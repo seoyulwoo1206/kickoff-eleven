@@ -1,7 +1,7 @@
 /* 앱 진입점: 상태 머신(menu/play/paused/over), 경기 시작, 프레임 루프, 시뮬 이벤트 → 연출, 온라인 연결 */
 import './style.css';
 import { TEAMS } from './data/teams';
-import { STEP, TEMPO, CX, CY } from './sim/consts';
+import { STEP, TEMPO } from './sim/consts';
 import { createMatch, step } from './sim/match';
 import type { Sim, SimEvent } from './sim/types';
 import { newInp, readInput, clearPresses, dropKeys, type Inp } from './input/actions';
@@ -9,6 +9,8 @@ import { installKeyboard } from './input/keyboard';
 import { pollGamepads } from './input/gamepad';
 import { installTouch } from './input/touch';
 import { Renderer } from './render/canvas2d';
+import { ThreeRenderer } from './render/three/scene';
+import type { IRenderer, CamMode } from './render/types';
 import { opts, loadOpts, saveOpts } from './options';
 import { audio, ensureAudio, crowdStart, crowdStop, crowdSwell, sfx } from './audio';
 import { NET, LOCAL, initPeer, netSend, netClose, netHost, netJoin, netPing } from './net/peer';
@@ -24,12 +26,20 @@ let state: State = 'menu';
 let sim: Sim | null = null;
 const INP: [Inp, Inp] = [newInp(), newInp()];
 let isTouch = !!(window.matchMedia && window.matchMedia('(pointer: coarse)').matches);
-const R = new Renderer($('cv') as HTMLCanvasElement, $('insets'));
+loadOpts();
+function makeRenderer(): IRenderer {
+  try { const c = document.createElement('canvas'); if (!c.getContext('webgl2') && !c.getContext('webgl')) throw new Error('no webgl'); return new ThreeRenderer($('cv') as HTMLCanvasElement, $('insets'), $('ov') as HTMLCanvasElement, opts.gfx); }
+  catch (e) { console.warn('WebGL 사용 불가, 2D 렌더러로', e); $('ov').hidden = true; return new Renderer($('cv') as HTMLCanvasElement, $('insets')); }
+}
+const R: IRenderer = makeRenderer();
+const CAMS: CamMode[] = ['tv', 'pro', 'top'], CAM_NAME = { tv: '중계', pro: '선수 뒤', top: '탑뷰' };
+let camMode: CamMode = 'tv';
+function cycleCamera() { camMode = CAMS[(CAMS.indexOf(camMode) + 1) % CAMS.length]; R.setCamMode?.(camMode); $('camBtn').textContent = '카메라: ' + CAM_NAME[camMode]; }
 let perf = 0, lastTs = 0, acc = 0, simLast = 0;
 const snapBuf: SnapBuf = { buf: [], off: null };
 const inSt = { lastIn: '', hb: 0 };
 
-loadOpts(); audio.on = opts.sound;
+audio.on = opts.sound;
 
 /* ---------- 경기 시작/종료 ---------- */
 function startMatch(cfg?: StartCfg) {
@@ -51,7 +61,7 @@ function startMatch(cfg?: StartCfg) {
     net, seed: cfg ? cfg.seed : randomSeed(), guest: NET.role === 'guest',
   }, INP);
   if (NET.role === 'guest') { snapBuf.buf = []; snapBuf.off = null; }
-  R.parts.length = 0; R.cam.x = CX; R.cam.y = CY; R.cam.z = 1; acc = 0; simLast = 0; state = 'play';
+  R.reset(); acc = 0; simLast = 0; state = 'play';
   $('menu').hidden = true; $('result').hidden = true; $('pause').hidden = true; $('hud').hidden = false; $('pauseBtn').hidden = false; $('touch').hidden = !isTouch;
   $('hPing').hidden = !net; showPing();
   resetHud(); drain(sim); updateHud(sim, LOCAL()); crowdStart();
@@ -146,7 +156,7 @@ function netInterpNow() { if (sim) netInterp(sim, snapBuf, perf, (x, y) => R.puf
 window.setInterval(() => { if (NET.role === 'guest' && state === 'play' && sim) { readInput(INP[0], STEP); const m = encodeInput(INP[0], inSt); if (m) netSend(m); clearPresses(INP[0]); } }, 1000 / 60);
 
 /* ---------- 입력 ---------- */
-installKeyboard({ inp: INP, isPlaying: () => state === 'play', hasLocalP2: () => !!(sim && sim.M.twoP && !NET.role), togglePause: () => { if (state === 'play') pauseGame(); else if (state === 'paused') resumeGame(); } });
+installKeyboard({ inp: INP, isPlaying: () => state === 'play', hasLocalP2: () => !!(sim && sim.M.twoP && !NET.role), togglePause: () => { if (state === 'play') pauseGame(); else if (state === 'paused') resumeGame(); }, cycleCamera });
 installTouch(INP[0], () => { if (!isTouch) { isTouch = true; if (state === 'play' || state === 'paused') $('touch').hidden = false; } });
 window.addEventListener('blur', () => { for (const I of INP) dropKeys(I); if (state === 'play' && !NET.ready) pauseGame(); }); // 온라인에선 창 포커스만 잃어도 상대를 기다리게 하지 않는다
 document.addEventListener('visibilitychange', () => { if (document.hidden && state === 'play') pauseGame(); });
@@ -158,6 +168,8 @@ bindSeg('segLen', opts.len, v => { opts.len = +v; netSendLobby(); });
 bindSeg('segDiff', opts.diff, v => { opts.diff = v as typeof opts.diff; });
 bindSeg('segTempo', opts.tempo, v => { opts.tempo = v as typeof opts.tempo; saveOpts(); });
 bindSeg('segCursor', opts.cursor, v => { opts.cursor = v as typeof opts.cursor; saveOpts(); });
+bindSeg('segGfx', opts.gfx, v => { opts.gfx = v as typeof opts.gfx; R.setQuality?.(opts.gfx); saveOpts(); });
+$('camBtn').addEventListener('click', cycleCamera);
 bindSeg('segSnd', audio.on ? 'on' : 'off', v => { audio.on = v === 'on'; opts.sound = audio.on; });
 $('startBtn').addEventListener('click', () => { ensureAudio(); startMatch(); });
 $('pauseBtn').addEventListener('click', () => pauseGame());
@@ -195,7 +207,7 @@ window.setInterval(() => {
   runSteps(dt);
 }, 1000 / 60);
 function frame(ts: number) {
-  requestAnimationFrame(frame); const now = ts / 1000; const dt = lastTs ? Math.min(0.1, now - lastTs) : STEP; lastTs = now; perf = now;
+  requestAnimationFrame(frame); const now = ts / 1000; const rawDt = lastTs ? now - lastTs : STEP, dt = Math.min(0.1, rawDt); lastTs = now; perf = now;
   pollGamepads({ inp: INP[0], isPlaying: () => state === 'play', togglePause: () => { if (state === 'play') pauseGame(); else if (state === 'paused') resumeGame(); } });
   if (sim && sim.M.slow > 0 && !NET.role) sim.M.slow = Math.max(0, sim.M.slow - dt);
   if (state === 'play' && sim) {
@@ -205,6 +217,14 @@ function frame(ts: number) {
   } else if (state === 'paused' && NET.role === 'guest' && sim) netInterpNow();
   netPing(perf);
   R.render(sim, dt, perf, state === 'paused');
+  if (rawDt < 0.2 && document.visibilityState === 'visible') autoQuality(dt);
+}
+// 프레임이 3초 넘게 28fps 아래면 품질을 한 단계 내린다 (자동, 올리지는 않음)
+let lowT = 0;
+function autoQuality(dt: number) {
+  if (state !== 'play' || R.fps == null) return;
+  if (R.fps < 28) { lowT += dt; if (lowT > 3 && opts.gfx !== 'low') { opts.gfx = opts.gfx === 'high' ? 'mid' : 'low'; R.setQuality?.(opts.gfx); setSeg('segGfx', opts.gfx); saveOpts(); lowT = 0; } } else lowT = Math.max(0, lowT - dt);
 }
 function resize() { R.resize(); $('rotateTip').hidden = !(isTouch && R.ch > R.cw); }
 window.addEventListener('resize', resize); resize(); requestAnimationFrame(frame);
+if (import.meta.env.DEV) (window as unknown as { __KO11: unknown }).__KO11 = { R, getSim: () => sim, INP, startMatch, perfNow: () => perf };

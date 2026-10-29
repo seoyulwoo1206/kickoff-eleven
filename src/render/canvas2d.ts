@@ -5,6 +5,7 @@ import { W, H, CX, CY, GH, GZ } from '../sim/consts';
 import { clamp } from '../sim/util';
 import { hexRgb, isLight, type Kit } from '../data/teams';
 import type { Sim, Player } from '../sim/types';
+import type { IRenderer } from './types';
 
 const CAM = { D: 110, Hc: 72 };
 const TX0 = -24, TY0 = -18, TW = W + 48, TH = H + 36;
@@ -14,7 +15,7 @@ interface P3 { x: number; y: number; s: number; d: number; }
 const rnd = Math.random;
 function shade(c: string, k: number) { const [r, g, b] = hexRgb(c); return `rgb(${Math.round(r * k)},${Math.round(g * k)},${Math.round(b * k)})`; }
 
-export class Renderer {
+export class Renderer implements IRenderer {
   ctx: CanvasRenderingContext2D;
   dpr = 1; cw = 0; ch = 0; ins = { t: 0, r: 0, b: 0, l: 0 };
   cam = { x: CX, y: CY, shake: 0, z: 1 };
@@ -22,6 +23,7 @@ export class Renderer {
   private focal = 1; private cth = 1; private sth = 0; private VW = 36; private depth0 = 1; private shk = { x: 0, y: 0 };
   private pitchTex: HTMLCanvasElement | null = null; private crowdTex: HTMLCanvasElement | null = null;
   constructor(public cv: HTMLCanvasElement, private insetEl: HTMLElement) { this.ctx = cv.getContext('2d')!; }
+  reset() { this.parts.length = 0; this.cam.x = CX; this.cam.y = CY; this.cam.z = 1; }
   resize() {
     this.dpr = Math.min(window.devicePixelRatio || 1, 2); const r = this.cv.getBoundingClientRect(); this.cw = r.width; this.ch = r.height;
     this.cv.width = Math.round(this.cw * this.dpr); this.cv.height = Math.round(this.ch * this.dpr);
