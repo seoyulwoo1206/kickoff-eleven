@@ -63,6 +63,8 @@ export interface MatchCfg {
   squads?: [SquadDef | null, SquadDef | null];
   /** 전술 (없으면 선수단 포메이션 + 기본값) */
   tactics?: [Tactics | null, Tactics | null];
+  /** 메뉴에서 고친 선발(등번호 11개). 없으면 선수단 기본 선발 */
+  lineups?: [number[] | null, number[] | null];
   /** 게스트: 시뮬을 돌리지 않고 스냅샷만 받는다 (선수 배치만 하고 킥오프 안 함) */
   guest?: boolean;
 }

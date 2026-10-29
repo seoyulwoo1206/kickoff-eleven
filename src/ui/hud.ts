@@ -11,7 +11,7 @@ export function updateHud(s: Sim, local: number) {
     $('hS0').textContent = String(M.score[0]); $('hS1').textContent = String(M.score[1]); $('hClk').textContent = (M.half === 1 ? '전반 ' : '후반 ') + minute + extra + "'";
   }
   const h = HU[local], own = !!(h && h.ctrl && ball.owner === h.ctrl), lk = own ? 'a' : 'd';
-  if (lk !== labelCache) { labelCache = lk; $('bA').textContent = own ? '패스' : '압박'; $('bB').textContent = own ? '슛' : '슬라이딩'; $('bD').textContent = own ? '스루' : '전환'; }
+  if (lk !== labelCache) { labelCache = lk; $('bA').textContent = own ? '패스' : '압박'; $('bB').textContent = own ? '슛' : '슬라이딩'; $('bD').textContent = own ? '스루' : '세컨드'; $('bL').textContent = own ? '롱패스' : '전환'; }
 }
 let bannerTimer = 0;
 export function showBanner(big: string, small: string, ms: number, isGoal: boolean) {

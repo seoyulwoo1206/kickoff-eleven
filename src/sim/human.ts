@@ -90,7 +90,7 @@ export function humanUpdate(s: Sim, h: Human, dt: number) {
     // 개인기: Q 탭 (폰: 스와이프 → I.skill)
     if (I.press.gkRush) { const sv = I.skill ?? { x: mx, y: my }; I.skill = null; if (skillMove(s, p, sv.x, sv.y)) return; }
     // 패스는 떼는 순간, 누른 시간이 세기 (탭 = 보통). 터치는 pass 길게 = 롱패스
-    if (I.rel.pass) { const pw = clamp((I.holdT.pass - 0.12) / 0.45, 0, 1); if (I.touch && I.holdT.pass >= 0.3) queueKick(s, p, () => longPass(s, p, aim, 0.6), 0.04); else queueKick(s, p, () => shortPass(s, p, aim, pw), 0.04); h.charging = false; return; }
+    if (I.rel.pass) { const pw = clamp((I.holdT.pass - 0.12) / 0.45, 0, 1); queueKick(s, p, () => shortPass(s, p, aim, pw), 0.04); h.charging = false; return; }
     if (I.rel.lob) { const pw = clamp((I.holdT.lob - 0.1) / 0.5, 0, 1); queueKick(s, p, () => longPass(s, p, aim, 0.35 + pw * 0.65)); h.charging = false; return; }
     if (I.press.through) { const pw = I.down.sprint ? 0.8 : 0; queueKick(s, p, () => throughPass(s, p, aim, pw), 0.04); h.charging = false; return; }
     if (I.press.chip) { queueKick(s, p, () => chipShot(s, p)); h.charging = false; return; }
@@ -104,8 +104,8 @@ export function humanUpdate(s: Sim, h: Human, dt: number) {
     if (I.press.pass) standTackle(s, p);
     else if (I.down.pass && I.holdT.pass > 0.25 && ball.owner && ball.owner.t !== p.t && d(p, ball.owner) < 1.8 && p.tackleCD <= 0 && (ball.owner.kickCD > 0 || Math.hypot(ball.owner.vx, ball.owner.vy) > 6)) standTackle(s, p); // 압박 중 공이 발에서 떨어지면 알아서 태클
     if (I.press.shoot) slideTackle(s, p, aim);
-    if (I.press.lob || (I.touch && I.press.through)) switchPlayer(s, h);
-    if (I.down.through && !I.touch) h.second = true;
+    if (I.press.lob) switchPlayer(s, h);
+    if (I.down.through && (!I.touch || I.holdT.through > 0.12)) h.second = true;
     if (I.down.gkRush) h.gkRush = true;
     // 몸싸움: 공 가진 상대와 부딪히면 버튼 없이도 어깨 싸움으로 공을 뺏을 수 있다 (피지컬·밸런스 대결)
     const o = ball.owner;

@@ -1,0 +1,15 @@
+{
+  "name": "킥오프 일레븐",
+  "short_name": "킥오프 11",
+  "description": "11대11 축구 게임. 24개 국가대표팀, 온라인 대전.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "fullscreen",
+  "orientation": "landscape",
+  "background_color": "#09121b",
+  "theme_color": "#09121b",
+  "lang": "ko",
+  "icons": [
+    { "src": "./icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
+  ]
+}

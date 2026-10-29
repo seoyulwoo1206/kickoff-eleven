@@ -101,7 +101,30 @@ kbd{font-family:var(--f-num);font-weight:600;font-size:12px;border:1px solid var
 /* 왼쪽 반 화면 어디든 누르면 그 자리에 아날로그 조이스틱이 뜬다 */
 #stickArea{position:absolute;left:0;top:0;width:55%;height:100%;pointer-events:auto;touch-action:none}
 #skillArea{position:absolute;left:55%;top:0;width:45%;height:100%;pointer-events:auto;touch-action:none}
-.tbtns{z-index:1}
+.tbtns{z-index:1;transform:scale(var(--btn-scale,1));transform-origin:bottom right}
+.tb{opacity:var(--btn-alpha,.75)}
+#bL{width:54px;height:54px;right:182px;bottom:92px;font-size:12px}
+#stick.sprint .base{border-color:var(--amber);box-shadow:0 0 14px rgba(255,182,39,.5)}
+.touchonly{display:none}
+body.touch .touchonly{display:grid}
+body.touch button.touchonly{display:inline-block}
+.ghost.small{padding:6px 12px;font-size:13px}
+.lugrid{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+@media (max-width:620px){.lugrid{grid-template-columns:1fr}}
+.lulist{display:grid;gap:4px;margin-top:6px;max-height:40vh;overflow-y:auto}
+.lu{display:grid;grid-template-columns:38px 1fr auto auto;gap:8px;align-items:center;text-align:left;background:rgba(255,255,255,.04);border:1px solid transparent;border-radius:8px;padding:6px 10px;font-size:14px}
+.lu.on{border-color:var(--amber);background:rgba(255,182,39,.12)}
+.lu .pos{font-family:var(--f-num);font-weight:800;letter-spacing:.06em;color:var(--amber);font-size:12px}
+.lu b{font-family:var(--f-num);font-weight:800;font-size:15px}
+.lu small{color:var(--muted);font-size:11px}
+.playercard{display:flex;gap:16px;align-items:flex-start;border-top:1px solid var(--rule);padding-top:14px;flex-wrap:wrap}
+.cardinfo{display:grid;gap:6px;min-width:0;flex:1}
+.cardhead{display:flex;justify-content:space-between;align-items:baseline;gap:10px;font-family:var(--f-display);font-size:20px}
+.cardhead b{font-family:var(--f-num);font-weight:800;font-size:30px;color:var(--amber)}
+.cardmeta{font-size:13px;color:var(--muted)}
+.carddetail{display:flex;flex-wrap:wrap;gap:4px 14px;font-size:12px;color:var(--muted)}
+.carddetail b{font-family:var(--f-num);font-weight:800;color:var(--chalk);font-size:13px;margin-left:3px}
+.htstats{position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);z-index:6;background:var(--panel);border:1px solid var(--rule);border-radius:14px;padding:18px 24px;display:grid;gap:12px;min-width:280px;max-width:92vw;pointer-events:none}
 #stick{position:absolute;left:0;top:0;width:0;height:0;pointer-events:none}
 #stick .base{position:absolute;left:-64px;top:-64px;width:128px;height:128px;border-radius:50%;border:2px solid rgba(238,243,234,.35);background:rgba(9,17,27,.35)}
 #stick .knob{position:absolute;left:-28px;top:-28px;width:56px;height:56px;border-radius:50%;background:rgba(238,243,234,.85);box-shadow:0 2px 10px rgba(0,0,0,.4)}

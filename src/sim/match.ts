@@ -33,18 +33,19 @@ export function createMatch(cfg: MatchCfg, inp?: [Inp, Inp]): Sim {
     players: [], team: [[], []], HU: [makeHuman(0, cfg.humans[0]), makeHuman(1, cfg.humans[1])], INP: inp ?? [newInp(), newInp()], pred: [],
     rnd: mulberry32(cfg.seed), ev: [],
   };
-  makePlayers(s, cfg.squads ?? [null, null]);
+  makePlayers(s, cfg.squads ?? [null, null], cfg.lineups ?? [null, null]);
   if (cfg.guest) { for (const p of s.players) { p.x = wx(p.bx, p.t); p.y = p.by; } placeBall(s, CX, CY); }
   else kickoff(s, cfg.firstKick);
   return s;
 }
-function makePlayers(s: Sim, squads: [import('../data/squad').SquadDef | null, import('../data/squad').SquadDef | null]) {
+function makePlayers(s: Sim, squads: [import('../data/squad').SquadDef | null, import('../data/squad').SquadDef | null], lineups: [number[] | null, number[] | null]) {
   const { M, HU } = s;
   s.players.length = 0; s.team[0].length = 0; s.team[1].length = 0;
   for (let t = 0; t < 2; t++) {
     const T = M.teams[t], mult = HU[t] ? 1 : DIFF[M.diff].spd, sq = squads[t];
     const slots: Slot[] = (sq && FORMATIONS[M.tac[t].form]) ? FORMATIONS[M.tac[t].form] : sq ? slotsOf(sq) : FORM.map(f => ({ pos: f[0] === 'GK' ? 'GK' : f[0] === 'DF' ? 'CB' : f[0] === 'MF' ? 'CM' : 'ST', role: f[0], x: f[1], y: f[2] }));
-    const xi: (PlayerDef | null)[] = sq ? lineupOf(sq) : [];
+    const lu = lineups[t], byNum = sq ? new Map(sq.players.map(p => [p.num, p])) : null;
+    const xi: (PlayerDef | null)[] = sq ? (lu && lu.length === 11 && lu.every(n => byNum!.has(n)) ? lu.map(n => byNum!.get(n)!) : lineupOf(sq)) : [];
     if (sq) M.bench[t] = sq.players.filter(p => !xi.includes(p));
     slots.forEach((f, i) => {
       const d = xi[i] ?? null;

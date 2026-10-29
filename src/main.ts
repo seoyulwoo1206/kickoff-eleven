@@ -7,7 +7,8 @@ import type { Sim, SimEvent } from './sim/types';
 import { newInp, readInput, clearPresses, dropKeys, type Inp } from './input/actions';
 import { installKeyboard } from './input/keyboard';
 import { pollGamepads } from './input/gamepad';
-import { installTouch } from './input/touch';
+import { installTouch, touchGauge, applyTouchStyle } from './input/touch';
+import { openLineup, closeLineup } from './ui/lineup';
 import { Renderer } from './render/canvas2d';
 import { ThreeRenderer } from './render/three/scene';
 import type { IRenderer, CamMode } from './render/types';
@@ -64,7 +65,7 @@ function startMatch(cfg?: StartCfg) {
     teams: [a, b], len: opts.len, diff: opts.diff, tempo: TEMPO[opts.tempo], firstKick: cfg ? cfg.fk : (Math.random() < 0.5 ? 0 : 1),
     humans: [{ tag: tag(0), col: '#ffb627', cursor: cur(0) }, twoP ? { tag: tag(1), col: '#4fd3ff', cursor: cur(1) } : null],
     net, seed: cfg ? cfg.seed : randomSeed(), guest: NET.role === 'guest', squads: [squadOf(a), squadOf(b)],
-    tactics: net ? [null, null] : [menuTac[0], menuTac[1]],
+    tactics: net ? [null, null] : [menuTac[0], menuTac[1]], lineups: net ? [null, null] : [menuLineup[0], menuLineup[1]],
   }, INP);
   renderPauseTactics();
   if (NET.role === 'guest') { snapBuf.buf = []; snapBuf.off = null; }
@@ -83,7 +84,7 @@ function applyLocalEv(e: SimEvent, relay: boolean) {
   const ev = (k: string, a?: unknown) => { if (relay && NET.role === 'host' && NET.ready) netSend({ t: 'ev', k, a }); };
   switch (e.k) {
     case 'banner': showBanner(e.big, e.small, e.ms, e.goal); ev('b', [e.big, e.small, e.ms, e.goal]); break;
-    case 'sfx': sfx(e.type); ev('x', e.type); break;
+    case 'sfx': sfx(e.type); ev('x', e.type); buzz(e.type); break;
     case 'crowd': crowdSwell(e.amt, e.dur); ev('c', [e.amt, e.dur]); break;
     case 'puff': R.puff(e.x, e.y, e.n, e.sp); break;
     case 'shake': R.cam.shake = Math.max(R.cam.shake, e.v); break;
@@ -92,6 +93,7 @@ function applyLocalEv(e: SimEvent, relay: boolean) {
     case 'full': fullTime(); break;
   }
 }
+function buzz(type: string) { if (!opts.vibrate || !isTouch || !navigator.vibrate) return; try { if (type === 'goal') navigator.vibrate([80, 40, 120]); else if (type === 'tackle') navigator.vibrate(25); else if (type === 'post') navigator.vibrate(45); } catch { /* */ } }
 function fullTime() {
   if (!sim) return; sim.M.phase = 'full'; state = 'over'; $('touch').hidden = true;
   if (NET.role === 'host') { netSend(makeSnap(sim, perf, R.cam.shake)); netSend({ t: 'ev', k: 'full' }); }
@@ -165,7 +167,9 @@ window.setInterval(() => { if (NET.role === 'guest' && state === 'play' && sim) 
 
 /* ---------- 입력 ---------- */
 installKeyboard({ inp: INP, isPlaying: () => state === 'play', hasLocalP2: () => !!(sim && sim.M.twoP && !NET.role), togglePause: () => { if (state === 'play') pauseGame(); else if (state === 'paused') resumeGame(); }, cycleCamera });
-installTouch(INP[0], () => { if (!isTouch) { isTouch = true; if (state === 'play' || state === 'paused') $('touch').hidden = false; } });
+installTouch(INP[0], () => { if (!isTouch) { isTouch = true; document.body.classList.add('touch'); if (state === 'play' || state === 'paused') $('touch').hidden = false; } }, () => ({ stickSprint: opts.stickSprint }));
+if (isTouch) document.body.classList.add('touch');
+applyTouchStyle(opts.btnSize, opts.btnAlpha);
 window.addEventListener('blur', () => { for (const I of INP) dropKeys(I); if (state === 'play' && !NET.ready) pauseGame(); }); // 온라인에선 창 포커스만 잃어도 상대를 기다리게 하지 않는다
 document.addEventListener('visibilitychange', () => { if (document.hidden && state === 'play') pauseGame(); });
 
@@ -185,7 +189,7 @@ function tacRows(prefix: string, tac: Tactics, onChange: () => void) {
 function renderMenuTactics() {
   for (const t of [0, 1] as const) {
     const T = TEAMS[opts.sel[t]];
-    if (menuTacTeam[t] !== opts.sel[t]) { menuTacTeam[t] = opts.sel[t]; const sq = squadOf(T); Object.assign(menuTac[t], defaultTactics(sq?.formation)); }
+    if (menuTacTeam[t] !== opts.sel[t]) { menuTacTeam[t] = opts.sel[t]; const sq = squadOf(T); Object.assign(menuTac[t], defaultTactics(sq?.formation)); menuLineup[t] = null; }
     tacRows('tac' + t, menuTac[t], () => { /* 값은 menuTac에 바로 저장됨 */ });
   }
   $('tacBox').classList.toggle('locked', opts.mode === 'net');
@@ -215,6 +219,15 @@ bindSeg('segDiff', opts.diff, v => { opts.diff = v as typeof opts.diff; });
 bindSeg('segTempo', opts.tempo, v => { opts.tempo = v as typeof opts.tempo; saveOpts(); });
 bindSeg('segCursor', opts.cursor, v => { opts.cursor = v as typeof opts.cursor; saveOpts(); });
 bindSeg('segNames', opts.names, v => { opts.names = v as typeof opts.names; saveOpts(); });
+bindSeg('segStickSprint', opts.stickSprint ? 'on' : 'off', v => { opts.stickSprint = v === 'on'; saveOpts(); });
+bindSeg('segVib', opts.vibrate ? 'on' : 'off', v => { opts.vibrate = v === 'on'; saveOpts(); });
+bindSeg('segBtnSize', opts.btnSize, v => { opts.btnSize = v as typeof opts.btnSize; applyTouchStyle(opts.btnSize, opts.btnAlpha); saveOpts(); });
+bindSeg('segBtnAlpha', opts.btnAlpha, v => { opts.btnAlpha = v as typeof opts.btnAlpha; applyTouchStyle(opts.btnSize, opts.btnAlpha); saveOpts(); });
+$('fsBtn').addEventListener('click', async () => { try { await document.documentElement.requestFullscreen(); const o = screen.orientation as ScreenOrientation & { lock?: (m: string) => Promise<void> }; if (o.lock) await o.lock('landscape'); } catch { /* 지원 안 함 */ } });
+// 라인업 편집: 팀별 선발(등번호) 저장, 팀을 바꾸면 초기화
+const menuLineup: [number[] | null, number[] | null] = [null, null];
+for (const t of [0, 1] as const) $('lu' + t).addEventListener('click', () => { const T = TEAMS[opts.sel[t]], sq = squadOf(T); if (!sq) return; openLineup(sq, menuTac[t].form, menuLineup[t] ?? sq.lineup, opts.names, lu => { menuLineup[t] = lu.slice(); }); });
+$('luClose').addEventListener('click', closeLineup);
 bindSeg('segGfx', opts.gfx, v => { opts.gfx = v as typeof opts.gfx; R.setQuality?.(opts.gfx); saveOpts(); });
 $('camBtn').addEventListener('click', cycleCamera);
 bindSeg('segSnd', audio.on ? 'on' : 'off', v => { audio.on = v === 'on'; opts.sound = audio.on; });
@@ -260,7 +273,7 @@ function frame(ts: number) {
   if (state === 'play' && sim) {
     if (NET.role === 'guest') netInterpNow();
     else if (NET.role !== 'host') runSteps(dt);
-    if (sim) updateHud(sim, LOCAL());
+    if (sim) { updateHud(sim, LOCAL()); halftimePanel(sim); gauges(sim); }
   } else if (state === 'paused' && NET.role === 'guest' && sim) netInterpNow();
   netPing(perf);
   R.render(sim, dt, perf, state === 'paused');
@@ -272,6 +285,23 @@ function autoQuality(dt: number) {
   if (state !== 'play' || R.fps == null) return;
   if (R.fps < 28) { lowT += dt; if (lowT > 3 && opts.gfx !== 'low') { opts.gfx = opts.gfx === 'high' ? 'mid' : 'low'; R.setQuality?.(opts.gfx); setSeg('segGfx', opts.gfx); saveOpts(); lowT = 0; } } else lowT = Math.max(0, lowT - dt);
 }
+let htShown = false;
+function halftimePanel(s: Sim) {
+  const on = s.M.phase === 'halftime';
+  if (on && !htShown) { htShown = true; const M = s.M, tp = M.stats.poss[0] + M.stats.poss[1], p0 = Math.round(M.stats.poss[0] / tp * 100);
+    $('hN0b').textContent = M.teams[0].code; $('hN1b').textContent = M.teams[1].code; $('hC0b').style.background = M.kit[0].c1; $('hC1b').style.background = M.kit[1].c1; $('hScore').textContent = `${M.score[0]} : ${M.score[1]}`;
+    const rows: [string, string | number, string | number][] = [['슈팅', M.stats.shots[0], M.stats.shots[1]], ['유효 슈팅', M.stats.onT[0], M.stats.onT[1]], ['점유율', p0 + '%', (100 - p0) + '%'], ['패스 성공', `${M.stats.passC[0]}/${M.stats.passA[0]}`, `${M.stats.passC[1]}/${M.stats.passA[1]}`], ['파울', M.stats.fouls[0], M.stats.fouls[1]]];
+    $('hRows').innerHTML = rows.map(r => `<div class="rs"><span>${r[1]}</span><em>${r[0]}</em><span>${r[2]}</span></div>`).join(''); $('htStats').hidden = false; }
+  else if (!on && htShown) { htShown = false; $('htStats').hidden = true; }
+}
+// 터치 버튼 게이지: 슛 파워, 패스·롱패스 누른 시간
+function gauges(s: Sim) {
+  if (!isTouch) return; const h = s.HU[LOCAL()], I = INP[0]; if (!h) return;
+  touchGauge('bB', h.charging ? h.charge : 0, h.charge > 0.8);
+  touchGauge('bA', I.down.pass ? Math.min(1, Math.max(0, (I.holdT.pass - 0.12) / 0.45)) : 0);
+  touchGauge('bL', I.down.lob ? Math.min(1, Math.max(0, (I.holdT.lob - 0.1) / 0.5)) : 0);
+}
+if (import.meta.env.PROD && 'serviceWorker' in navigator) window.addEventListener('load', () => { navigator.serviceWorker.register('./sw.js').catch(() => { /* http 등에선 불가 */ }); });
 function resize() { R.resize(); $('rotateTip').hidden = !(isTouch && R.ch > R.cw); }
 window.addEventListener('resize', resize); resize(); requestAnimationFrame(frame);
 if (import.meta.env.DEV) (window as unknown as { __KO11: unknown }).__KO11 = { R, getSim: () => sim, INP, startMatch, perfNow: () => perf };

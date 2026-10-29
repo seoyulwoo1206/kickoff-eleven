@@ -5,6 +5,10 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
 <title>킥오프 일레븐</title>
 <meta name="claude:viewport-fit-sides" content="cover">
+<meta name="theme-color" content="#09121b">
+<link rel="manifest" href="./manifest.webmanifest">
+<link rel="icon" href="./icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="./icon.svg">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Black+Han+Sans&family=IBM+Plex+Sans+KR:wght@400;500;700&family=Saira+Condensed:wght@600;800&display=swap">
 </head>
 <body>
@@ -18,11 +22,11 @@
   <div id="stickArea"></div>
   <div id="skillArea" aria-hidden="true"></div>
   <div id="stick" hidden><div class="base"></div><div class="knob"></div></div>
-  <div class="tbtns"><button class="tb" id="bA">패스</button><button class="tb" id="bB">슛</button><button class="tb" id="bC">질주</button><button class="tb" id="bD">스루</button></div>
+  <div class="tbtns"><button class="tb" id="bA">패스</button><button class="tb" id="bB">슛</button><button class="tb" id="bC">질주</button><button class="tb" id="bD">스루</button><button class="tb" id="bL">롱패스</button></div>
 </div>
 
 <div id="menu" class="overlay"><div class="card">
-  <header><div class="eyebrow">11 대 11 · 풀경기 · <span id="build">BUILD 1029-P5</span></div><h1>킥오프 일레븐</h1><p class="lede">팀을 고르고 킥오프. 공 근처 선수로 커서가 자동으로 옮겨가고, 같은 키보드로 친구와 1대1도 됩니다.</p></header>
+  <header><div class="eyebrow">11 대 11 · 풀경기 · <span id="build">BUILD 1029-P6</span></div><h1>킥오프 일레븐</h1><p class="lede">팀을 고르고 킥오프. 공 근처 선수로 커서가 자동으로 옮겨가고, 같은 키보드로 친구와 1대1도 됩니다.</p></header>
   <div class="opts">
     <div class="opt"><span class="label">대전 방식</span><div class="seg" id="segMode"><button id="mAI" data-v="ai" aria-pressed="true">AI 대전</button><button id="m2P" data-v="2p">2인 대전 (한 키보드)</button><button id="mNet" data-v="net">온라인 대전</button></div></div>
     <div class="opt" id="optLen"><span class="label">경기 시간</span><div class="seg" id="segLen"><button id="len180" data-v="180">3분</button><button id="len300" data-v="300" aria-pressed="true">5분</button><button id="len480" data-v="480">8분</button></div></div>
@@ -31,6 +35,10 @@
     <div class="opt"><span class="label">커서 전환</span><div class="seg" id="segCursor"><button data-v="manual" aria-pressed="true">수동 (A키)</button><button data-v="auto">자동</button></div></div>
     <div class="opt"><span class="label">선수 이름</span><div class="seg" id="segNames"><button data-v="real">실명</button><button data-v="alias">가명</button></div></div>
     <div class="opt"><span class="label">그래픽</span><div class="seg" id="segGfx"><button data-v="low">저</button><button data-v="mid">중</button><button data-v="high">고</button></div></div>
+    <div class="opt touchonly"><span class="label">조이스틱 끝 질주</span><div class="seg" id="segStickSprint"><button data-v="on">켜기</button><button data-v="off">끄기</button></div></div>
+    <div class="opt touchonly"><span class="label">진동</span><div class="seg" id="segVib"><button data-v="on">켜기</button><button data-v="off">끄기</button></div></div>
+    <div class="opt touchonly"><span class="label">버튼 크기</span><div class="seg" id="segBtnSize"><button data-v="small">작게</button><button data-v="normal">보통</button><button data-v="large">크게</button></div></div>
+    <div class="opt touchonly"><span class="label">버튼 투명도</span><div class="seg" id="segBtnAlpha"><button data-v="light">연하게</button><button data-v="normal">보통</button><button data-v="solid">진하게</button></div></div>
     <div class="opt"><span class="label">소리</span><div class="seg" id="segSnd"><button id="sOn" data-v="on" aria-pressed="true">켜기</button><button id="sOff" data-v="off">끄기</button></div></div>
   </div>
   <section class="net" id="netPanel" hidden>
@@ -39,15 +47,15 @@
     <p class="netstat" id="netStat">인터넷만 되면 어디서든 연결됩니다. 방을 만들면 코드가 나오고, 친구가 그 코드를 넣고 참가하면 바로 로비가 열립니다. 호스트가 왼쪽 팀, 게스트가 오른쪽 팀입니다.</p>
   </section>
   <div class="matchup">
-    <section class="side"><div class="sidehead"><span class="label" id="lab0">내 팀 (P1)</span><span class="stats" id="st0"></span></div><div class="chosen" id="ch0"></div><div class="squad" id="sq0"></div><div class="grid" id="grid0"></div></section>
-    <section class="side"><div class="sidehead"><span class="label" id="lab1">상대 팀</span><span class="stats" id="st1"></span></div><div class="chosen" id="ch1"></div><div class="squad" id="sq1"></div><div class="grid" id="grid1"></div></section>
+    <section class="side"><div class="sidehead"><span class="label" id="lab0">내 팀 (P1)</span><span class="stats" id="st0"></span></div><div class="chosen" id="ch0"></div><div class="squad" id="sq0"></div><div class="row"><button class="ghost small" id="lu0">라인업 · 선수 카드</button></div><div class="grid" id="grid0"></div></section>
+    <section class="side"><div class="sidehead"><span class="label" id="lab1">상대 팀</span><span class="stats" id="st1"></span></div><div class="chosen" id="ch1"></div><div class="squad" id="sq1"></div><div class="row"><button class="ghost small" id="lu1">라인업 · 선수 카드</button></div><div class="grid" id="grid1"></div></section>
   </div>
   <section class="tacbox" id="tacBox">
     <div class="tacside"><span class="label">내 팀 전술</span><div class="tacrow"><select id="tac0Form" aria-label="포메이션"></select><select id="tac0Line" aria-label="수비 라인"></select><select id="tac0Style" aria-label="공격 성향"></select><select id="tac0Press" aria-label="압박"></select></div></div>
     <div class="tacside"><span class="label">상대 팀 전술</span><div class="tacrow"><select id="tac1Form" aria-label="포메이션"></select><select id="tac1Line" aria-label="수비 라인"></select><select id="tac1Style" aria-label="공격 성향"></select><select id="tac1Press" aria-label="압박"></select></div></div>
   </section>
   <p class="tip" id="rotateTip" hidden>폰을 가로로 돌리면 경기장이 더 넓게 보여요.</p>
-  <div class="row"><button class="kick" id="startBtn">킥오프</button><span class="netstat" id="startNote"></span></div>
+  <div class="row"><button class="kick" id="startBtn">킥오프</button><button class="ghost touchonly" id="fsBtn">전체화면</button><span class="netstat" id="startNote"></span></div>
   <div class="help">
     <div><span class="who p1">P1 공격</span><kbd>방향키</kbd> 이동 · <kbd>S</kbd> 짧은 패스 · <kbd>A</kbd> 롱패스/크로스 · <kbd>W</kbd> 스루패스 · <kbd>D</kbd> 길게 슛 · <kbd>Z</kbd> 칩슛 · <kbd>E</kbd> 질주</div>
     <div><span class="who p1">P1 수비</span><kbd>S</kbd> 압박(길게)/태클 · <kbd>D</kbd> 슬라이딩 · <kbd>A</kbd> 선수 전환 · <kbd>W</kbd> 세컨드 디펜더(길게) · <kbd>Q</kbd> 골키퍼 돌진 · <kbd>E</kbd> 질주</div>
@@ -58,6 +66,13 @@
   </div>
 </div></div>
 
+<div id="lineup" class="overlay" hidden><div class="card">
+  <div class="sidehead"><div><div class="eyebrow">라인업</div><h2 id="luTitle"></h2></div><button class="ghost" id="luClose">닫기</button></div>
+  <p class="lede" id="luAvg"></p>
+  <div class="lugrid"><div><div class="label">선발</div><div class="lulist" id="luXI"></div></div><div><div class="label">벤치</div><div class="lulist" id="luBench"></div></div></div>
+  <section class="playercard" id="card" hidden><canvas id="cardRadar" width="180" height="180"></canvas><div class="cardinfo"><div class="cardhead"><span id="cardName"></span><b id="cardOvr"></b></div><div class="cardmeta" id="cardMeta"></div><div class="carddetail" id="cardDetail"></div></div></section>
+</div></div>
+<div id="htStats" class="htstats" hidden><div class="eyebrow">하프타임</div><div class="final"><div class="fn"><i id="hC0b"></i><span id="hN0b"></span></div><div class="fs" id="hScore">0 : 0</div><div class="fn"><i id="hC1b"></i><span id="hN1b"></span></div></div><div class="rstats" id="hRows"></div></div>
 <div id="pause" class="overlay" hidden><div class="card narrow">
   <div><div class="eyebrow">일시정지</div><h2>잠깐 쉬어갑니다</h2></div>
   <section class="tacbox" id="pauseTac" hidden>
