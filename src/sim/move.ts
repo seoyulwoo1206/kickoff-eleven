@@ -7,13 +7,14 @@ import { offsideLine } from './ball';
    가려는 방향과 현재 방향이 많이 다르면 속도를 줄여서 돈다 */
 export function steer(p: Player, dvx: number, dvy: number, dt: number) {
   const sp = Math.hypot(p.vx, p.vy), dsp = Math.hypot(dvx, dvy);
-  if (dsp < 0.05) { const dec = 11 * dt; if (sp <= dec) { p.vx = p.vy = 0; } else { p.vx -= p.vx / sp * dec; p.vy -= p.vy / sp * dec; } return; }
+  const A = p.attrs, nAcc = (A.acc - 50) / 50, nAgi = (A.agi - 50) / 50, nBal = (A.bal - 50) / 50;
+  if (dsp < 0.05) { const dec = (sp > 7 ? 8 : 10 + nBal * 2) * dt; if (sp <= dec) { p.vx = p.vy = 0; } else { p.vx -= p.vx / sp * dec; p.vy -= p.vy / sp * dec; } return; } // 질주하다 멈추면 조금 미끄러진다
   const ag = p.role === 'GK' ? 1.7 : 1; // 키퍼는 짧은 거리 반응이 빠르다
   const ta = Math.atan2(dvy, dvx); let ca = sp > 0.3 ? Math.atan2(p.vy, p.vx) : ta;
-  const turn = clamp(15 - sp * 1.15, 3.8, 15) * ag * dt; ca = angApproach(ca, ta, turn);
+  const turn = clamp((14 + nAgi * 4) - sp * (1.25 - nAgi * 0.3), 3.6, 18) * ag * dt; ca = angApproach(ca, ta, turn); // 민첩할수록 빠르게·질주 중에도 잘 돈다
   const df = Math.abs(angDiff(ca, ta));
   const want = dsp * Math.max(0.3, Math.cos(df));
-  const acc = (want > sp ? Math.max(3, 8.5 - sp * 0.35) : 11) * ag * dt;
+  const acc = (want > sp ? Math.max(3, (7.3 + nAcc * 2.4) - sp * 0.35) : 10 + nBal * 2) * ag * dt * (p.burst > 0 ? 1.4 : 1);
   const ns = want > sp ? Math.min(want, sp + acc) : Math.max(want, sp - acc);
   p.vx = Math.cos(ca) * ns; p.vy = Math.sin(ca) * ns;
 }

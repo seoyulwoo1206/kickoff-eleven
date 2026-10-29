@@ -16,18 +16,20 @@
 <div id="banner"><div class="big" id="bnBig"></div><div class="small" id="bnSmall"></div></div>
 <div id="touch" hidden>
   <div id="stickArea"></div>
+  <div id="skillArea" aria-hidden="true"></div>
   <div id="stick" hidden><div class="base"></div><div class="knob"></div></div>
   <div class="tbtns"><button class="tb" id="bA">패스</button><button class="tb" id="bB">슛</button><button class="tb" id="bC">질주</button><button class="tb" id="bD">스루</button></div>
 </div>
 
 <div id="menu" class="overlay"><div class="card">
-  <header><div class="eyebrow">11 대 11 · 풀경기 · <span id="build">BUILD 1029-P2</span></div><h1>킥오프 일레븐</h1><p class="lede">팀을 고르고 킥오프. 공 근처 선수로 커서가 자동으로 옮겨가고, 같은 키보드로 친구와 1대1도 됩니다.</p></header>
+  <header><div class="eyebrow">11 대 11 · 풀경기 · <span id="build">BUILD 1029-P4</span></div><h1>킥오프 일레븐</h1><p class="lede">팀을 고르고 킥오프. 공 근처 선수로 커서가 자동으로 옮겨가고, 같은 키보드로 친구와 1대1도 됩니다.</p></header>
   <div class="opts">
     <div class="opt"><span class="label">대전 방식</span><div class="seg" id="segMode"><button id="mAI" data-v="ai" aria-pressed="true">AI 대전</button><button id="m2P" data-v="2p">2인 대전 (한 키보드)</button><button id="mNet" data-v="net">온라인 대전</button></div></div>
     <div class="opt" id="optLen"><span class="label">경기 시간</span><div class="seg" id="segLen"><button id="len180" data-v="180">3분</button><button id="len300" data-v="300" aria-pressed="true">5분</button><button id="len480" data-v="480">8분</button></div></div>
     <div class="opt" id="optDiff"><span class="label">AI 난이도</span><div class="seg" id="segDiff"><button id="dEasy" data-v="easy">쉬움</button><button id="dNormal" data-v="normal" aria-pressed="true">보통</button><button id="dHard" data-v="hard">어려움</button></div></div>
     <div class="opt" id="optTempo"><span class="label">경기 템포</span><div class="seg" id="segTempo"><button data-v="slow">느림</button><button data-v="normal" aria-pressed="true">보통</button><button data-v="fast">빠름</button></div></div>
     <div class="opt"><span class="label">커서 전환</span><div class="seg" id="segCursor"><button data-v="manual" aria-pressed="true">수동 (A키)</button><button data-v="auto">자동</button></div></div>
+    <div class="opt"><span class="label">선수 이름</span><div class="seg" id="segNames"><button data-v="real">실명</button><button data-v="alias">가명</button></div></div>
     <div class="opt"><span class="label">그래픽</span><div class="seg" id="segGfx"><button data-v="low">저</button><button data-v="mid">중</button><button data-v="high">고</button></div></div>
     <div class="opt"><span class="label">소리</span><div class="seg" id="segSnd"><button id="sOn" data-v="on" aria-pressed="true">켜기</button><button id="sOff" data-v="off">끄기</button></div></div>
   </div>
@@ -37,8 +39,8 @@
     <p class="netstat" id="netStat">인터넷만 되면 어디서든 연결됩니다. 방을 만들면 코드가 나오고, 친구가 그 코드를 넣고 참가하면 바로 로비가 열립니다. 호스트가 왼쪽 팀, 게스트가 오른쪽 팀입니다.</p>
   </section>
   <div class="matchup">
-    <section class="side"><div class="sidehead"><span class="label" id="lab0">내 팀 (P1)</span><span class="stats" id="st0"></span></div><div class="chosen" id="ch0"></div><div class="grid" id="grid0"></div></section>
-    <section class="side"><div class="sidehead"><span class="label" id="lab1">상대 팀</span><span class="stats" id="st1"></span></div><div class="chosen" id="ch1"></div><div class="grid" id="grid1"></div></section>
+    <section class="side"><div class="sidehead"><span class="label" id="lab0">내 팀 (P1)</span><span class="stats" id="st0"></span></div><div class="chosen" id="ch0"></div><div class="squad" id="sq0"></div><div class="grid" id="grid0"></div></section>
+    <section class="side"><div class="sidehead"><span class="label" id="lab1">상대 팀</span><span class="stats" id="st1"></span></div><div class="chosen" id="ch1"></div><div class="squad" id="sq1"></div><div class="grid" id="grid1"></div></section>
   </div>
   <p class="tip" id="rotateTip" hidden>폰을 가로로 돌리면 경기장이 더 넓게 보여요.</p>
   <div class="row"><button class="kick" id="startBtn">킥오프</button><span class="netstat" id="startNote"></span></div>

@@ -8,9 +8,11 @@ import type { IRenderer, Quality, CamMode } from '../types';
 import { buildStadium, updateNets, type Stadium } from './stadium';
 import { PlayerModel, type PoseState } from './player';
 import { ballTexture, puffTexture, ringTexture } from './textures';
+import { opts } from '../../options';
+import { displayName, shirtName } from '../../data/squads';
 
 interface Puff { sp: THREE.Sprite; vx: number; vz: number; life: number; t: number; }
-const PF = 12, BF = 6; // 리플레이 프레임: 선수당 12값, 공 6값
+const PF = 15, BF = 6; // 리플레이 프레임: 선수당 15값, 공 6값
 interface Frame { t: number; P: Float32Array; B: Float32Array; }
 const ELEV = 0.5; // 중계 카메라 올려다보는 각 (rad)
 export class ThreeRenderer implements IRenderer {
@@ -19,7 +21,7 @@ export class ThreeRenderer implements IRenderer {
   private dpr = 1; private ins = { t: 0, r: 0, b: 0, l: 0 };
   private gl: THREE.WebGLRenderer; private scene = new THREE.Scene(); private camera: THREE.PerspectiveCamera;
   private sun: THREE.DirectionalLight; private stadium!: Stadium; private quality: Quality = 'mid'; private mode: CamMode = 'tv';
-  private models = new Map<Player, PlayerModel>(); private modelSim: Sim | null = null;
+  private models = new Map<Player, PlayerModel>(); private modelSim: Sim | null = null; private namesMode = opts.names;
   private ball: THREE.Mesh; private ballShadow: THREE.Mesh; private rings: THREE.Mesh[] = [];
   private puffs: Puff[] = []; private puffTex: THREE.Texture; private blobTex: THREE.Texture;
   private ov: CanvasRenderingContext2D; private lastPhase = ''; private camPos = new THREE.Vector3(); private camLook = new THREE.Vector3(CX, 0, CY);
@@ -67,7 +69,7 @@ export class ThreeRenderer implements IRenderer {
   private pushFrame(sim: Sim, perf: number) {
     const n = sim.players.length; let f = this.frames.length > 260 ? this.frames.shift()! : { t: 0, P: new Float32Array(n * PF), B: new Float32Array(BF) };
     if (f.P.length !== n * PF) f = { t: 0, P: new Float32Array(n * PF), B: new Float32Array(BF) };
-    f.t = perf; sim.players.forEach((p, i) => { const k = i * PF; f.P[k] = p.x; f.P[k + 1] = p.y; f.P[k + 2] = p.dir; f.P[k + 3] = p.vx; f.P[k + 4] = p.vy; f.P[k + 5] = p.run; f.P[k + 6] = p.kickCD; f.P[k + 7] = p.slide; f.P[k + 8] = p.dive; f.P[k + 9] = p.diveDir; f.P[k + 10] = p.stun; f.P[k + 11] = p.cele ? 1 : 0; });
+    f.t = perf; sim.players.forEach((p, i) => { const k = i * PF; f.P[k] = p.x; f.P[k + 1] = p.y; f.P[k + 2] = p.dir; f.P[k + 3] = p.vx; f.P[k + 4] = p.vy; f.P[k + 5] = p.run; f.P[k + 6] = p.kickCD; f.P[k + 7] = p.slide; f.P[k + 8] = p.dive; f.P[k + 9] = p.diveDir; f.P[k + 10] = p.stun; f.P[k + 11] = p.cele ? 1 : 0; f.P[k + 12] = p.kickWind; f.P[k + 13] = p.spin; f.P[k + 14] = p.feint; });
     const b = sim.ball; f.B[0] = b.x; f.B[1] = b.y; f.B[2] = b.z; f.B[3] = b.vx; f.B[4] = b.vy; f.B[5] = b.owner ? sim.players.indexOf(b.owner) : -1;
     this.frames.push(f);
   }
@@ -76,9 +78,9 @@ export class ThreeRenderer implements IRenderer {
     const fr = this.frames; if (!fr.length) return false;
     let j = fr.length - 1; while (j > 0 && fr[j - 1].t > t) j--; const b = fr[j], a = fr[Math.max(0, j - 1)];
     const f = b.t > a.t ? clamp((t - a.t) / (b.t - a.t), 0, 1) : 1;
-    if (this.pose.length !== sim.players.length) this.pose = sim.players.map(p => ({ x: 0, y: 0, dir: 0, vx: 0, vy: 0, run: 0, kickCD: 0, slide: 0, dive: 0, diveDir: 0, stun: 0, cele: false, role: p.role, i: p.i }));
+    if (this.pose.length !== sim.players.length) this.pose = sim.players.map(p => ({ x: 0, y: 0, dir: 0, vx: 0, vy: 0, run: 0, kickCD: 0, slide: 0, dive: 0, diveDir: 0, stun: 0, cele: false, role: p.role, i: p.i, kickWind: 0, spin: 0, feint: 0 }));
     const L = (i: number) => a.P[i] + (b.P[i] - a.P[i]) * f;
-    this.pose.forEach((q, i) => { const k = i * PF; q.x = L(k); q.y = L(k + 1); let da = b.P[k + 2] - a.P[k + 2]; da = ((da % (Math.PI * 2)) + Math.PI * 3) % (Math.PI * 2) - Math.PI; q.dir = a.P[k + 2] + da * f; q.vx = b.P[k + 3]; q.vy = b.P[k + 4]; q.run = L(k + 5); q.kickCD = b.P[k + 6]; q.slide = b.P[k + 7]; q.dive = b.P[k + 8]; q.diveDir = b.P[k + 9]; q.stun = b.P[k + 10]; q.cele = b.P[k + 11] > 0; });
+    this.pose.forEach((q, i) => { const k = i * PF; q.x = L(k); q.y = L(k + 1); let da = b.P[k + 2] - a.P[k + 2]; da = ((da % (Math.PI * 2)) + Math.PI * 3) % (Math.PI * 2) - Math.PI; q.dir = a.P[k + 2] + da * f; q.vx = b.P[k + 3]; q.vy = b.P[k + 4]; q.run = L(k + 5); q.kickCD = b.P[k + 6]; q.slide = b.P[k + 7]; q.dive = b.P[k + 8]; q.diveDir = b.P[k + 9]; q.stun = b.P[k + 10]; q.cele = b.P[k + 11] > 0; q.kickWind = b.P[k + 12]; q.spin = b.P[k + 13]; q.feint = b.P[k + 14]; });
     const rb = this.rBall; rb.x = a.B[0] + (b.B[0] - a.B[0]) * f; rb.y = a.B[1] + (b.B[1] - a.B[1]) * f; rb.z = a.B[2] + (b.B[2] - a.B[2]) * f; rb.vx = b.B[3]; rb.vy = b.B[4]; rb.owner = b.B[5] >= 0 ? sim.players[b.B[5]] : null;
     return true;
   }
@@ -90,10 +92,10 @@ export class ThreeRenderer implements IRenderer {
     }
   }
   private syncModels(sim: Sim) {
-    if (this.modelSim === sim) return;
+    if (this.modelSim === sim && this.namesMode === opts.names) return;
     for (const m of this.models.values()) this.scene.remove(m.root); this.models.clear();
-    for (const p of sim.players) { const m = new PlayerModel(p, sim.M.kit[p.t], this.blobTex); m.setBlob(this.quality === 'low'); this.scene.add(m.root); this.models.set(p, m); }
-    this.modelSim = sim;
+    for (const p of sim.players) { const m = new PlayerModel(p, sim.M.kit[p.t], this.blobTex, shirtName(p, opts.names)); m.setBlob(this.quality === 'low'); this.scene.add(m.root); this.models.set(p, m); }
+    this.modelSim = sim; this.namesMode = opts.names;
   }
   /** 월드 → 화면 좌표 (오버레이용) */
   private toScreen(x: number, z: number, y: number) {
@@ -185,8 +187,9 @@ export class ThreeRenderer implements IRenderer {
       if (!h || !h.ctrl) continue; const c = h.ctrl, pp = this.toScreen(c.x, c.y, 2.05), px = pp.x, py = pp.y, on = pp.on && px > 8 && px < cw - 8 && py > 8 && py < ch - 8;
       if (on) {
         const ty2 = py - 10; ctx.fillStyle = h.col; ctx.beginPath(); ctx.moveTo(px, ty2 + 9); ctx.lineTo(px - 6, ty2); ctx.lineTo(px + 6, ty2); ctx.fill();
-        ctx.font = '800 13px "Saira Condensed","Arial Narrow",sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'bottom'; ctx.fillStyle = '#ffffff'; ctx.shadowColor = 'rgba(0,0,0,.6)'; ctx.shadowBlur = 3; ctx.fillText((M.twoP ? h.tag + ' · ' : '') + c.num, px, ty2 - 1); ctx.shadowBlur = 0;
-        if (h.charging) { const fp = this.toScreen(c.x, c.y, 0), bw = 44, bh = 6, bx = fp.x - bw / 2, by = fp.y + 8; ctx.fillStyle = 'rgba(9,17,27,.85)'; ctx.fillRect(bx - 1, by - 1, bw + 2, bh + 2); ctx.fillStyle = h.charge > 0.8 ? '#ff5a4e' : h.col; ctx.fillRect(bx, by, bw * h.charge, bh); ctx.fillStyle = '#fff'; ctx.fillRect(bx + bw * 0.8, by - 2, 1.5, bh + 4); }
+        ctx.font = '800 13px "Saira Condensed","Arial Narrow",sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'bottom'; ctx.fillStyle = '#ffffff'; ctx.shadowColor = 'rgba(0,0,0,.6)'; ctx.shadowBlur = 3; ctx.fillText((M.twoP ? h.tag + ' · ' : '') + displayName(c, opts.names), px, ty2 - 1); ctx.shadowBlur = 0;
+        { const fp = this.toScreen(c.x, c.y, 0), bw = 30, bh = 3, bx = fp.x - bw / 2, by = fp.y + 4; ctx.fillStyle = 'rgba(9,17,27,.7)'; ctx.fillRect(bx - 1, by - 1, bw + 2, bh + 2); ctx.fillStyle = c.sta > 0.4 ? '#8fe3a3' : '#ff8a5c'; ctx.fillRect(bx, by, bw * c.sta, bh); } // 체력
+        if (h.charging) { const fp = this.toScreen(c.x, c.y, 0), bw = 44, bh = 6, bx = fp.x - bw / 2, by = fp.y + 10; ctx.fillStyle = 'rgba(9,17,27,.85)'; ctx.fillRect(bx - 1, by - 1, bw + 2, bh + 2); ctx.fillStyle = h.charge > 0.8 ? '#ff5a4e' : h.col; ctx.fillRect(bx, by, bw * h.charge, bh); ctx.fillStyle = '#fff'; ctx.fillRect(bx + bw * 0.8, by - 2, 1.5, bh + 4); }
       } else { const cx2 = clamp(px, 24, cw - 24), cy2 = clamp(py, 24 + ins.t, ch - 24 - ins.b), a = Math.atan2(py - cy2, px - cx2); ctx.save(); ctx.translate(cx2, cy2); ctx.rotate(a); ctx.fillStyle = h.col; ctx.beginPath(); ctx.moveTo(12, 0); ctx.lineTo(-6, -8); ctx.lineTo(-6, 8); ctx.fill(); ctx.restore(); }
     }
     // 미니맵

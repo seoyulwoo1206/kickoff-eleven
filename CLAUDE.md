@@ -15,12 +15,20 @@
 - `src/render/canvas2d.ts` 2D 폴백 `Renderer`(원근 투영 `proj`, 관절형 벡터 선수, 미니맵)
 - `src/net/peer.ts` PeerJS 연결(`NET`, `netHost/netJoin/netSend/netClose`, `LOCAL()`), `protocol.ts` 스냅샷(`makeSnap/applySnap/netInterp`)·입력(`encodeInput/applyNetInput`)
 - `src/ui/` `menu.ts`(팀 그리드·세그·네트 상태), `hud.ts`(스코어보드·배너), `result.ts`. `src/options.ts`(localStorage `ko11v2`), `src/audio.ts`(Web Audio 합성)
-- `src/data/teams.ts` TEAMS(24팀, 유니폼 패턴 solid/stripes/hoops/half/sash/chevron/check), DIFF, FORM(4-4-2), 킷 유틸
+- `src/data/teams.ts` TEAMS(24팀, 유니폼 패턴 solid/stripes/hoops/half/sash/chevron/check), DIFF, FORM(4-4-2 폴백), 킷 유틸. `applySquadStrength()`가 앱 시작 시 atk/def/spd를 선수단 기준으로 덮어씀
+- `src/data/squad.ts` 선수단 스키마(`PlayerDef` 6대 지표 r + GK `gk`, `expand()`가 세부 능력치 `Detail` 전개, `overall()` 포지션별 가중). `formations.ts` 7개 포메이션 슬롯(위치·역할·포지션). `squads.ts` 조회(`squadOf/lineupOf/slotsOf/strengthOf/topPlayers/aliasOf/displayName/shirtName`). `teams/<CODE>.json`이 데이터(작성 규칙은 `teams/README.md`), `teams/index.ts`는 `npx tsx tools/gen-squad-index.ts`로 생성. 검증 `npx tsx tools/validate-data.ts [CODE]`
+- `tools/bench.ts` 상황 벤치(패스 수신률·슛 성공률·수비 회수율, `--seeds 4 --n 80`으로 여러 시드 평균). 조작·물리 숫자를 바꾸면 전후로 돌려 비교할 것
 - `tools/simulate.ts` 헤드리스: `npx tsx tools/simulate.ts 40 300 KOR BRA --seed 1` → 골·슛·점유·파울·오프사이드·루즈볼 + 결정론 검사. 숫자 튜닝은 반드시 이걸로 재고 바꿀 것
 - `index.html`은 마크업만(`#build`가 빌드 표시, 폰에서 옛 파일인지 확인용). CSS는 `src/style.css`
 
 ## 게임 규칙·모델 (함수 이름은 위 파일에 있음)
-- 입력 액션: `pass`(S) 짧은패스/압박·태클, `lob`(A) 롱패스/선수 전환, `through`(W) 스루/세컨드 디펜더, `shoot`(D) 슛(길게 파워)/슬라이딩, `chip`(Z) 칩슛, `gkRush`(Q) 키퍼 돌진, `sprint`(E) 질주. 터치는 pass 짧게=숏/길게=롱, through 버튼이 수비 땐 전환. `INP[0]`은 로컬 P1(키보드/터치/패드), `INP[1]`은 로컬 P2 또는 온라인 게스트 입력
+- 선수 능력치(Phase 4): `Player.attrs`(Detail)가 항상 있음(선수단 없으면 팀 능력치로 가짜 전개). `n(v)=(v-50)/50`. `steer` 가속 7.3+n(acc)×2.4, 감속 10+n(bal)×2(질주 중 멈추면 8로 미끄러짐), 회전 (14+n(agi)×4)-sp×(1.25-n(agi)×.3). 속력 `speed0`=6.2+(spd-60)/40×1.6, `speed`=speed0×(.86+.14×sta). 체력 `sta` 0~1: 질주 1.7/len·달리기 .5/len 소모, 걸으면 .7/len 회복(스태미나 능력치로 보정). 패스 오차 `passErr` .01+(1-sp/100)×.09 rad ×(1+압박×.6+피로). 슛 오차 (1.22-fin/100)×(1+압박×.4)×약발 페널티, 속도 (16+17p)×(.92+n(pow)×.1). 트래핑 깨끗한 한계 (toMe 17 : 11)+ctl×.15, 넘으면 `bad`만큼 튀는 퍼스트 터치. 스탠딩 태클 (앞 .6/.42)+n(stk)×.25-n(상대 bal)×.12+(공이 발에서 떨어짐 .18)-(헛다리 .4)-(룰렛 .5). 슬라이딩 .55+n(slt)×.3, 사람/옆으로 향하면 파울. 몸싸움 str·bal 대결. 포크 .55+n(int)×.25. AI 태클률 ×(.85+n(stk)×.4). GK: 선방 .62+n(ref)×.3+n(div)×.1, 잡기 sp<14+n(han)×10, 위치선정 pos, 킥 kic, 반응 지연 .3-n(rea)×.08
+- 킥 와인드업 `queueKick(s,p,fn,wind)`: 공 가진 채 `p.kickWind`가 0이 될 때 실행(`runPending`), 그 사이 공을 잃으면 취소. 패스 .04초·슛 .1초(AI도 같음). 렌더는 kickWind>0이면 백스윙
+- 공 물리: 공중 `airStep` 공기저항 (.05+.0038×속도)/s + 마그누스 `ball.curl`(진행 방향 수직 가속, 땅에선 반, 1.5/s 감쇠). 감아차기(`shoot(...,finesse)`, Q 누른 채 슛)는 조준 바깥 .14rad에서 안으로 휨, 속도 .85배, 오차 .7배. 공중볼 슛은 발리(속도 1.08, 오차 1.6)
+- 개인기(`skillMove`, Q 탭 / 폰 오른쪽 스와이프 `I.skill`): skill≥2 헛다리(`feint` .35초 동안 태클 성공 -40%, `burst` 가속), ≥3 스틱 뒤+Q 드래그백(돌아서기), ≥4 질주 중 옆+Q 마르세유 턴(`spin` .5초 한 바퀴, 공은 몸 옆, 태클 거의 불가). AI도 압박받으면 skill×3% 확률로 헛다리
+- 패스 세기: 키보드 pass/lob은 떼는 순간(`I.rel`) 누른 시간이 power(숏 도착 11→16m/s·거리 가산, 롱 35→65m). through는 press, sprint 누른 채면 빠른 공
+- 수비 컨테인: pass 홀드 중 상대 2.6m 안이면 공-골 선상 1.5m를 유지하며 따라붙고, 공이 발에서 떨어졌을 때(kickCD>0 또는 6m/s 넘게 달릴 때)만 자동 태클
+- 입력 액션: `pass`(S) 짧은패스/압박·태클, `lob`(A) 롱패스/선수 전환, `through`(W) 스루/세컨드 디펜더, `shoot`(D) 슛(길게 파워)/슬라이딩, `chip`(Z) 칩슛, `gkRush`(Q) 공격 땐 개인기·누른 채 슛은 감아차기 / 수비 땐 키퍼 돌진, `sprint`(E) 질주. 터치는 pass 짧게=숏/길게=롱, through 버튼이 수비 땐 전환. `INP[0]`은 로컬 P1(키보드/터치/패드), `INP[1]`은 로컬 P2 또는 온라인 게스트 입력
 - 패스 중 커서(FIFA식): 차는 순간 받는 선수로 커서가 넘어가고(`passTo`/`throughPass`에서 h.ctrl=m), 공이 2.5m 밖에 있는 동안은 `assistDir`가 97% 자동으로 공을 향해 뛰게 하며 그 안부터 스틱이 섞인다. 패서는 동료에게 가는 공을 건드리지 않음(`ballControl`)
 - 이동 어시스트: `assistDir`가 조작 방향에 공 쪽 방향을 섞음 (나한테 오는 패스 55~95%, 흐르는 공은 거리·방향에 따라 0~80%, 상대 볼 소유 땐 0~55%). 공 반대쪽 의도는 존중. 손 놓으면 10m 안 루즈볼은 자동 추적, 4.5m 안 상대는 천천히 따라붙음
 - 움직임 모델(`steer`): 정지에서 8.5m/s² 가속(빠를수록 둔화), 감속 11m/s², 회전 속도는 빠를수록 느려 질주 중엔 크게 돈다. 방향이 크게 다르면 속도를 줄여 돈다. 키퍼는 1.7배 민첩. 움직이는 공은 `chase`(전속), 정지 목표는 `moveTo`(가까워지면 감속)
@@ -50,6 +58,7 @@
 월드 105×68 m, x 0→105, y 0→68, z 위. 팀 0은 오른쪽(+x) 공격, 팀 1은 왼쪽. `wx(x,t)`가 팀 기준 좌표 뒤집기.
 
 ## 측정값
+- Phase 4 (2026-10-29, `tools/bench.ts --seeds 3 --n 60`, KOR vs BRA 실명 선수단): 잡자마자 전방 패스 숏 76%·스루 78%, 슛 10m .7 → 55% / 18m 풀 39% / 25m 6% / 14m .6 32%, 수비 회수 84%. AI 반응 지연 없이는 63%/53%
 - 헤드리스(2026-10-29, Phase 1 이식 직후, KOR vs BRA 40경기 264초): 슛 4.9/경기, 골 0.8, 파울 6.7, 루즈볼 46%. 레거시 브라우저 8경기: 슛 6.1, 골 1.4, 파울 6.6, 루즈볼 47%
 
 ### 이전 측정 (브라우저 자동 시험, 2026-10-28)
@@ -61,5 +70,5 @@
 
 ## 알려진 개선 과제
 - 게스트 입력 지연 = 왕복 핑. 클라이언트 예측은 없음.
-- 선수 스프라이트는 아직 선 기반. 방향별(앞/뒤/옆) 전용 스프라이트와 킥 프레임 세분화 여지.
-- 스태미나, 선수 개인 능력치, 포메이션 선택, 교체 없음.
+- 포메이션·전술 선택, 교체, 카드, 연장·승부차기 없음 (Phase 5).
+- 스냅샷은 선수당 16값(sta·kickWind·spin·feint 포함), 리플레이 프레임은 15값. 필드를 늘리면 `protocol.ts` k=i*16과 `scene.ts` PF를 같이 바꿀 것

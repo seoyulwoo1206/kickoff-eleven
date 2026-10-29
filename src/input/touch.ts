@@ -30,5 +30,10 @@ export function installTouch(I: Inp, onTouch: () => void) {
   bindBtn($('bB'), () => { I.touch = true; onTouch(); keyDown(I, 'shoot'); }, () => keyUp(I, 'shoot'));
   bindBtn($('bC'), () => { I.touch = true; onTouch(); keyDown(I, 'sprint'); }, () => keyUp(I, 'sprint'));
   bindBtn($('bD'), () => { I.touch = true; onTouch(); keyDown(I, 'through'); }, () => keyUp(I, 'through'));
+  // 오른쪽 빈 공간 스와이프 = 개인기 (방향은 화면 기준 → 경기장 기준으로 그대로 씀)
+  const skillArea = $('skillArea'); let skId: number | null = null, skx = 0, sky = 0;
+  skillArea.addEventListener('pointerdown', e => { if (skId !== null) return; skId = e.pointerId; skx = e.clientX; sky = e.clientY; try { skillArea.setPointerCapture(e.pointerId); } catch { /* */ } });
+  const skEnd = (e: PointerEvent) => { if (e.pointerId !== skId) return; skId = null; const dx = e.clientX - skx, dy = e.clientY - sky; if (Math.hypot(dx, dy) >= 36) { I.touch = true; I.skill = { x: dx, y: dy }; keyDown(I, 'gkRush'); window.setTimeout(() => keyUp(I, 'gkRush'), 40); } };
+  skillArea.addEventListener('pointerup', skEnd); skillArea.addEventListener('pointercancel', skEnd);
   window.addEventListener('touchstart', onTouch, { passive: true });
 }

@@ -19,6 +19,7 @@ import { updateHud, resetHud, showBanner, hideBanner } from './ui/hud';
 import { initMenu, renderMenu, setSeg, bindSeg, netStatus, NET_IDLE_MSG } from './ui/menu';
 import { fillResult } from './ui/result';
 import { randomSeed } from './sim/rng';
+import { applySquadStrength, squadOf } from './data/squads';
 
 const $ = (id: string) => document.getElementById(id) as HTMLElement;
 type State = 'menu' | 'play' | 'paused' | 'over';
@@ -39,7 +40,7 @@ let perf = 0, lastTs = 0, acc = 0, simLast = 0;
 const snapBuf: SnapBuf = { buf: [], off: null };
 const inSt = { lastIn: '', hb: 0 };
 
-audio.on = opts.sound;
+audio.on = opts.sound; applySquadStrength();
 
 /* ---------- 경기 시작/종료 ---------- */
 function startMatch(cfg?: StartCfg) {
@@ -58,7 +59,7 @@ function startMatch(cfg?: StartCfg) {
   sim = createMatch({
     teams: [a, b], len: opts.len, diff: opts.diff, tempo: TEMPO[opts.tempo], firstKick: cfg ? cfg.fk : (Math.random() < 0.5 ? 0 : 1),
     humans: [{ tag: tag(0), col: '#ffb627', cursor: cur(0) }, twoP ? { tag: tag(1), col: '#4fd3ff', cursor: cur(1) } : null],
-    net, seed: cfg ? cfg.seed : randomSeed(), guest: NET.role === 'guest',
+    net, seed: cfg ? cfg.seed : randomSeed(), guest: NET.role === 'guest', squads: [squadOf(a), squadOf(b)],
   }, INP);
   if (NET.role === 'guest') { snapBuf.buf = []; snapBuf.off = null; }
   R.reset(); acc = 0; simLast = 0; state = 'play';
@@ -168,6 +169,7 @@ bindSeg('segLen', opts.len, v => { opts.len = +v; netSendLobby(); });
 bindSeg('segDiff', opts.diff, v => { opts.diff = v as typeof opts.diff; });
 bindSeg('segTempo', opts.tempo, v => { opts.tempo = v as typeof opts.tempo; saveOpts(); });
 bindSeg('segCursor', opts.cursor, v => { opts.cursor = v as typeof opts.cursor; saveOpts(); });
+bindSeg('segNames', opts.names, v => { opts.names = v as typeof opts.names; saveOpts(); });
 bindSeg('segGfx', opts.gfx, v => { opts.gfx = v as typeof opts.gfx; R.setQuality?.(opts.gfx); saveOpts(); });
 $('camBtn').addEventListener('click', cycleCamera);
 bindSeg('segSnd', audio.on ? 'on' : 'off', v => { audio.on = v === 'on'; opts.sound = audio.on; });

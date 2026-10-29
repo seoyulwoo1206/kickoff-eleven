@@ -1,6 +1,7 @@
 import { TEAMS, kitCss } from '../data/teams';
 import { opts } from '../options';
 import { NET, LOCAL } from '../net/peer';
+import { squadOf, strengthOf, topPlayers, overall, aliasOf } from '../data/squads';
 
 const $ = (id: string) => document.getElementById(id) as HTMLElement;
 export interface MenuHooks { onSelChange(): void; }
@@ -13,7 +14,9 @@ export function renderMenu() {
     g.innerHTML = TEAMS.map((T, i) => `<button class="chip" data-i="${i}" aria-pressed="${opts.sel[s] === i}" ${opts.sel[1 - s] === i ? 'disabled' : ''} aria-label="${T.name}"><div class="shirt" style="background:${kitCss(T)}"></div><span>${T.code}</span></button>`).join('');
     g.querySelectorAll<HTMLButtonElement>('.chip').forEach(b => b.addEventListener('click', () => { if (locked && s !== mySide) return; opts.sel[s] = +b.dataset.i!; renderMenu(); hooks.onSelChange(); }));
     const T = TEAMS[opts.sel[s]]; $('ch' + s).innerHTML = `${T.name}<small>${T.code}</small>`;
-    $('st' + s).innerHTML = `<span>공격<b>${T.atk}</b></span><span>수비<b>${T.def}</b></span><span>속도<b>${T.spd}</b></span>`;
+    const sq = squadOf(T);
+    $('st' + s).innerHTML = (sq ? `<span>종합<b>${strengthOf(sq).ovr}</b></span>` : '') + `<span>공격<b>${T.atk}</b></span><span>수비<b>${T.def}</b></span><span>속도<b>${T.spd}</b></span>`;
+    $('sq' + s).innerHTML = sq ? `<span class="form">${sq.formation}</span>` + topPlayers(sq, 3).map(p => `<span>${opts.names === 'real' ? p.name : aliasOf(p)}<b>${overall(p)}</b></span>`).join('') + `<span class="asof">${sq.asOf} 기준</span>` : '<span class="asof">선수단 데이터 없음</span>';
     g.parentElement!.classList.toggle('locked', locked && s !== mySide);
   }
   const two = opts.mode === '2p';

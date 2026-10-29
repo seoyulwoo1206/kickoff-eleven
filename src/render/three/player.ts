@@ -4,7 +4,7 @@
 import * as THREE from 'three';
 import type { Player } from '../../sim/types';
 /** 포즈에 필요한 상태. 경기 중엔 Player 그대로, 리플레이 땐 버퍼에서 채운 객체 */
-export interface PoseState { x: number; y: number; dir: number; vx: number; vy: number; run: number; kickCD: number; slide: number; dive: number; diveDir: number; stun: number; cele: boolean; role: string; i: number; }
+export interface PoseState { x: number; y: number; dir: number; vx: number; vy: number; run: number; kickCD: number; slide: number; dive: number; diveDir: number; stun: number; cele: boolean; role: string; i: number; kickWind: number; spin: number; feint: number; }
 import type { Kit } from '../../data/teams';
 import { kitTextures } from './textures';
 import { clamp } from '../../sim/util';
@@ -19,8 +19,8 @@ function limbGeo(key: string, r0: number, r1: number, len: number) { return geo(
 function boxGeo(key: string, w: number, h: number, d: number) { return geo(key, () => new THREE.BoxGeometry(w, h, d)); }
 
 const kitTexCache = new Map<string, { front: THREE.Texture; back: THREE.Texture }>();
-function kitTex(kit: Kit, gk: boolean, num: number) {
-  const key = JSON.stringify([kit, gk, num]); let t = kitTexCache.get(key); if (!t) { t = kitTextures(kit, gk, num); kitTexCache.set(key, t); } return t;
+function kitTex(kit: Kit, gk: boolean, num: number, name?: string) {
+  const key = JSON.stringify([kit, gk, num, name ?? '']); let t = kitTexCache.get(key); if (!t) { t = kitTextures(kit, gk, num, name); kitTexCache.set(key, t); } return t;
 }
 const THIGH = 0.44, SHIN = 0.42, UARM = 0.28, FARM = 0.26, HIP_Y = 0.9;
 
@@ -32,7 +32,7 @@ export class PlayerModel {
   private body = new THREE.Group(); // hips+torso를 함께 기울이거나 눕힐 때
   private hScale: number;
   private blob: THREE.Mesh;
-  constructor(public p: Player, kit: Kit, blobTex: THREE.Texture) {
+  constructor(public p: Player, kit: Kit, blobTex: THREE.Texture, backName?: string) {
     const gk = p.role === 'GK', skin = lam(p.skin), hair = lam(p.hair);
     const shirt = gk ? kit.gk : kit.c1, shorts = gk ? '#1b1b1b' : kit.sh, sock = gk ? '#1b1b1b' : '#f4f4f4';
     this.hScale = 0.95 + ((p.i * 7 + p.t * 3) % 5) * 0.03; // 선수마다 키 차이 (1.66~1.86m)
@@ -41,10 +41,10 @@ export class PlayerModel {
     // 골반
     const pelvis = new THREE.Mesh(boxGeo('pelvis', 0.22, 0.2, 0.34), lam(shorts)); pelvis.position.y = 0.04; pelvis.castShadow = true; this.hips.add(pelvis);
     // 몸통 (앞/뒤 텍스처)
-    const kt = kitTex(kit, gk, p.num);
+    const kt = kitTex(kit, gk, p.num, backName);
     const tgeo = boxGeo('torso', 0.26, 0.5, 0.4);
     const side = lam(shirt);
-    const tmats = [mat('kf' + JSON.stringify([kit, gk, p.num]), () => new THREE.MeshLambertMaterial({ map: kt.front })), mat('kb' + JSON.stringify([kit, gk, p.num]), () => new THREE.MeshLambertMaterial({ map: kt.back })), side, lam(shorts), side, side];
+    const tmats = [mat('kf' + JSON.stringify([kit, gk, p.num]), () => new THREE.MeshLambertMaterial({ map: kt.front })), mat('kb' + JSON.stringify([kit, gk, p.num, backName ?? '']), () => new THREE.MeshLambertMaterial({ map: kt.back })), side, lam(shorts), side, side];
     const torsoM = new THREE.Mesh(tgeo, tmats); torsoM.position.y = 0.25; torsoM.castShadow = true;
     this.torso.position.y = 0.12; this.hips.add(this.torso); this.torso.add(torsoM);
     // 머리
@@ -85,6 +85,7 @@ export class PlayerModel {
     const ph = p.run * 2.6, sw = Math.sin(ph) * stride;
     const own = !!ball.owner && (ball.owner as PoseState) === p;
     const kickA = p.kickCD > 0 ? (0.3 - p.kickCD) / 0.3 : -1; // 0→1 킥 진행
+    const wind = p.kickWind > 0 ? Math.min(1, p.kickWind / 0.1) : 0; // 와인드업: 발을 뒤로
     const body = this.body, hips = this.hips, torso = this.torso;
     body.rotation.set(0, 0, 0); body.position.set(0, 0, 0); hips.position.y = HIP_Y; torso.rotation.set(0, 0, 0); this.head.rotation.set(0, 0, 0);
     const legPose = (i: number, thighA: number, kneeA: number, footA = 0) => { this.thigh[i].rotation.set(0, 0, thighA); this.shin[i].rotation.set(0, 0, -kneeA); this.foot[i].rotation.set(0, 0, footA); };
@@ -106,7 +107,9 @@ export class PlayerModel {
       const A = 0.75 * stride, lean = clamp(sp / 8, 0, 1) * 0.22;
       const knee = (phase: number) => 0.18 + 1.0 * Math.max(0, Math.cos(phase)) * stride + (stride ? 0.15 : 0);
       let th0 = Math.sin(ph) * A, th1 = Math.sin(ph + Math.PI) * A, kn0 = knee(ph), kn1 = knee(ph + Math.PI);
-      if (kickA >= 0) { // 킥: 오른발(1)이 뒤에서 앞으로 휘두른다
+      if (wind > 0) { th1 = -0.9 * (1 - wind * 0.3); kn1 = 1.1; th0 = -0.2; kn0 = 0.3; body.rotation.z = -0.08; }
+      else if (p.feint > 0 && kickA < 0) { const f = Math.sin(tGlobal * 26); th0 = f * 0.5; th1 = -f * 0.5; kn0 = 0.6 + Math.max(0, f) * 0.5; kn1 = 0.6 + Math.max(0, -f) * 0.5; } // 헛다리
+      else if (kickA >= 0) { // 킥: 오른발(1)이 뒤에서 앞으로 휘두른다
         const k = kickA, swing = k < 0.1 ? -0.9 : k < 0.45 ? -0.9 + (k - 0.1) / 0.35 * 2.2 : 1.3 - (k - 0.45) / 0.55 * 1.3;
         th1 = swing; kn1 = k < 0.2 ? 1.2 : 0.3; th0 = -0.25; kn0 = 0.35; body.rotation.z = -0.1;
       }

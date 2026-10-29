@@ -14,10 +14,11 @@ export interface Inp {
   rel: Record<Act, boolean>;       // 이번 틱에 뗌
   holdT: Record<Act, number>;      // 누른 시간
   touch: boolean;                  // 터치 조작 중 (패스 버튼 길게 = 롱패스 등)
+  skill: { x: number; y: number } | null; // 폰 스와이프 개인기 방향 (gkRush press와 함께)
 }
 const rec = <T,>(v: T) => Object.fromEntries(ACTS.map(a => [a, v])) as Record<Act, T>;
 export function newInp(): Inp {
-  return { mx: 0, my: 0, keys: new Set(), tx: 0, ty: 0, press: rec(false), down: rec(false), rel: rec(false), holdT: rec(0), touch: false };
+  return { mx: 0, my: 0, keys: new Set(), tx: 0, ty: 0, press: rec(false), down: rec(false), rel: rec(false), holdT: rec(0), touch: false, skill: null };
 }
 export function isAct(k: string): k is Act { return (ACTS as readonly string[]).includes(k); }
 export function keyDown(I: Inp, k: Act | Dir, repeat?: boolean) {

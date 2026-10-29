@@ -1,0 +1,27 @@
+/* 자동 생성: npx tsx tools/gen-squad-index.ts — 손으로 고치지 말 것 */
+import type { SquadDef } from '../squad';
+import ARG from './ARG.json';
+import AUS from './AUS.json';
+import BEL from './BEL.json';
+import BRA from './BRA.json';
+import COL from './COL.json';
+import CRO from './CRO.json';
+import DEN from './DEN.json';
+import ENG from './ENG.json';
+import ESP from './ESP.json';
+import FRA from './FRA.json';
+import GER from './GER.json';
+import GHA from './GHA.json';
+import ITA from './ITA.json';
+import JPN from './JPN.json';
+import KOR from './KOR.json';
+import MAR from './MAR.json';
+import MEX from './MEX.json';
+import NED from './NED.json';
+import NGA from './NGA.json';
+import POR from './POR.json';
+import SEN from './SEN.json';
+import SUI from './SUI.json';
+import URU from './URU.json';
+import USA from './USA.json';
+export const SQUADS: Record<string, SquadDef> = { ARG: ARG as SquadDef, AUS: AUS as SquadDef, BEL: BEL as SquadDef, BRA: BRA as SquadDef, COL: COL as SquadDef, CRO: CRO as SquadDef, DEN: DEN as SquadDef, ENG: ENG as SquadDef, ESP: ESP as SquadDef, FRA: FRA as SquadDef, GER: GER as SquadDef, GHA: GHA as SquadDef, ITA: ITA as SquadDef, JPN: JPN as SquadDef, KOR: KOR as SquadDef, MAR: MAR as SquadDef, MEX: MEX as SquadDef, NED: NED as SquadDef, NGA: NGA as SquadDef, POR: POR as SquadDef, SEN: SEN as SquadDef, SUI: SUI as SquadDef, URU: URU as SquadDef, USA: USA as SquadDef };

@@ -3,21 +3,22 @@ import { clamp, d, wx } from '../util';
 import { DIFF } from '../../data/teams';
 import type { Sim, Player } from '../types';
 import { sfx } from '../events';
-import { gain, kick, passTo } from '../ball';
+import { gain, kick, passTo, n } from '../ball';
 import { steer, moveTo } from '../move';
 import { bestAIPass } from './carrier';
 
 export function gkAI(s: Sim, k: Player, dt: number) {
   const { ball, M, team, HU } = s;
   const t = k.t, gx = t === 0 ? 0 : W, sg = t === 0 ? 1 : -1, own = ball.owner;
-  const skill = (0.62 + (M.teams[t].def - 70) / 22 * 0.22) * (!HU[t] ? DIFF[M.diff].gk : 1);
+  const G = k.def?.gk ?? { div: k.attrs.jmp, han: k.attrs.rea, kic: k.attrs.lp, ref: k.attrs.rea, pos: k.attrs.mrk };
+  const skill = (0.62 + n(G.ref) * 0.3 + n(G.div) * 0.1) * (!HU[t] ? DIFF[M.diff].gk : 1);
   if (own === k) {
     k.holdT += dt; steer(k, 0, 0, dt); k.dir = t === 0 ? 0 : Math.PI;
-    if (k.holdT > 1.0 && M.phase === 'live') { const m = bestAIPass(s, k); if (m) passTo(s, k, m.p, m.loft); else kick(s, k, sg * 22, (s.rnd() - 0.5) * 8, 7); }
+    if (k.holdT > 1.0 && M.phase === 'live') { const m = bestAIPass(s, k); if (m) passTo(s, k, m.p, m.loft); else kick(s, k, sg * (20 + n(G.kic) * 6), (s.rnd() - 0.5) * 8, 7); }
     return;
   }
   const lb = wx(ball.x, t), lk = wx(k.x, t), dG = Math.hypot(ball.x - gx, ball.y - CY);
-  let tx = 1.3 + Math.max(0, (32 - dG) / 32) * 3.2, ty = clamp(CY + (ball.y - CY) * 0.32, CY - 3.3, CY + 3.3), f = 0.85;
+  let tx = 1.3 + Math.max(0, (32 - dG) / 32) * (3.0 + n(G.pos) * 1.2), ty = clamp(CY + (ball.y - CY) * (0.3 + n(G.pos) * 0.08), CY - 3.3, CY + 3.3), f = 0.8 + n(G.pos) * 0.15;
   const h = HU[t];
   if (h && h.gkRush && lb < 30) { // 골키퍼 돌진
     moveTo(k, ball.x, ball.y, 1.3, dt);
@@ -36,7 +37,7 @@ export function gkAI(s: Sim, k: Player, dt: number) {
       const pr = (dy < 0.9 && !hi ? 0.95 : skill * (1 - (dy - 0.6) / 2.6) * (1 - Math.max(0, sp - 20) / 30)) * (hi ? 0.85 : 1);
       k.dive = 0.5; k.diveDir = Math.sign(ball.y - k.y) || 1;
       if (s.rnd() < pr) {
-        if (sp < 21 && ball.z < 1.8) gain(s, k);
+        if (sp < 14 + n(G.han) * 10 && ball.z < 1.8) gain(s, k); // 핸들링 좋으면 잡고, 아니면 쳐낸다
         else { ball.vx = -ball.vx * 0.3; ball.vy = (ball.y > k.y ? 1 : -1) * (6 + s.rnd() * 6); ball.vz = 3 + s.rnd() * 3; ball.lastTouch = t; ball.kicker = k; ball.shot++; k.lastSave = ball.shot; k.kickCD = 0.3; sfx(s, 'tackle'); }
       }
     }

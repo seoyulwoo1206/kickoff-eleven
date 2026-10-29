@@ -17,7 +17,7 @@ export function teamAI(s: Sim, t: number, dt: number) {
   if (!own) {
     if (ball.passTarget && ball.passTarget.t === t) chaser = ball.passTarget;
     else if (ball.knock && ball.knock.t === t) chaser = (h && h.ctrl === ball.knock) ? null : ball.knock;
-    else {
+    else if (M.react[t] <= 0 || (ball.kicker && ball.kicker.t === t)) { // 상대 패스엔 반응 지연 뒤에 쫓는다
       let bt = 1e9; for (const p of outs) { const tt = interceptT(s, p); if (tt < bt) { bt = tt; chaser = p; } }
       if (h && h.ctrl && interceptT(s, h.ctrl) <= bt - 0.35) chaser = null; // 사람이 확실히 빠를 때만 양보
     }
