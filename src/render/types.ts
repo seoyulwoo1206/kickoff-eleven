@@ -1,7 +1,7 @@
 import type { Sim } from '../sim/types';
 
 export type Quality = 'low' | 'mid' | 'high';
-export type CamMode = 'tv' | 'pro' | 'top';
+export type CamMode = 'tv' | 'pro' | 'top' | 'intro';
 /** 렌더러 공통 인터페이스. main.ts는 이것만 안다 */
 export interface IRenderer {
   cam: { x: number; y: number; shake: number; z: number };

@@ -8,6 +8,7 @@ export function fillResult(s: Sim, local: number, isGuest: boolean) {
   let line: string;
   if (M.net) { const mine = M.score[local], theirs = M.score[1 - local]; line = mine > theirs ? '승리! 상대를 꺾었어요.' : mine < theirs ? '패배… 한 판 더 해요.' : '무승부!'; if (isGuest) line += ' 호스트가 다시 하기를 누르면 재경기가 시작돼요.'; }
   else line = M.twoP ? (a > b ? 'P1 승리!' : a < b ? 'P2 승리!' : '무승부!') : (a > b ? `${M.teams[0].name}의 승리입니다.` : a < b ? `${M.teams[1].name}에 졌어요. 한 판 더?` : '무승부로 끝났어요.');
+  if (M.so) { const g0 = M.so.kicks[0].filter(v => v).length, g1 = M.so.kicks[1].filter(v => v).length; line = `승부차기 ${g0} - ${g1} · ${M.teams[M.so.winner].name} 승리` + (M.so.winner === local ? '!' : '…'); $('rScore').textContent = `${a} : ${b} (${g0}-${g1})`; }
   $('rLine').textContent = line; $('againBtn').hidden = isGuest;
   const tp = M.stats.poss[0] + M.stats.poss[1], p0 = Math.round(M.stats.poss[0] / tp * 100);
   const rows: [string, string | number, string | number][] = [['슈팅', M.stats.shots[0], M.stats.shots[1]], ['유효 슈팅', M.stats.onT[0], M.stats.onT[1]], ['점유율', p0 + '%', (100 - p0) + '%'], ['파울', M.stats.fouls[0], M.stats.fouls[1]], ['오프사이드', M.stats.offs[0], M.stats.offs[1]], ['패스 성공', `${M.stats.passC[0]}/${M.stats.passA[0]}`, `${M.stats.passC[1]}/${M.stats.passA[1]}`], ['경고 · 퇴장', `${M.stats.yel[0]} · ${M.stats.red[0]}`, `${M.stats.yel[1]} · ${M.stats.red[1]}`]];

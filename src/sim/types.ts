@@ -2,6 +2,7 @@ import type { Inp } from '../input/actions';
 import type { TeamDef, Kit, Role, DiffKey } from '../data/teams';
 import type { SquadDef, PlayerDef, Detail, Pos } from '../data/squad';
 import type { Tactics } from './tactics';
+import type { Shootout } from './shootout';
 
 export type Phase = 'kickoff' | 'live' | 'setpiece' | 'goal' | 'halftime' | 'full';
 export type SetPieceType = 'corner' | 'throw' | 'goalkick' | 'freekick' | 'penalty';
@@ -41,7 +42,9 @@ export interface MatchInfo {
   /** AI 반응 지연: 상대가 공을 찬 뒤 이 시간 동안은 루즈볼을 쫓지 않는다 (난이도별) */
   react: [number, number];
   /** Phase 5: 전술, 벤치·교체 수, 중단 횟수(추가시간 계산), 추가시간(분, 전/후반), 어드밴티지 */
-  tac: [Tactics, Tactics]; bench: [PlayerDef[], PlayerDef[]]; subs: [number, number]; stops: number; added: [number, number];
+  tac: [Tactics, Tactics]; bench: [PlayerDef[], PlayerDef[]]; subs: [number, number]; stops: number; added: number[];
+  /** 토너먼트: 비기면 연장(전·후반 3·4) → 승부차기. so는 승부차기 상태 */
+  knockout: boolean; so: Shootout | null;
   adv: { t: number; x: number; y: number; timer: number; on: Player } | null;
 }
 export interface Pred { x: number; y: number; z: number; t: number; }
@@ -65,6 +68,10 @@ export interface MatchCfg {
   tactics?: [Tactics | null, Tactics | null];
   /** 메뉴에서 고친 선발(등번호 11개). 없으면 선수단 기본 선발 */
   lineups?: [number[] | null, number[] | null];
+  /** 비기면 연장·승부차기 (토너먼트) */
+  knockout?: boolean;
+  /** 승부차기만 */
+  shootoutOnly?: boolean;
   /** 게스트: 시뮬을 돌리지 않고 스냅샷만 받는다 (선수 배치만 하고 킥오프 안 함) */
   guest?: boolean;
 }

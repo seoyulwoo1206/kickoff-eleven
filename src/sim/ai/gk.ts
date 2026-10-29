@@ -37,7 +37,10 @@ export function gkAI(s: Sim, k: Player, dt: number) {
       if (ball.isShot && ball.kicker) M.stats.onT[ball.kicker.t]++; // 골문 안으로 온 슛 = 유효 슈팅
       let pr = (dy < 0.9 && !hi ? 0.95 : skill * (1 - (dy - 0.6) / 2.6) * (1 - Math.max(0, sp - 20) / 30)) * (hi ? 0.85 : 1);
       k.dive = 0.5; k.diveDir = Math.sign(ball.y - k.y) || 1;
-      if (M.spType === 'penalty' && M.protect > 0) { const guess = s.rnd() < 0.5 ? 1 : -1; k.diveDir = guess; pr = guess === Math.sign(ball.y - CY) ? 0.5 + n(G.div) * 0.3 : 0.08; } // 페널티: 한쪽을 찍고 몸을 던진다
+      if (M.spType === 'penalty' && M.protect > 0) { // 페널티: 한쪽을 찍고 몸을 던진다 (사람 팀 키퍼는 스틱 방향)
+        const I = h ? s.INP[t] : null; const guess = I && Math.abs(I.my) > 0.3 ? Math.sign(I.my) : I ? 0 : (s.rnd() < 0.5 ? 1 : -1);
+        const side = Math.abs(ball.y - CY) < 1 ? 0 : Math.sign(ball.y - CY);
+        k.diveDir = guess || (Math.sign(ball.y - k.y) || 1); pr = guess === side ? 0.55 + n(G.div) * 0.3 : guess === 0 ? 0.15 : 0.06; }
       if (s.rnd() < pr) {
         if (sp < 14 + n(G.han) * 10 && ball.z < 1.8) gain(s, k); // 핸들링 좋으면 잡고, 아니면 쳐낸다
         else { ball.vx = -ball.vx * 0.3; ball.vy = (ball.y > k.y ? 1 : -1) * (6 + s.rnd() * 6); ball.vz = 3 + s.rnd() * 3; ball.lastTouch = t; ball.kicker = k; ball.shot++; k.lastSave = ball.shot; k.kickCD = 0.3; sfx(s, 'tackle'); }

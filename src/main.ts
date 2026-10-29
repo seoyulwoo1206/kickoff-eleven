@@ -9,6 +9,10 @@ import { installKeyboard } from './input/keyboard';
 import { pollGamepads } from './input/gamepad';
 import { installTouch, touchGauge, applyTouchStyle } from './input/touch';
 import { openLineup, closeLineup } from './ui/lineup';
+import { newCup, loadCup, saveCup, userFixture, advance, type Cup } from './cup';
+import { renderCup } from './ui/cup';
+import { loadKeys, renderKeys, installKeyCapture } from './ui/keys';
+import { boo } from './audio';
 import { Renderer } from './render/canvas2d';
 import { ThreeRenderer } from './render/three/scene';
 import type { IRenderer, CamMode } from './render/types';
@@ -38,7 +42,7 @@ function makeRenderer(): IRenderer {
   catch (e) { console.warn('WebGL 사용 불가, 2D 렌더러로', e); $('ov').hidden = true; return new Renderer($('cv') as HTMLCanvasElement, $('insets')); }
 }
 const R: IRenderer = makeRenderer();
-const CAMS: CamMode[] = ['tv', 'pro', 'top'], CAM_NAME = { tv: '중계', pro: '선수 뒤', top: '탑뷰' };
+const CAMS: CamMode[] = ['tv', 'pro', 'top'], CAM_NAME: Record<CamMode, string> = { tv: '중계', pro: '선수 뒤', top: '탑뷰', intro: '입장' };
 let camMode: CamMode = 'tv';
 function cycleCamera() { camMode = CAMS[(CAMS.indexOf(camMode) + 1) % CAMS.length]; R.setCamMode?.(camMode); $('camBtn').textContent = '카메라: ' + CAM_NAME[camMode]; }
 let perf = 0, lastTs = 0, acc = 0, simLast = 0;
@@ -48,6 +52,9 @@ const inSt = { lastIn: '', hb: 0 };
 audio.on = opts.sound; applySquadStrength();
 
 /* ---------- 경기 시작/종료 ---------- */
+let cup: Cup | null = loadCup();
+let cupMatch = false; // 지금 경기가 토너먼트 경기인가
+let introT = 0;
 function startMatch(cfg?: StartCfg) {
   // 온라인: 호스트가 설정(cfg)을 만들어 게스트에게 보내고, 양쪽이 같은 cfg로 경기를 구성한다
   if (opts.mode === 'net') {
@@ -60,19 +67,23 @@ function startMatch(cfg?: StartCfg) {
   const tag = (t: number) => net ? (t === LOCAL() ? 'YOU' : (t === 0 ? a : b).code) : 'P' + (t + 1);
   const cur = (t: number) => (net && t !== LOCAL()) ? 'auto' as const : opts.cursor; // 커서 전환 방식은 각자 로컬 설정
   const twoP = opts.mode === '2p' || net;
+  if (opts.mode === 'cup' && cup) { const uf = userFixture(cup); if (uf) { opts.sel[0] = uf.a; opts.sel[1] = uf.b; cupMatch = true; } else cupMatch = false; } else cupMatch = false;
   for (const I of INP) { dropKeys(I); clearPresses(I); I.tx = I.ty = 0; }
   sim = createMatch({
     teams: [a, b], len: opts.len, diff: opts.diff, tempo: TEMPO[opts.tempo], firstKick: cfg ? cfg.fk : (Math.random() < 0.5 ? 0 : 1),
     humans: [{ tag: tag(0), col: '#ffb627', cursor: cur(0) }, twoP ? { tag: tag(1), col: '#4fd3ff', cursor: cur(1) } : null],
     net, seed: cfg ? cfg.seed : randomSeed(), guest: NET.role === 'guest', squads: [squadOf(a), squadOf(b)],
     tactics: net ? [null, null] : [menuTac[0], menuTac[1]], lineups: net ? [null, null] : [menuLineup[0], menuLineup[1]],
+    knockout: cupMatch && !!cup && cup.stage !== 'group', shootoutOnly: opts.mode === 'pk',
   }, INP);
+  introT = (net || opts.mode === 'pk') ? 0 : 3.2; if (introT > 0) R.setCamMode?.('intro');
   renderPauseTactics();
   if (NET.role === 'guest') { snapBuf.buf = []; snapBuf.off = null; }
   R.reset(); acc = 0; simLast = 0; state = 'play';
   $('menu').hidden = true; $('result').hidden = true; $('pause').hidden = true; $('hud').hidden = false; $('pauseBtn').hidden = false; $('touch').hidden = !isTouch;
   $('hPing').hidden = !net; showPing();
   resetHud(); drain(sim); updateHud(sim, LOCAL()); crowdStart();
+  if (introT > 0) showBanner(`${a.code} vs ${b.code}`, `${a.name} · ${b.name}`, 3000, false); // 입장 배너 (킥오프 배너 뒤에)
   saveOpts();
 }
 /** 시뮬이 내보낸 연출 이벤트를 처리하고, 호스트면 게스트에게도 보낸다 */
@@ -89,7 +100,8 @@ function applyLocalEv(e: SimEvent, relay: boolean) {
     case 'puff': R.puff(e.x, e.y, e.n, e.sp); break;
     case 'shake': R.cam.shake = Math.max(R.cam.shake, e.v); break;
     case 'hud': resetHud(); break;
-    case 'card': case 'sub': renderPauseTactics(); break;
+    case 'card': renderPauseTactics(); if (e.kind === 'Y' || e.kind === 'R') boo(); break;
+    case 'sub': renderPauseTactics(); break;
     case 'full': fullTime(); break;
   }
 }
@@ -99,6 +111,8 @@ function fullTime() {
   if (NET.role === 'host') { netSend(makeSnap(sim, perf, R.cam.shake)); netSend({ t: 'ev', k: 'full' }); }
   if (NET.role !== 'guest') sfx('long');
   fillResult(sim, LOCAL(), NET.role === 'guest');
+  $('cupNextBtn').hidden = !cupMatch; $('againBtn').hidden = cupMatch || NET.role === 'guest';
+  if (cupMatch && cup) { const so = sim.M.so ? [sim.M.so.kicks[0].filter(v => v).length, sim.M.so.kicks[1].filter(v => v).length] as [number, number] : undefined; advance(cup, [sim.M.score[0], sim.M.score[1]], so, sim.M.so?.winner); saveCup(cup); }
   window.setTimeout(() => { if (state === 'over') { $('result').hidden = false; ($('againBtn') as HTMLButtonElement).focus(); } }, 900);
   if (NET.role !== 'guest') { const M = sim.M; showBanner('FULL TIME', `${M.teams[0].code} ${M.score[0]} - ${M.score[1]} ${M.teams[1].code}`, 1400, false); }
 }
@@ -213,7 +227,7 @@ $('subBtn').addEventListener('click', () => {
 
 /* ---------- 메뉴 ---------- */
 initMenu({ onSelChange: () => { netSendLobby(); renderMenuTactics(); } });
-bindSeg('segMode', opts.mode, v => { if (opts.mode === 'net' && v !== 'net') { netClose(); netStatus(NET_IDLE_MSG); } opts.mode = v as typeof opts.mode; renderMenu(); renderMenuTactics(); });
+bindSeg('segMode', opts.mode, v => { if (opts.mode === 'net' && v !== 'net') { netClose(); netStatus(NET_IDLE_MSG); } opts.mode = v as typeof opts.mode; renderMenu(); renderMenuTactics(); if (v === 'cup') openCup(); });
 bindSeg('segLen', opts.len, v => { opts.len = +v; netSendLobby(); });
 bindSeg('segDiff', opts.diff, v => { opts.diff = v as typeof opts.diff; });
 bindSeg('segTempo', opts.tempo, v => { opts.tempo = v as typeof opts.tempo; saveOpts(); });
@@ -228,10 +242,26 @@ $('fsBtn').addEventListener('click', async () => { try { await document.document
 const menuLineup: [number[] | null, number[] | null] = [null, null];
 for (const t of [0, 1] as const) $('lu' + t).addEventListener('click', () => { const T = TEAMS[opts.sel[t]], sq = squadOf(T); if (!sq) return; openLineup(sq, menuTac[t].form, menuLineup[t] ?? sq.lineup, opts.names, lu => { menuLineup[t] = lu.slice(); }); });
 $('luClose').addEventListener('click', closeLineup);
+// 월드컵
+function openCup() { if (!cup) cup = newCup(opts.sel[0]); saveCup(cup); renderCup(cup); $('cup').hidden = false; }
+$('cupClose').addEventListener('click', () => { $('cup').hidden = true; });
+$('cupQuit').addEventListener('click', () => { cup = null; saveCup(null); $('cup').hidden = true; });
+$('cupPlay').addEventListener('click', () => {
+  if (!cup) return;
+  if (cup.stage === 'done') { cup = newCup(opts.sel[0]); saveCup(cup); renderCup(cup); return; }
+  const uf = userFixture(cup);
+  if (cup.eliminated || !uf) { advance(cup); saveCup(cup); renderCup(cup); return; }
+  $('cup').hidden = true; ensureAudio(); startMatch();
+});
+$('cupNextBtn').addEventListener('click', () => { toMenu(); if (cup) { renderCup(cup); $('cup').hidden = false; } });
+// 키 설정
+loadKeys(); installKeyCapture();
+$('keysBtn').addEventListener('click', () => { renderKeys(); $('keys').hidden = false; });
+$('keysClose').addEventListener('click', () => { $('keys').hidden = true; });
 bindSeg('segGfx', opts.gfx, v => { opts.gfx = v as typeof opts.gfx; R.setQuality?.(opts.gfx); saveOpts(); });
 $('camBtn').addEventListener('click', cycleCamera);
 bindSeg('segSnd', audio.on ? 'on' : 'off', v => { audio.on = v === 'on'; opts.sound = audio.on; });
-$('startBtn').addEventListener('click', () => { ensureAudio(); startMatch(); });
+$('startBtn').addEventListener('click', () => { ensureAudio(); if (opts.mode === 'cup') { openCup(); return; } startMatch(); });
 $('pauseBtn').addEventListener('click', () => pauseGame());
 $('resumeBtn').addEventListener('click', () => resumeGame());
 $('restartBtn').addEventListener('click', () => startMatch());
@@ -270,9 +300,10 @@ function frame(ts: number) {
   requestAnimationFrame(frame); const now = ts / 1000; const rawDt = lastTs ? now - lastTs : STEP, dt = Math.min(0.1, rawDt); lastTs = now; perf = now;
   pollGamepads({ inp: INP[0], isPlaying: () => state === 'play', togglePause: () => { if (state === 'play') pauseGame(); else if (state === 'paused') resumeGame(); } });
   if (sim && sim.M.slow > 0 && !NET.role) sim.M.slow = Math.max(0, sim.M.slow - dt);
+  if (introT > 0) { introT -= dt; if (introT <= 0) { R.setCamMode?.(camMode); lastTs = now; } }
   if (state === 'play' && sim) {
     if (NET.role === 'guest') netInterpNow();
-    else if (NET.role !== 'host') runSteps(dt);
+    else if (NET.role !== 'host' && introT <= 0) runSteps(dt);
     if (sim) { updateHud(sim, LOCAL()); halftimePanel(sim); gauges(sim); }
   } else if (state === 'paused' && NET.role === 'guest' && sim) netInterpNow();
   netPing(perf);

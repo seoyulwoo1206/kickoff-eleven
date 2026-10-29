@@ -25,6 +25,17 @@ export function crowdSwell(amt: number, dur: number) {
   if (!crowd || !AC) return; const t = AC.currentTime, g = crowd.g.gain;
   try { g.cancelScheduledValues(t); g.setValueAtTime(Math.max(g.value, 0.045), t); g.linearRampToValueAtTime(amt, t + 0.3); g.linearRampToValueAtTime(0.045, t + dur); } catch { /* */ }
 }
+/** 야유: 낮은 웅성거림 1.3초 (카드·거친 파울 뒤) */
+export function boo() {
+  if (!audio.on || !AC) return; const t = AC.currentTime;
+  try {
+    const len = 1.3, buf = AC.createBuffer(1, AC.sampleRate * len, AC.sampleRate), c0 = buf.getChannelData(0);
+    for (let i = 0; i < c0.length; i++) c0[i] = Math.random() * 2 - 1;
+    const src = AC.createBufferSource(), f = AC.createBiquadFilter(), g = AC.createGain(); src.buffer = buf; f.type = 'lowpass'; f.frequency.value = 260; f.Q.value = 1.2;
+    g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(0.2, t + 0.15); g.gain.linearRampToValueAtTime(0, t + len);
+    src.connect(f).connect(g).connect(AC.destination); src.start(t);
+  } catch { /* */ }
+}
 export function sfx(type: SfxType) {
   if (!audio.on || !AC) return; const t = AC.currentTime;
   try {

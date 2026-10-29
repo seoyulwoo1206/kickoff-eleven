@@ -26,9 +26,9 @@
 </div>
 
 <div id="menu" class="overlay"><div class="card">
-  <header><div class="eyebrow">11 대 11 · 풀경기 · <span id="build">BUILD 1029-P6</span></div><h1>킥오프 일레븐</h1><p class="lede">팀을 고르고 킥오프. 공 근처 선수로 커서가 자동으로 옮겨가고, 같은 키보드로 친구와 1대1도 됩니다.</p></header>
+  <header><div class="eyebrow">11 대 11 · 풀경기 · <span id="build">BUILD 1029-P7</span></div><h1>킥오프 일레븐</h1><p class="lede">팀을 고르고 킥오프. 공 근처 선수로 커서가 자동으로 옮겨가고, 같은 키보드로 친구와 1대1도 됩니다.</p></header>
   <div class="opts">
-    <div class="opt"><span class="label">대전 방식</span><div class="seg" id="segMode"><button id="mAI" data-v="ai" aria-pressed="true">AI 대전</button><button id="m2P" data-v="2p">2인 대전 (한 키보드)</button><button id="mNet" data-v="net">온라인 대전</button></div></div>
+    <div class="opt"><span class="label">대전 방식</span><div class="seg" id="segMode"><button id="mAI" data-v="ai" aria-pressed="true">AI 대전</button><button id="m2P" data-v="2p">2인 대전 (한 키보드)</button><button id="mNet" data-v="net">온라인 대전</button><button id="mCup" data-v="cup">월드컵</button><button id="mPK" data-v="pk">승부차기</button></div></div>
     <div class="opt" id="optLen"><span class="label">경기 시간</span><div class="seg" id="segLen"><button id="len180" data-v="180">3분</button><button id="len300" data-v="300" aria-pressed="true">5분</button><button id="len480" data-v="480">8분</button></div></div>
     <div class="opt" id="optDiff"><span class="label">AI 난이도</span><div class="seg" id="segDiff"><button id="dEasy" data-v="easy">쉬움</button><button id="dNormal" data-v="normal" aria-pressed="true">보통</button><button id="dHard" data-v="hard">어려움</button></div></div>
     <div class="opt" id="optTempo"><span class="label">경기 템포</span><div class="seg" id="segTempo"><button data-v="slow">느림</button><button data-v="normal" aria-pressed="true">보통</button><button data-v="fast">빠름</button></div></div>
@@ -55,7 +55,7 @@
     <div class="tacside"><span class="label">상대 팀 전술</span><div class="tacrow"><select id="tac1Form" aria-label="포메이션"></select><select id="tac1Line" aria-label="수비 라인"></select><select id="tac1Style" aria-label="공격 성향"></select><select id="tac1Press" aria-label="압박"></select></div></div>
   </section>
   <p class="tip" id="rotateTip" hidden>폰을 가로로 돌리면 경기장이 더 넓게 보여요.</p>
-  <div class="row"><button class="kick" id="startBtn">킥오프</button><button class="ghost touchonly" id="fsBtn">전체화면</button><span class="netstat" id="startNote"></span></div>
+  <div class="row"><button class="kick" id="startBtn">킥오프</button><button class="ghost" id="keysBtn">키 설정</button><button class="ghost touchonly" id="fsBtn">전체화면</button><span class="netstat" id="startNote"></span></div>
   <div class="help">
     <div><span class="who p1">P1 공격</span><kbd>방향키</kbd> 이동 · <kbd>S</kbd> 짧은 패스 · <kbd>A</kbd> 롱패스/크로스 · <kbd>W</kbd> 스루패스 · <kbd>D</kbd> 길게 슛 · <kbd>Z</kbd> 칩슛 · <kbd>E</kbd> 질주</div>
     <div><span class="who p1">P1 수비</span><kbd>S</kbd> 압박(길게)/태클 · <kbd>D</kbd> 슬라이딩 · <kbd>A</kbd> 선수 전환 · <kbd>W</kbd> 세컨드 디펜더(길게) · <kbd>Q</kbd> 골키퍼 돌진 · <kbd>E</kbd> 질주</div>
@@ -66,6 +66,19 @@
   </div>
 </div></div>
 
+<div id="cup" class="overlay" hidden><div class="card">
+  <div class="sidehead"><div><div class="eyebrow">월드컵 토너먼트</div><h2 id="cupTitle"></h2></div><div class="row"><button class="ghost small" id="cupQuit">대회 포기</button><button class="ghost" id="cupClose">메뉴</button></div></div>
+  <p class="lede" id="cupLede"></p>
+  <div class="row"><button class="kick" id="cupPlay">킥오프</button></div>
+  <div class="cupgroups" id="cupGroups"></div>
+  <div class="cupgroups" id="cupKo"></div>
+</div></div>
+<div id="keys" class="overlay" hidden><div class="card narrow">
+  <div class="sidehead"><div><div class="eyebrow">키 설정 (P1)</div><h2>키를 바꿉니다</h2></div><button class="ghost" id="keysClose">닫기</button></div>
+  <p class="lede">바꿀 키의 버튼을 누른 뒤 새 키를 누르세요. Esc로 취소.</p>
+  <div class="keylist" id="keyList"></div>
+  <div class="row"><button class="ghost" id="keyReset">기본값으로</button></div>
+</div></div>
 <div id="lineup" class="overlay" hidden><div class="card">
   <div class="sidehead"><div><div class="eyebrow">라인업</div><h2 id="luTitle"></h2></div><button class="ghost" id="luClose">닫기</button></div>
   <p class="lede" id="luAvg"></p>
@@ -90,7 +103,7 @@
   <div class="eyebrow">경기 종료 · 90'</div>
   <div class="final"><div class="fn"><i id="rC0"></i><span id="rN0"></span></div><div class="fs" id="rScore">0 : 0</div><div class="fn"><i id="rC1"></i><span id="rN1"></span></div></div>
   <p class="lede" id="rLine"></p><div class="rstats" id="rStats"></div>
-  <div class="row"><button class="kick" id="againBtn">다시 하기</button><button class="ghost" id="menuBtn2">팀 다시 고르기</button></div>
+  <div class="row"><button class="kick" id="againBtn">다시 하기</button><button class="kick" id="cupNextBtn" hidden>토너먼트로</button><button class="ghost" id="menuBtn2">팀 다시 고르기</button></div>
 </div></div>
 
 <script type="module" src="/src/main.ts"></script>

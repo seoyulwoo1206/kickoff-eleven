@@ -2,7 +2,7 @@ import { TEAMS } from './data/teams';
 import type { DiffKey } from './data/teams';
 import { TEMPO, type TempoKey } from './sim/consts';
 
-export type Mode = 'ai' | '2p' | 'net';
+export type Mode = 'ai' | '2p' | 'net' | 'cup' | 'pk';
 export type Gfx = 'low' | 'mid' | 'high';
 export type Names = 'real' | 'alias';
 export interface Options { sel: [number, number]; len: number; diff: DiffKey; mode: Mode; tempo: TempoKey; cursor: 'manual' | 'auto'; sound: boolean; gfx: Gfx; names: Names;

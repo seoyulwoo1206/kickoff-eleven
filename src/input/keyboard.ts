@@ -1,8 +1,11 @@
 import { keyDown, keyUp, type Act, type Dir, type Inp } from './actions';
 
-type Key = Act | Dir;
+export type Key = Act | Dir;
 /* P1: 방향키 + S/A/W/D/Z/Q/E (FC 온라인 배치). P2: IJKL + B/V/N/M/./,/Space */
-export const K1: Record<string, Key> = { ArrowLeft: 'left', ArrowRight: 'right', ArrowUp: 'up', ArrowDown: 'down', KeyS: 'pass', KeyA: 'lob', KeyW: 'through', KeyD: 'shoot', KeyZ: 'chip', KeyQ: 'gkRush', KeyE: 'sprint', ShiftLeft: 'sprint' };
+const K1_DEFAULT: Record<string, Key> = { ArrowLeft: 'left', ArrowRight: 'right', ArrowUp: 'up', ArrowDown: 'down', KeyS: 'pass', KeyA: 'lob', KeyW: 'through', KeyD: 'shoot', KeyZ: 'chip', KeyQ: 'gkRush', KeyE: 'sprint', ShiftLeft: 'sprint' };
+export let K1: Record<string, Key> = { ...K1_DEFAULT };
+/** 키 설정 변경 (null이면 기본으로) */
+export function setK1(m: Record<string, Key> | null) { K1 = m ? { ...m } : { ...K1_DEFAULT }; }
 export const K2: Record<string, Key> = { KeyJ: 'left', KeyL: 'right', KeyI: 'up', KeyK: 'down', KeyB: 'pass', KeyV: 'lob', KeyN: 'through', KeyM: 'shoot', Period: 'chip', Comma: 'gkRush', Space: 'sprint', ShiftRight: 'sprint' };
 
 export interface KeyboardHooks {

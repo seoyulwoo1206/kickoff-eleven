@@ -123,6 +123,8 @@ export class ThreeRenderer implements IRenderer {
     } else if (this.mode === 'pro' && sim && h) { // 조작 선수 뒤
       const dx = Math.cos(h.dir), dy = Math.sin(h.dir); px = h.x - dx * 9; py = 5.5; pz = h.y - dy * 9; lx = h.x + dx * 8; lz = h.y + dy * 8; ly = 1;
       this.camPos.lerp(new THREE.Vector3(px, py, pz), 1 - Math.pow(0.02, dtR)); this.camLook.lerp(new THREE.Vector3(lx, ly, lz), 1 - Math.pow(0.01, dtR));
+    } else if (this.mode === 'intro') { // 입장: 관중석 높은 곳에서 천천히 내려온다
+      const k = (Math.sin(perf * 0.5) + 1) / 2; px = CX + Math.cos(perf * 0.25) * 40; py = 28 + k * 10; pz = CY + 70 + Math.sin(perf * 0.25) * 20; this.camPos.lerp(new THREE.Vector3(px, py, pz), 1 - Math.pow(0.1, dtR)); this.camLook.set(CX, 1, CY);
     } else if (this.mode === 'top') {
       px = cam.x; py = L * 1.7; pz = cam.y + 10; this.camPos.set(px, py, pz); this.camLook.set(lx, 0, lz);
     } else {

@@ -5,6 +5,7 @@ import { DIFF, FORM, NUMS, HAIR, SKIN, kitFor, kitsClash } from '../data/teams';
 import { lineupOf, slotsOf, overall, detailOf } from '../data/squads';
 import { defaultTactics } from './tactics';
 import { updateAdvantage, addedMinutes, buildWall, alive } from './rules';
+import { startShootout, soRecord, soUpdate } from './shootout';
 import type { PlayerDef } from '../data/squad';
 import { FORMATIONS, type Slot } from '../data/formations';
 import { newInp, readInput, clearPresses, type Inp } from '../input/actions';
@@ -27,7 +28,7 @@ export function createMatch(cfg: MatchCfg, inp?: [Inp, Inp]): Sim {
       phase: 'kickoff', phaseT: 0, protect: 0, stats: { shots: [0, 0], onT: [0, 0], poss: [0.001, 0.001], fouls: [0, 0], offs: [0, 0], yel: [0, 0], red: [0, 0], passA: [0, 0], passC: [0, 0] },
       firstKick: cfg.firstKick, nextKick: 0, twoP: !!cfg.humans[1], net: cfg.net, tick: 0, slow: 0, scorer: null, tempo: cfg.tempo, spType: null, react: [0, 0],
       tac: [cfg.tactics?.[0] ?? defaultTactics(cfg.squads?.[0]?.formation), cfg.tactics?.[1] ?? defaultTactics(cfg.squads?.[1]?.formation)],
-      bench: [[], []], subs: [0, 0], stops: 0, added: [0, 0], adv: null,
+      bench: [[], []], subs: [0, 0], stops: 0, added: [0, 0, 0, 0], adv: null, knockout: !!cfg.knockout, so: null,
     },
     ball: { x: CX, y: CY, z: 0, vx: 0, vy: 0, vz: 0, owner: null, lastTouch: 0, passTarget: null, kicker: null, shot: 0, isShot: false, spin: 0, knock: null, curl: 0 },
     players: [], team: [[], []], HU: [makeHuman(0, cfg.humans[0]), makeHuman(1, cfg.humans[1])], INP: inp ?? [newInp(), newInp()], pred: [],
@@ -35,6 +36,7 @@ export function createMatch(cfg: MatchCfg, inp?: [Inp, Inp]): Sim {
   };
   makePlayers(s, cfg.squads ?? [null, null], cfg.lineups ?? [null, null]);
   if (cfg.guest) { for (const p of s.players) { p.x = wx(p.bx, p.t); p.y = p.by; } placeBall(s, CX, CY); }
+  else if (cfg.shootoutOnly) { s.M.phase = 'live'; startShootout(s); }
   else kickoff(s, cfg.firstKick);
   return s;
 }
@@ -118,14 +120,16 @@ export function checkOut(s: Sim) {
     const left = x < 0;
     if (Math.abs(y - CY) < GH && ball.z < GZ) { goal(s, left ? 1 : 0); return; }
     const def = left ? 0 : 1;
+    if (s.M.so) { soRecord(s, false); return; }
     if (ball.lastTouch === def) setPiece(s, 'corner', 1 - def, left ? 0.5 : W - 0.5, y < CY ? 0.5 : H - 0.5); else setPiece(s, 'goalkick', def, wx(5.5, def), CY);
-  } else if (y < 0 || y > H) setPiece(s, 'throw', 1 - ball.lastTouch, clamp(x, 1, W - 1), y < 0 ? 0.3 : H - 0.3);
+  } else if (y < 0 || y > H) { if (s.M.so) { soRecord(s, false); return; } setPiece(s, 'throw', 1 - ball.lastTouch, clamp(x, 1, W - 1), y < 0 ? 0.3 : H - 0.3); }
 }
 export function goal(s: Sim, t: number) {
   const { M, ball } = s;
   for (const q of s.players) { q.pending = null; q.kickWind = 0; }
   M.stops++; M.adv = null;
   if (ball.kicker && ball.kicker.t === t) M.stats.onT[t]++;
+  if (M.so) { M.phase = 'goal'; M.phaseT = 2.0; M.nextKick = 1 - t; M.scorer = ball.kicker; banner(s, 'GOAL!', '', 1500, true); sfx(s, 'goal'); crowdSwell(s, 0.18, 1.5); return; }
   M.score[t]++; M.phase = 'goal'; M.phaseT = 7.4; // 세리머니 1.3초 + 리플레이 ~5.6초 M.nextKick = 1 - t; ball.owner = null; shake(s, 0.6); M.slow = 1.1;
   const k = ball.kicker, own = !(k && k.t === t), who = !own && k ? `${M.teams[t].name} ${k.num}번` : `${M.teams[1 - t].name} 자책골`;
   M.scorer = own ? null : k;
@@ -148,14 +152,19 @@ export function step(s: Sim, dt: number) {
   for (const I of INP) readInput(I, dt);
   const ph = M.phase;
   if (ph === 'live') {
-    M.time += dt / M.tempo; const minute = M.time / M.len * 90, hi = M.half - 1, end = M.half === 1 ? 45 : 90;
+    if (M.so) { soUpdate(s, dt); }
+    else {
+    M.time += dt / M.tempo; const minute = M.time / M.len * 90, hi = M.half - 1, end = M.half === 1 ? 45 : M.half === 2 ? 90 : M.half === 3 ? 105 : 120;
     if (minute >= end && M.added[hi] === 0) { M.added[hi] = addedMinutes(s); banner(s, '', `추가시간 +${M.added[hi]}분`, 1400); s.ev.push({ k: 'hud' }); }
     if (M.half === 1 && minute >= 45 + M.added[0]) { M.time = M.len / 2; M.phase = 'halftime'; M.phaseT = 2.8; banner(s, 'HALF TIME', `${M.teams[0].code} ${M.score[0]} - ${M.score[1]} ${M.teams[1].code}`, 2600); sfx(s, 'long'); }
-    else if (M.half === 2 && minute >= 90 + M.added[1]) { M.time = M.len; M.phase = 'full'; s.ev.push({ k: 'full' }); return; }
+    else if (M.half === 2 && minute >= 90 + M.added[1]) { M.time = M.len; if (M.knockout && M.score[0] === M.score[1]) { M.half = 3; M.phase = 'halftime'; M.phaseT = 2.8; banner(s, 'EXTRA TIME', '연장전 · 전반', 2400); sfx(s, 'long'); } else { M.phase = 'full'; s.ev.push({ k: 'full' }); return; } }
+    else if (M.half === 3 && minute >= 105 + M.added[2]) { M.time = M.len * 105 / 90; M.half = 4; M.phase = 'halftime'; M.phaseT = 2.0; banner(s, '', '연장전 · 후반', 1800); }
+    else if (M.half === 4 && minute >= 120 + M.added[3]) { M.time = M.len * 120 / 90; if (M.score[0] === M.score[1]) { startShootout(s); } else { M.phase = 'full'; s.ev.push({ k: 'full' }); return; } }
+    }
   }
   else if (ph === 'kickoff' || ph === 'setpiece') { M.phaseT -= dt; if (M.phaseT <= 0) { M.phase = 'live'; M.protect = Math.max(M.protect, 1.2); } }
-  else if (ph === 'goal') { M.phaseT -= dt; if (M.phaseT <= 0) kickoff(s, M.nextKick); }
-  else if (ph === 'halftime') { M.phaseT -= dt; if (M.phaseT <= 0) { M.half = 2; M.time = M.len / 2; kickoff(s, 1 - M.firstKick); } }
+  else if (ph === 'goal') { M.phaseT -= dt; if (M.phaseT <= 0) { if (M.so) soRecord(s, true); else kickoff(s, M.nextKick); } }
+  else if (ph === 'halftime') { M.phaseT -= dt; if (M.phaseT <= 0) { if (M.half === 1) { M.half = 2; M.time = M.len / 2; } kickoff(s, (M.half === 2 || M.half === 4) ? 1 - M.firstKick : M.firstKick); } }
   else if (ph === 'full') return;
   M.protect = Math.max(0, M.protect - dt); M.react[0] = Math.max(0, M.react[0] - dt); M.react[1] = Math.max(0, M.react[1] - dt);
   for (const p of players) {

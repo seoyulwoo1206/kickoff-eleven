@@ -18,6 +18,9 @@
 - `src/data/teams.ts` TEAMS(24팀, 유니폼 패턴 solid/stripes/hoops/half/sash/chevron/check), DIFF, FORM(4-4-2 폴백), 킷 유틸. `applySquadStrength()`가 앱 시작 시 atk/def/spd를 선수단 기준으로 덮어씀
 - `src/data/squad.ts` 선수단 스키마(`PlayerDef` 6대 지표 r + GK `gk`, `expand()`가 세부 능력치 `Detail` 전개, `overall()` 포지션별 가중). `formations.ts` 7개 포메이션 슬롯(위치·역할·포지션). `squads.ts` 조회(`squadOf/lineupOf/slotsOf/strengthOf/topPlayers/aliasOf/displayName/shirtName`). `teams/<CODE>.json`이 데이터(작성 규칙은 `teams/README.md`), `teams/index.ts`는 `npx tsx tools/gen-squad-index.ts`로 생성. 검증 `npx tsx tools/validate-data.ts [CODE]`
 - `src/sim/rules.ts` 파울 처리 `foulCommitted`(카드 판정·어드밴티지 `M.adv`), `updateAdvantage`, `card/sendOff`(`p.off`: 모든 선수 루프는 `off`를 건너뛴다 — team 필터·offsideLine·ballControl·nearestOutfield·AI), `addedMinutes`, `buildWall`, `substitute`(선수 객체 덮어쓰기, `M.bench/subs`). `src/sim/tactics.ts` `Tactics{form,line,style,press}`·`applyFormation`(포지션 유사도로 재배치). `M.tac[t]`를 `targetFor`(라인·풀백 오버래핑·윙어 침투·성향), `teamAI`(압박 속도·마크 거리·트리거), `bestAIPass`(성향·시야)가 읽음
+- `src/sim/shootout.ts` 승부차기(`startShootout/soNext/soRecord/soUpdate`, `M.so`). 연장은 `step`에서 half 3·4(105'/120'), `M.knockout`일 때만. `MatchCfg.shootoutOnly`면 바로 승부차기. 사람 팀 키퍼의 다이브 방향은 `gkAI`가 스틱(my)에서 읽음
+- `src/cup.ts` 토너먼트 상태(`Cup`: groups·fixtures·stage·ko)와 진행(`newCup/advance/userFixture/table/recordResult`, 다른 경기는 헤드리스 90초), 저장 `ko11cup`. 화면은 `ui/cup.ts`. `main.ts`의 `cupMatch`가 켜지면 결과 카드에 "토너먼트로"가 뜨고 `advance`가 호출됨
+- `src/ui/keys.ts` 키 설정(P1 `K1`을 `setK1`로 교체, `ko11keys`). 입장 카메라는 `main.ts` `introT`(3.2초, 시뮬 정지) + 렌더 `CamMode 'intro'`
 - `tools/league.ts` 무작위 짝 N경기 통계(골·슈팅·유효·패스·파울·오프사이드·카드·루즈볼·전력차별 승률). AI 숫자를 바꾸면 `league 60 300`으로 재고 PROGRESS에 기록
 - `tools/bench.ts` 상황 벤치(패스 수신률·슛 성공률·수비 회수율, `--seeds 4 --n 80`으로 여러 시드 평균). 조작·물리 숫자를 바꾸면 전후로 돌려 비교할 것
 - `tools/simulate.ts` 헤드리스: `npx tsx tools/simulate.ts 40 300 KOR BRA --seed 1` → 골·슛·점유·파울·오프사이드·루즈볼 + 결정론 검사. 숫자 튜닝은 반드시 이걸로 재고 바꿀 것
@@ -74,5 +77,5 @@
 
 ## 알려진 개선 과제
 - 게스트 입력 지연 = 왕복 핑. 클라이언트 예측은 없음.
-- 연장·승부차기 없음 (Phase 7 토너먼트). AI 오프사이드 0건. 온라인은 전술·교체 동기화 없음(UI 숨김).
+- AI 오프사이드 0건. 온라인은 전술·교체·토너먼트 없음(UI 숨김). 토너먼트 다른 경기 시뮬은 라운드당 1~2초 동기 실행(멈춤).
 - 스냅샷은 선수당 16값(sta·kickWind·spin·feint 포함), 리플레이 프레임은 15값. 필드를 늘리면 `protocol.ts` k=i*16과 `scene.ts` PF를 같이 바꿀 것

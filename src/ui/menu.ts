@@ -19,16 +19,16 @@ export function renderMenu() {
     $('sq' + s).innerHTML = sq ? `<span class="form">${sq.formation}</span>` + topPlayers(sq, 3).map(p => `<span>${opts.names === 'real' ? p.name : aliasOf(p)}<b>${overall(p)}</b></span>`).join('') + `<span class="asof">${sq.asOf} 기준</span>` : '<span class="asof">선수단 데이터 없음</span>';
     g.parentElement!.classList.toggle('locked', locked && s !== mySide);
   }
-  const two = opts.mode === '2p';
+  const two = opts.mode === '2p', cupMode = opts.mode === 'cup';
   const labs = net ? (NET.role === 'guest' ? ['상대 팀 (호스트)', '내 팀 (게스트)'] : ['내 팀 (호스트)', '상대 팀 (게스트)']) : two ? ['P1 팀', 'P2 팀'] : ['내 팀', '상대 팀 (AI)'];
   $('lab0').textContent = labs[0]; $('lab1').textContent = labs[1];
-  $('help2').hidden = !two; $('helpNet').hidden = !net; $('optDiff').hidden = opts.mode !== 'ai'; $('netPanel').hidden = !net;
+  $('help2').hidden = !two; $('helpNet').hidden = !net; $('optDiff').hidden = !(opts.mode === 'ai' || cupMode || opts.mode === 'pk'); $('netPanel').hidden = !net; $('optLen').hidden = opts.mode === 'pk';
   $('optLen').classList.toggle('locked', net && NET.role === 'guest'); $('optTempo').classList.toggle('locked', net && NET.role === 'guest');
   $('codeBox').hidden = !(net && NET.role === 'host' && NET.code); if (NET.code) $('codeTxt').textContent = NET.code;
   const sb = $('startBtn') as HTMLButtonElement, note = $('startNote');
   if (net && NET.role === 'guest') { sb.disabled = true; sb.textContent = '호스트 대기 중'; note.textContent = NET.ready ? '호스트가 킥오프하면 시작돼요.' : ''; }
   else if (net && !NET.ready) { sb.disabled = true; sb.textContent = '킥오프'; note.textContent = '상대가 들어오면 킥오프할 수 있어요.'; }
-  else { sb.disabled = false; sb.textContent = '킥오프'; note.textContent = ''; }
+  else { sb.disabled = false; sb.textContent = cupMode ? '대회로' : opts.mode === 'pk' ? '승부차기 시작' : '킥오프'; note.textContent = cupMode ? '내 팀으로 대회를 치릅니다. 상대는 대진표가 정합니다.' : ''; }
 }
 export function setSeg(id: string, cur: string | number) { $(id).querySelectorAll('button').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.v === String(cur)))); }
 export function bindSeg(id: string, cur: string | number, fn: (v: string) => void) {
