@@ -19,7 +19,11 @@ import { updateHud, resetHud, showBanner, hideBanner } from './ui/hud';
 import { initMenu, renderMenu, setSeg, bindSeg, netStatus, NET_IDLE_MSG } from './ui/menu';
 import { fillResult } from './ui/result';
 import { randomSeed } from './sim/rng';
-import { applySquadStrength, squadOf } from './data/squads';
+import { applySquadStrength, squadOf, displayName } from './data/squads';
+import { defaultTactics, applyFormation, LINE_NAMES, STYLE_NAMES, PRESS_NAMES, type Tactics, type Style } from './sim/tactics';
+import { substitute } from './sim/rules';
+import { FORMATION_KEYS } from './data/formations';
+import { overall } from './data/squad';
 
 const $ = (id: string) => document.getElementById(id) as HTMLElement;
 type State = 'menu' | 'play' | 'paused' | 'over';
@@ -60,7 +64,9 @@ function startMatch(cfg?: StartCfg) {
     teams: [a, b], len: opts.len, diff: opts.diff, tempo: TEMPO[opts.tempo], firstKick: cfg ? cfg.fk : (Math.random() < 0.5 ? 0 : 1),
     humans: [{ tag: tag(0), col: '#ffb627', cursor: cur(0) }, twoP ? { tag: tag(1), col: '#4fd3ff', cursor: cur(1) } : null],
     net, seed: cfg ? cfg.seed : randomSeed(), guest: NET.role === 'guest', squads: [squadOf(a), squadOf(b)],
+    tactics: net ? [null, null] : [menuTac[0], menuTac[1]],
   }, INP);
+  renderPauseTactics();
   if (NET.role === 'guest') { snapBuf.buf = []; snapBuf.off = null; }
   R.reset(); acc = 0; simLast = 0; state = 'play';
   $('menu').hidden = true; $('result').hidden = true; $('pause').hidden = true; $('hud').hidden = false; $('pauseBtn').hidden = false; $('touch').hidden = !isTouch;
@@ -82,6 +88,7 @@ function applyLocalEv(e: SimEvent, relay: boolean) {
     case 'puff': R.puff(e.x, e.y, e.n, e.sp); break;
     case 'shake': R.cam.shake = Math.max(R.cam.shake, e.v); break;
     case 'hud': resetHud(); break;
+    case 'card': case 'sub': renderPauseTactics(); break;
     case 'full': fullTime(); break;
   }
 }
@@ -94,7 +101,7 @@ function fullTime() {
   if (NET.role !== 'guest') { const M = sim.M; showBanner('FULL TIME', `${M.teams[0].code} ${M.score[0]} - ${M.score[1]} ${M.teams[1].code}`, 1400, false); }
 }
 function pauseGame(remote?: boolean) {
-  if (state !== 'play') return; state = 'paused'; $('pause').hidden = false; $('soundBtn').textContent = audio.on ? '소리 끄기' : '소리 켜기'; $('restartBtn').hidden = NET.role === 'guest';
+  if (state !== 'play') return; state = 'paused'; $('pause').hidden = false; renderPauseTactics(); $('soundBtn').textContent = audio.on ? '소리 끄기' : '소리 켜기'; $('restartBtn').hidden = NET.role === 'guest';
   for (const I of INP) dropKeys(I); ($('resumeBtn') as HTMLButtonElement).focus(); if (remote !== true && NET.ready) netSend({ t: 'pause' });
 }
 function resumeGame(remote?: boolean) { if (state !== 'paused') return; state = 'play'; $('pause').hidden = true; lastTs = 0; simLast = 0; if (remote !== true && NET.ready) netSend({ t: 'resume' }); }
@@ -162,9 +169,47 @@ installTouch(INP[0], () => { if (!isTouch) { isTouch = true; if (state === 'play
 window.addEventListener('blur', () => { for (const I of INP) dropKeys(I); if (state === 'play' && !NET.ready) pauseGame(); }); // 온라인에선 창 포커스만 잃어도 상대를 기다리게 하지 않는다
 document.addEventListener('visibilitychange', () => { if (document.hidden && state === 'play') pauseGame(); });
 
+/* ---------- 전술·교체 UI ---------- */
+// 메뉴의 전술 선택 (팀별). 팀을 바꾸면 그 팀 선수단의 포메이션으로 초기화
+const menuTac: [Tactics, Tactics] = [defaultTactics(), defaultTactics()];
+const menuTacTeam = [-1, -1];
+function tacSelect(id: string, opts: [string, string][], cur: string, onChange: (v: string) => void) {
+  const el = $(id) as HTMLSelectElement; el.innerHTML = opts.map(([v, l]) => `<option value="${v}" ${v === cur ? 'selected' : ''}>${l}</option>`).join(''); el.onchange = () => onChange(el.value);
+}
+function tacRows(prefix: string, tac: Tactics, onChange: () => void) {
+  tacSelect(prefix + 'Form', FORMATION_KEYS.map(k => [k, k]), tac.form, v => { tac.form = v; onChange(); });
+  tacSelect(prefix + 'Line', (['-1', '0', '1'] as const).map(k => [k, LINE_NAMES[k]]), String(tac.line), v => { tac.line = +v as Tactics['line']; onChange(); });
+  tacSelect(prefix + 'Style', (Object.keys(STYLE_NAMES) as Style[]).map(k => [k, STYLE_NAMES[k]]), tac.style, v => { tac.style = v as Style; onChange(); });
+  tacSelect(prefix + 'Press', (['0', '1', '2'] as const).map(k => [k, PRESS_NAMES[k]]), String(tac.press), v => { tac.press = +v as Tactics['press']; onChange(); });
+}
+function renderMenuTactics() {
+  for (const t of [0, 1] as const) {
+    const T = TEAMS[opts.sel[t]];
+    if (menuTacTeam[t] !== opts.sel[t]) { menuTacTeam[t] = opts.sel[t]; const sq = squadOf(T); Object.assign(menuTac[t], defaultTactics(sq?.formation)); }
+    tacRows('tac' + t, menuTac[t], () => { /* 값은 menuTac에 바로 저장됨 */ });
+  }
+  $('tacBox').classList.toggle('locked', opts.mode === 'net');
+}
+// 일시정지 메뉴: 로컬 팀 전술 + 교체 (온라인에선 숨김)
+function renderPauseTactics() {
+  const box = $('pauseTac'); if (!sim || sim.M.net) { box.hidden = true; return; } box.hidden = false;
+  const t = LOCAL(), s = sim, tac = s.M.tac[t];
+  tacRows('ptac', tac, () => { if (sim) applyFormation(sim, t, tac.form); });
+  const field = s.team[t].filter(p => !p.off), bench = s.M.bench[t];
+  const outSel = $('subOut') as HTMLSelectElement, inSel = $('subIn') as HTMLSelectElement;
+  outSel.innerHTML = field.map(p => `<option value="${p.i}">${p.pos} ${displayName(p, opts.names)} ${p.ovr}${p.sta < 0.5 ? ' (지침)' : ''}</option>`).join('');
+  inSel.innerHTML = bench.map((d, i) => `<option value="${i}">${d.pos} ${opts.names === 'real' ? d.name : d.nameEn.split(' ').map(w => w[0]).join('.')} ${overall(d)}</option>`).join('');
+  $('subNote').textContent = `교체 ${s.M.subs[t]}/5` + (bench.length ? '' : ' · 벤치 없음');
+  ($('subBtn') as HTMLButtonElement).disabled = s.M.subs[t] >= 5 || !bench.length;
+}
+$('subBtn').addEventListener('click', () => {
+  if (!sim) return; const t = LOCAL(), out = sim.team[t].find(p => p.i === +($('subOut') as HTMLSelectElement).value), inDef = sim.M.bench[t][+($('subIn') as HTMLSelectElement).value];
+  if (out && inDef && substitute(sim, t, out, inDef)) { drain(sim); renderPauseTactics(); }
+});
+
 /* ---------- 메뉴 ---------- */
-initMenu({ onSelChange: netSendLobby });
-bindSeg('segMode', opts.mode, v => { if (opts.mode === 'net' && v !== 'net') { netClose(); netStatus(NET_IDLE_MSG); } opts.mode = v as typeof opts.mode; renderMenu(); });
+initMenu({ onSelChange: () => { netSendLobby(); renderMenuTactics(); } });
+bindSeg('segMode', opts.mode, v => { if (opts.mode === 'net' && v !== 'net') { netClose(); netStatus(NET_IDLE_MSG); } opts.mode = v as typeof opts.mode; renderMenu(); renderMenuTactics(); });
 bindSeg('segLen', opts.len, v => { opts.len = +v; netSendLobby(); });
 bindSeg('segDiff', opts.diff, v => { opts.diff = v as typeof opts.diff; });
 bindSeg('segTempo', opts.tempo, v => { opts.tempo = v as typeof opts.tempo; saveOpts(); });
@@ -187,7 +232,7 @@ $('codeIn').addEventListener('keydown', e => { if (e.key === 'Enter') { ensureAu
 $('codeIn').addEventListener('input', e => { const t = e.target as HTMLInputElement; t.value = t.value.toUpperCase().replace(/[^A-Z0-9]/g, ''); });
 $('copyBtn').addEventListener('click', async () => { try { await navigator.clipboard.writeText(NET.code); $('copyBtn').textContent = '복사됨'; window.setTimeout(() => { $('copyBtn').textContent = '복사'; }, 1500); } catch { /* */ } });
 window.addEventListener('beforeunload', () => { if (NET.ready) netSend({ t: 'quit' }); });
-renderMenu();
+renderMenu(); renderMenuTactics();
 
 /* ---------- 루프 ---------- */
 function runSteps(dt: number) {

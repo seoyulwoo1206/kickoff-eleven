@@ -31,10 +31,18 @@ export function moveTo(p: Player, tx: number, ty: number, f: number, dt: number)
 /** 대형 위치: 공 위치에 따라 블록이 움직이고, 공격 땐 FW는 공보다 앞, MF는 공 근처까지 전진. 오프사이드 라인 뒤에 선다 */
 export function targetFor(s: Sim, p: Player, att: boolean, def: boolean) {
   const { ball, M } = s;
-  const t = p.t, lb = wx(ball.x, t);
-  let x = p.bx + (lb - 52.5) * 0.62 + (att ? 10 : def ? -3 : 0) + (att && p.role === 'FW' ? 6 : 0);
+  const t = p.t, lb = wx(ball.x, t), tac = M.tac[t];
+  let x = p.bx + (lb - 52.5) * 0.62 + (att ? 10 : def ? -3 : 0) + (att && p.role === 'FW' ? 6 : 0) + tac.line * (p.role === 'DF' ? 6 : p.role === 'MF' ? 4 : 2); // 라인 높이
   if (att) { if (p.role === 'FW') x = Math.max(x, lb + 9); else if (p.role === 'MF') x = Math.max(x, lb - 4); }
   let y = p.by + (ball.y - CY) * (p.role === 'DF' ? 0.3 : 0.45);
+  const wideSide = Math.abs(p.by - CY) > 14, sameSide = (p.by - CY) * (ball.y - CY) > 0;
+  if (att && wideSide) {
+    if ((p.pos === 'LB' || p.pos === 'RB') && sameSide && lb > 50) x += 12; // 풀백 오버래핑 (공이 자기 쪽일 때)
+    if ((p.pos === 'LW' || p.pos === 'RW' || p.pos === 'LM' || p.pos === 'RM') && lb > 55) { x += 6; y += (CY - p.by) * 0.25; } // 윙어 침투: 안쪽으로 파고든다
+    if (tac.style === 'wide') y += (p.by - CY) * 0.15; // 측면 전술: 더 넓게
+  }
+  if (att && p.role === 'FW' && tac.style === 'counter') x += 4;
+  if (!att && tac.style === 'possession' && p.role === 'MF') x -= 2;
   x += Math.sin(M.time * 0.6 + p.i * 1.7) * 1.1; y += Math.cos(M.time * 0.5 + p.i * 2.3) * 1.1;
   if (att || (!ball.owner && ball.lastTouch === t)) { const line = offsideLine(s, t); if (x > line - 0.8) x = line - 0.8; }
   const lim = ({ DF: [7, 68], MF: [14, 86], FW: [22, 99], GK: [0, 20] } as Record<string, [number, number]>)[p.role];

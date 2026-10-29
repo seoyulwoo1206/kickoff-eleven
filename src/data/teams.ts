@@ -32,9 +32,10 @@ export const TEAMS: TeamDef[] = [
   { code: 'NGA', name: '나이지리아', pat: 'stripes', c1: '#1b9b4b', c2: '#f4f4f4', sh: '#1b9b4b', gk: '#111111', atk: 83, def: 79, spd: 87 },
 ];
 export const DIFF: Record<DiffKey, DiffDef> = {
-  easy: { spd: 0.9, react: 0.45, tackle: 0.16, err: 1.6, gk: 0.82, press: 0.95 },
-  normal: { spd: 1, react: 0.28, tackle: 0.3, err: 1, gk: 1, press: 1.12 },
-  hard: { spd: 1.07, react: 0.16, tackle: 0.42, err: 0.7, gk: 1.12, press: 1.25 },
+  // 난이도는 속도 치트 없이 반응 시간·판단 실수·압박·태클·키퍼로만 (spd는 1로 고정)
+  easy: { spd: 1, react: 0.5, tackle: 0.12, err: 1.3, gk: 0.85, press: 0.9 },
+  normal: { spd: 1, react: 0.28, tackle: 0.22, err: 0.8, gk: 1, press: 1.12 },
+  hard: { spd: 1, react: 0.14, tackle: 0.34, err: 0.55, gk: 1.12, press: 1.3 },
 };
 /** 4-4-2 기본 위치 (팀 0 기준, 팀 1은 wx로 뒤집음) */
 export const FORM: [Role, number, number][] = [['GK', 4, 34], ['DF', 17, 10], ['DF', 15, 26], ['DF', 15, 42], ['DF', 17, 58], ['MF', 33, 12], ['MF', 30, 28], ['MF', 30, 40], ['MF', 33, 56], ['FW', 46, 28], ['FW', 46, 40]];

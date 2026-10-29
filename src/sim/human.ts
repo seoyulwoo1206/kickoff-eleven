@@ -21,10 +21,10 @@ export function autoCursor(s: Sim, h: Human, dt: number) {
   const margin = moving ? 0.6 : 0.3; // 조작 중이면 훨씬 더 유리한 선수가 있을 때만 바꾼다
   let best: Player | null = null, bt = 1e9;
   if (own) {
-    for (const p of team[h.t]) { if (p.role === 'GK') continue; const q = d(p, own) / p.speed; if (q < bt) { bt = q; best = p; } }
+    for (const p of team[h.t]) { if (p.role === 'GK' || p.off) continue; const q = d(p, own) / p.speed; if (q < bt) { bt = q; best = p; } }
     if (best && best !== h.ctrl && bt < d(h.ctrl, own) / h.ctrl.speed - margin) { h.ctrl = best; h.lock = 0.9; }
   } else {
-    for (const p of team[h.t]) { if (p.role === 'GK') continue; const q = interceptT(s, p); if (q < bt) { bt = q; best = p; } }
+    for (const p of team[h.t]) { if (p.role === 'GK' || p.off) continue; const q = interceptT(s, p); if (q < bt) { bt = q; best = p; } }
     if (best && best !== h.ctrl && bt < interceptT(s, h.ctrl) - margin) { h.ctrl = best; h.lock = 0.9; }
   }
 }
@@ -60,7 +60,7 @@ function skillMove(s: Sim, p: Player, sx: number, sy: number) {
 }
 export function humanUpdate(s: Sim, h: Human, dt: number) {
   const { ball, M, INP } = s;
-  const I = INP[h.t], p = h.ctrl; if (!p) return;
+  const I = INP[h.t], p = h.ctrl; if (!p) return; if (p.off) { switchPlayer(s, h); return; }
   const mx = I.mx, my = I.my, mag = Math.hypot(mx, my), sprint = I.down.sprint; let own = ball.owner === p;
   if (!own && ball.knock === p && d(p, ball) < 1.4 && ball.z < 0.6 && (I.press.pass || I.press.shoot || I.press.lob || I.press.through || I.press.chip || I.rel.pass || I.rel.lob)) { gain(s, p); own = ball.owner === p; } // 질주 드리블 중에도 바로 차거나 패스할 수 있다
   h.second = false; h.gkRush = false;
@@ -126,6 +126,6 @@ export function humanUpdate(s: Sim, h: Human, dt: number) {
 export function nearestToBall(s: Sim, h: Human, exclude?: Player | null) {
   const { ball, team } = s;
   const key = ball.owner ? (p: Player) => d(p, ball) / p.speed : (p: Player) => interceptT(s, p);
-  const list = team[h.t].filter(p => p.role !== 'GK' && p !== exclude).sort((a, b) => key(a) - key(b)); return list[0] || null;
+  const list = team[h.t].filter(p => p.role !== 'GK' && p !== exclude && !p.off).sort((a, b) => key(a) - key(b)); return list[0] || null;
 }
 export function switchPlayer(s: Sim, h: Human) { const nn = nearestToBall(s, h, h.ctrl); if (nn) { h.ctrl = nn; h.lock = 1.2; } }

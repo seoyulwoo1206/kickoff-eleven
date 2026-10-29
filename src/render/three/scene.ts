@@ -164,7 +164,7 @@ export class ThreeRenderer implements IRenderer {
       if (!this.replay && !paused) this.pushFrame(sim, perf);
       let ball: { x: number; y: number; z: number; vx: number; vy: number; owner: Player | null };
       if (this.replay && this.loadFrame(sim, this.replayT)) { ball = this.rBall; sim.players.forEach((p, i) => this.models.get(p)!.update(this.pose[i], ball, perf)); }
-      else { ball = sim.ball; for (const m of this.models.values()) m.update(m.p, ball, perf); }
+      else { ball = sim.ball; for (const m of this.models.values()) { m.root.visible = !m.p.off; if (!m.p.off) m.update(m.p, ball, perf); } }
       this.ball.position.set(ball.x, 0.11 + ball.z, ball.y);
       if (!paused) { const sp = Math.hypot(ball.vx, ball.vy); if (sp > 0.05) { const axis = this.tmpV.set(-ball.vy, 0, ball.vx).normalize(); this.ball.rotateOnWorldAxis(axis, -sp * dtR * (this.replay ? 0.55 : 1) / 0.11); } }
       this.ballShadow.position.set(ball.x + ball.z * 0.12, 0.012, ball.y); const ss = 1 / (1 + ball.z * 0.35); this.ballShadow.scale.set(ss, ss, ss); this.ballShadow.visible = this.quality === 'low' || ball.z > 0.3;

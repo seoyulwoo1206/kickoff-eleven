@@ -40,6 +40,12 @@ h2{font-family:var(--f-display);font-weight:400;font-size:30px;margin:4px 0 0;li
 .shirt{width:34px;height:32px;clip-path:polygon(33% 0,67% 0,100% 20%,88% 42%,79% 35%,79% 100%,21% 100%,21% 35%,12% 42%,0 20%)}
 .chip span{font-family:var(--f-num);font-weight:800;font-size:12px;letter-spacing:.08em}
 .stats{display:flex;gap:12px;font-size:12px;color:var(--muted)}
+.tacbox{display:grid;gap:10px;border:1px solid var(--rule);border-radius:10px;padding:12px 14px}
+.tacside{display:grid;gap:6px}
+.tacrow{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.tacrow select{font:inherit;font-size:13px;color:var(--chalk);background:rgba(255,255,255,.06);border:1px solid var(--rule);border-radius:8px;padding:6px 8px;max-width:100%}
+.tacrow select option{color:#111}
+.tacrow .ghost{padding:6px 12px;font-size:13px}
 .squad{display:flex;flex-wrap:wrap;gap:4px 12px;font-size:12px;color:var(--muted);align-items:baseline}
 .squad b{font-family:var(--f-num);font-weight:800;color:var(--chalk);font-size:13px;margin-left:3px}
 .squad .form{font-family:var(--f-num);font-weight:800;letter-spacing:.08em;color:var(--amber)}

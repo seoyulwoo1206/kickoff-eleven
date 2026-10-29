@@ -22,7 +22,7 @@
 </div>
 
 <div id="menu" class="overlay"><div class="card">
-  <header><div class="eyebrow">11 대 11 · 풀경기 · <span id="build">BUILD 1029-P4</span></div><h1>킥오프 일레븐</h1><p class="lede">팀을 고르고 킥오프. 공 근처 선수로 커서가 자동으로 옮겨가고, 같은 키보드로 친구와 1대1도 됩니다.</p></header>
+  <header><div class="eyebrow">11 대 11 · 풀경기 · <span id="build">BUILD 1029-P5</span></div><h1>킥오프 일레븐</h1><p class="lede">팀을 고르고 킥오프. 공 근처 선수로 커서가 자동으로 옮겨가고, 같은 키보드로 친구와 1대1도 됩니다.</p></header>
   <div class="opts">
     <div class="opt"><span class="label">대전 방식</span><div class="seg" id="segMode"><button id="mAI" data-v="ai" aria-pressed="true">AI 대전</button><button id="m2P" data-v="2p">2인 대전 (한 키보드)</button><button id="mNet" data-v="net">온라인 대전</button></div></div>
     <div class="opt" id="optLen"><span class="label">경기 시간</span><div class="seg" id="segLen"><button id="len180" data-v="180">3분</button><button id="len300" data-v="300" aria-pressed="true">5분</button><button id="len480" data-v="480">8분</button></div></div>
@@ -42,6 +42,10 @@
     <section class="side"><div class="sidehead"><span class="label" id="lab0">내 팀 (P1)</span><span class="stats" id="st0"></span></div><div class="chosen" id="ch0"></div><div class="squad" id="sq0"></div><div class="grid" id="grid0"></div></section>
     <section class="side"><div class="sidehead"><span class="label" id="lab1">상대 팀</span><span class="stats" id="st1"></span></div><div class="chosen" id="ch1"></div><div class="squad" id="sq1"></div><div class="grid" id="grid1"></div></section>
   </div>
+  <section class="tacbox" id="tacBox">
+    <div class="tacside"><span class="label">내 팀 전술</span><div class="tacrow"><select id="tac0Form" aria-label="포메이션"></select><select id="tac0Line" aria-label="수비 라인"></select><select id="tac0Style" aria-label="공격 성향"></select><select id="tac0Press" aria-label="압박"></select></div></div>
+    <div class="tacside"><span class="label">상대 팀 전술</span><div class="tacrow"><select id="tac1Form" aria-label="포메이션"></select><select id="tac1Line" aria-label="수비 라인"></select><select id="tac1Style" aria-label="공격 성향"></select><select id="tac1Press" aria-label="압박"></select></div></div>
+  </section>
   <p class="tip" id="rotateTip" hidden>폰을 가로로 돌리면 경기장이 더 넓게 보여요.</p>
   <div class="row"><button class="kick" id="startBtn">킥오프</button><span class="netstat" id="startNote"></span></div>
   <div class="help">
@@ -56,6 +60,10 @@
 
 <div id="pause" class="overlay" hidden><div class="card narrow">
   <div><div class="eyebrow">일시정지</div><h2>잠깐 쉬어갑니다</h2></div>
+  <section class="tacbox" id="pauseTac" hidden>
+    <div class="tacside"><span class="label">전술</span><div class="tacrow"><select id="ptacForm" aria-label="포메이션"></select><select id="ptacLine" aria-label="수비 라인"></select><select id="ptacStyle" aria-label="공격 성향"></select><select id="ptacPress" aria-label="압박"></select></div></div>
+    <div class="tacside"><span class="label" id="subNote">교체</span><div class="tacrow"><select id="subOut" aria-label="나가는 선수"></select><span>⇄</span><select id="subIn" aria-label="들어오는 선수"></select><button class="ghost" id="subBtn">교체</button></div></div>
+  </section>
   <div class="stack"><button class="kick" id="resumeBtn">계속하기</button><button class="ghost" id="restartBtn">처음부터 다시</button><button class="ghost" id="camBtn">카메라: 중계</button><button class="ghost" id="soundBtn">소리 끄기</button><button class="ghost" id="quitBtn">메뉴로 나가기</button></div>
   <div class="help">
     <div><span class="who p1">공격</span><kbd>S</kbd> 짧은 패스 · <kbd>A</kbd> 롱패스 · <kbd>W</kbd> 스루 · <kbd>D</kbd> 길게 슛 · <kbd>Z</kbd> 칩슛 · <kbd>E</kbd> 질주</div>

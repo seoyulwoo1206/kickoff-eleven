@@ -17,6 +17,8 @@
 - `src/ui/` `menu.ts`(팀 그리드·세그·네트 상태), `hud.ts`(스코어보드·배너), `result.ts`. `src/options.ts`(localStorage `ko11v2`), `src/audio.ts`(Web Audio 합성)
 - `src/data/teams.ts` TEAMS(24팀, 유니폼 패턴 solid/stripes/hoops/half/sash/chevron/check), DIFF, FORM(4-4-2 폴백), 킷 유틸. `applySquadStrength()`가 앱 시작 시 atk/def/spd를 선수단 기준으로 덮어씀
 - `src/data/squad.ts` 선수단 스키마(`PlayerDef` 6대 지표 r + GK `gk`, `expand()`가 세부 능력치 `Detail` 전개, `overall()` 포지션별 가중). `formations.ts` 7개 포메이션 슬롯(위치·역할·포지션). `squads.ts` 조회(`squadOf/lineupOf/slotsOf/strengthOf/topPlayers/aliasOf/displayName/shirtName`). `teams/<CODE>.json`이 데이터(작성 규칙은 `teams/README.md`), `teams/index.ts`는 `npx tsx tools/gen-squad-index.ts`로 생성. 검증 `npx tsx tools/validate-data.ts [CODE]`
+- `src/sim/rules.ts` 파울 처리 `foulCommitted`(카드 판정·어드밴티지 `M.adv`), `updateAdvantage`, `card/sendOff`(`p.off`: 모든 선수 루프는 `off`를 건너뛴다 — team 필터·offsideLine·ballControl·nearestOutfield·AI), `addedMinutes`, `buildWall`, `substitute`(선수 객체 덮어쓰기, `M.bench/subs`). `src/sim/tactics.ts` `Tactics{form,line,style,press}`·`applyFormation`(포지션 유사도로 재배치). `M.tac[t]`를 `targetFor`(라인·풀백 오버래핑·윙어 침투·성향), `teamAI`(압박 속도·마크 거리·트리거), `bestAIPass`(성향·시야)가 읽음
+- `tools/league.ts` 무작위 짝 N경기 통계(골·슈팅·유효·패스·파울·오프사이드·카드·루즈볼·전력차별 승률). AI 숫자를 바꾸면 `league 60 300`으로 재고 PROGRESS에 기록
 - `tools/bench.ts` 상황 벤치(패스 수신률·슛 성공률·수비 회수율, `--seeds 4 --n 80`으로 여러 시드 평균). 조작·물리 숫자를 바꾸면 전후로 돌려 비교할 것
 - `tools/simulate.ts` 헤드리스: `npx tsx tools/simulate.ts 40 300 KOR BRA --seed 1` → 골·슛·점유·파울·오프사이드·루즈볼 + 결정론 검사. 숫자 튜닝은 반드시 이걸로 재고 바꿀 것
 - `index.html`은 마크업만(`#build`가 빌드 표시, 폰에서 옛 파일인지 확인용). CSS는 `src/style.css`
@@ -58,6 +60,7 @@
 월드 105×68 m, x 0→105, y 0→68, z 위. 팀 0은 오른쪽(+x) 공격, 팀 1은 왼쪽. `wx(x,t)`가 팀 기준 좌표 뒤집기.
 
 ## 측정값
+- Phase 5 (2026-10-29, `league 60 300`): 골 1.38/경기, 슈팅 13.1(유효 5.0), 패스 성공 63%, 파울 2.1, 무승부 40%, 전력차 6+ 강팀 승률 50~100%
 - Phase 4 (2026-10-29, `tools/bench.ts --seeds 3 --n 60`, KOR vs BRA 실명 선수단): 잡자마자 전방 패스 숏 76%·스루 78%, 슛 10m .7 → 55% / 18m 풀 39% / 25m 6% / 14m .6 32%, 수비 회수 84%. AI 반응 지연 없이는 63%/53%
 - 헤드리스(2026-10-29, Phase 1 이식 직후, KOR vs BRA 40경기 264초): 슛 4.9/경기, 골 0.8, 파울 6.7, 루즈볼 46%. 레거시 브라우저 8경기: 슛 6.1, 골 1.4, 파울 6.6, 루즈볼 47%
 
@@ -70,5 +73,5 @@
 
 ## 알려진 개선 과제
 - 게스트 입력 지연 = 왕복 핑. 클라이언트 예측은 없음.
-- 포메이션·전술 선택, 교체, 카드, 연장·승부차기 없음 (Phase 5).
+- 연장·승부차기 없음 (Phase 7 토너먼트). AI 오프사이드 0건. 온라인은 전술·교체 동기화 없음(UI 숨김).
 - 스냅샷은 선수당 16값(sta·kickWind·spin·feint 포함), 리플레이 프레임은 15값. 필드를 늘리면 `protocol.ts` k=i*16과 `scene.ts` PF를 같이 바꿀 것

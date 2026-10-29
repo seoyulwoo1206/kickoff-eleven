@@ -1,6 +1,7 @@
 import type { Inp } from '../input/actions';
 import type { TeamDef, Kit, Role, DiffKey } from '../data/teams';
 import type { SquadDef, PlayerDef, Detail, Pos } from '../data/squad';
+import type { Tactics } from './tactics';
 
 export type Phase = 'kickoff' | 'live' | 'setpiece' | 'goal' | 'halftime' | 'full';
 export type SetPieceType = 'corner' | 'throw' | 'goalkick' | 'freekick' | 'penalty';
@@ -17,6 +18,8 @@ export interface Player {
   name: string; nameEn: string; pos: Pos; ovr: number; foot: 'L' | 'R'; skill: number; attrs: Detail; def: PlayerDef | null;
   /** Phase 4: 기본 속력(speed는 체력 반영 후), 체력 0~1, 킥 와인드업 남은 시간과 예약된 킥, 개인기 상태 */
   speed0: number; sta: number; kickWind: number; pending: (() => void) | null; feint: number; burst: number; spin: number; spinDir: number;
+  /** Phase 5: 퇴장(경기장 밖), 경고 수 */
+  off: boolean; yellow: number;
 }
 export interface Ball {
   x: number; y: number; z: number; vx: number; vy: number; vz: number;
@@ -29,7 +32,7 @@ export interface Human {
   t: number; ctrl: Player | null; lock: number; charge: number; charging: boolean;
   second: boolean; gkRush: boolean; col: string; tag: string; cursor: 'manual' | 'auto'; had: boolean;
 }
-export interface Stats { shots: number[]; onT: number[]; poss: number[]; fouls: number[]; offs: number[]; }
+export interface Stats { shots: number[]; onT: number[]; poss: number[]; fouls: number[]; offs: number[]; yel: number[]; red: number[]; passA: number[]; passC: number[]; }
 export interface MatchInfo {
   teams: [TeamDef, TeamDef]; kit: [Kit, Kit]; score: number[]; time: number; len: number; diff: DiffKey;
   half: number; phase: Phase; phaseT: number; protect: number; stats: Stats;
@@ -37,6 +40,9 @@ export interface MatchInfo {
   scorer: Player | null; tempo: number; spType: SetPieceType | null;
   /** AI 반응 지연: 상대가 공을 찬 뒤 이 시간 동안은 루즈볼을 쫓지 않는다 (난이도별) */
   react: [number, number];
+  /** Phase 5: 전술, 벤치·교체 수, 중단 횟수(추가시간 계산), 추가시간(분, 전/후반), 어드밴티지 */
+  tac: [Tactics, Tactics]; bench: [PlayerDef[], PlayerDef[]]; subs: [number, number]; stops: number; added: [number, number];
+  adv: { t: number; x: number; y: number; timer: number; on: Player } | null;
 }
 export interface Pred { x: number; y: number; z: number; t: number; }
 export type SimEvent =
@@ -46,6 +52,8 @@ export type SimEvent =
   | { k: 'puff'; x: number; y: number; n: number; sp: number }
   | { k: 'shake'; v: number }
   | { k: 'hud' }
+  | { k: 'card'; t: number; num: number; kind: 'Y' | 'R' }
+  | { k: 'sub'; t: number; num: number }
   | { k: 'full' };
 export interface HumanCfg { tag: string; col: string; cursor: 'manual' | 'auto'; }
 export interface MatchCfg {
@@ -53,6 +61,8 @@ export interface MatchCfg {
   humans: [HumanCfg | null, HumanCfg | null]; net: boolean; seed: number;
   /** 선수단 (포메이션·선발·개인 능력치). null이면 TEAMS 팀 능력치 + 4-4-2 익명 선수 */
   squads?: [SquadDef | null, SquadDef | null];
+  /** 전술 (없으면 선수단 포메이션 + 기본값) */
+  tactics?: [Tactics | null, Tactics | null];
   /** 게스트: 시뮬을 돌리지 않고 스냅샷만 받는다 (선수 배치만 하고 킥오프 안 함) */
   guest?: boolean;
 }

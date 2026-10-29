@@ -18,7 +18,7 @@ const seed0 = +(flag('--seed') ?? 1);
 
 function pick(code: string | undefined, fallback: number) { const i = code ? TEAMS.findIndex(t => t.code === code.toUpperCase()) : -1; return TEAMS[i >= 0 ? i : fallback]; }
 
-interface Res { score: number[]; shots: number[]; onT: number[]; poss: number[]; fouls: number[]; offs: number[]; loose: number; ticks: number; nan: boolean; }
+interface Res { score: number[]; shots: number[]; onT: number[]; poss: number[]; fouls: number[]; offs: number[]; loose: number; ticks: number; nan: boolean; passA: number[]; passC: number[]; yel: number[]; red: number[]; }
 function run(seed: number, a = pick(codeA, 0), b = pick(codeB, 2)): Res {
   const s: Sim = createMatch({ teams: [a, b], len: LEN, diff: 'normal', tempo: 1, firstKick: seed & 1, humans: [null, null], net: false, seed, squads: noSquad ? [null, null] : [squadOf(a), squadOf(b)] });
   let loose = 0, ticks = 0, nan = false;
@@ -28,7 +28,7 @@ function run(seed: number, a = pick(codeA, 0), b = pick(codeB, 2)): Res {
     if (!Number.isFinite(s.ball.x) || !Number.isFinite(s.ball.y)) { nan = true; break; }
   }
   const st = s.M.stats, tp = st.poss[0] + st.poss[1];
-  return { score: s.M.score.slice(), shots: st.shots.slice(), onT: st.onT.slice(), poss: [st.poss[0] / tp, st.poss[1] / tp], fouls: st.fouls.slice(), offs: st.offs.slice(), loose: loose / Math.max(1, ticks), ticks, nan };
+  return { score: s.M.score.slice(), shots: st.shots.slice(), onT: st.onT.slice(), poss: [st.poss[0] / tp, st.poss[1] / tp], fouls: st.fouls.slice(), offs: st.offs.slice(), loose: loose / Math.max(1, ticks), ticks, nan, passA: st.passA.slice(), passC: st.passC.slice(), yel: st.yel.slice(), red: st.red.slice() };
 }
 function fp(s: Sim) { return s.players.map(p => p.x.toFixed(3) + ',' + p.y.toFixed(3)).join('|') + '#' + s.ball.x.toFixed(3) + ',' + s.ball.y.toFixed(3); }
 function determinism() {
@@ -49,6 +49,8 @@ const wins = [sum(r => +(r.score[0] > r.score[1])), sum(r => +(r.score[0] < r.sc
 console.log(`${a.code}(${a.atk}/${a.def}/${a.spd}) vs ${b.code}(${b.atk}/${b.def}/${b.spd}) · ${N}경기 × ${LEN}초 · ${ms}ms (${(ms / N).toFixed(0)}ms/경기)${noSquad ? ' · 선수단 없이' : ''}`);
 console.log(`승/패/무 ${wins.join('/')} · 골 ${avg(r => r.score[0])} - ${avg(r => r.score[1])} (경기당 ${avg(r => r.score[0] + r.score[1])})`);
 console.log(`슈팅 ${avg(r => r.shots[0])} - ${avg(r => r.shots[1])} · 유효 ${avg(r => r.onT[0])} - ${avg(r => r.onT[1])} · 점유 ${(sum(r => r.poss[0]) / N * 100).toFixed(0)}% · 파울 ${avg(r => r.fouls[0] + r.fouls[1])} · 오프사이드 ${avg(r => r.offs[0] + r.offs[1])} · 루즈볼 ${(sum(r => r.loose) / N * 100).toFixed(0)}%`);
+const pa = sum(r => r.passA[0] + r.passA[1]), pc = sum(r => r.passC[0] + r.passC[1]);
+console.log(`패스 ${(pa / N).toFixed(0)}회/경기 성공 ${(pc / Math.max(1, pa) * 100).toFixed(0)}% · 경고 ${avg(r => r.yel[0] + r.yel[1])} · 퇴장 ${avg(r => r.red[0] + r.red[1])}`);
 if (rs.some(r => r.nan)) console.log('!! NaN 발생');
 if (rs.some(r => r.ticks >= LEN * 60 * 1.5)) console.log('!! 경기가 끝나지 않음');
 console.log('결정론:', determinism() ? 'OK (같은 시드 → 같은 결과)' : '!! 실패');

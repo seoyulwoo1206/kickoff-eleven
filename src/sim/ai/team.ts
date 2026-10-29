@@ -12,7 +12,7 @@ import { gkAI } from './gk';
 export function teamAI(s: Sim, t: number, dt: number) {
   const { ball, M, team, HU } = s;
   const D = DIFF[M.diff], own = ball.owner, att = !!own && own.t === t, def = !!own && own.t !== t, h = HU[t];
-  const outs = team[t].filter(p => p.role !== 'GK' && p !== (h && h.ctrl));
+  const tac = M.tac[t], outs = team[t].filter(p => p.role !== 'GK' && p !== (h && h.ctrl) && !p.off);
   let chaser: Player | null = null, cover: Player | null = null; const marks = new Map<Player, Player>(), supports = new Map<Player, { x: number; y: number }>();
   if (!own) {
     if (ball.passTarget && ball.passTarget.t === t) chaser = ball.passTarget;
@@ -26,15 +26,18 @@ export function teamAI(s: Sim, t: number, dt: number) {
     chaser = so[0]; cover = so[1];
     if (h && h.second && so[2]) cover = so[2]; // 세컨드 디펜더: 둘째도 같이 압박
     // 마크: 공 없는 상대를 위협 순(우리 골에 가까운 순)으로, 가까운 수비·미드필더가 골 쪽에서 막는다
-    const g = wx(0, t), threats = team[1 - t].filter(o => o !== own && o.role !== 'GK').sort((a, b) => Math.abs(a.x - g) - Math.abs(b.x - g)).slice(0, 6);
+    const g = wx(0, t), threats = team[1 - t].filter(o => o !== own && o.role !== 'GK' && !o.off).sort((a, b) => Math.abs(a.x - g) - Math.abs(b.x - g)).slice(0, 6);
     const free = outs.filter(p => p !== chaser && p !== cover && p.role !== 'FW');
-    for (const o of threats) { let best: Player | null = null, bd = 14; for (const p of free) { if (marks.has(p)) continue; const q = d(p, o); if (q < bd) { bd = q; best = p; } } if (best) marks.set(best, o); }
+    for (const o of threats) { let best: Player | null = null, bd = tac.press === 2 ? 18 : 14; for (const p of free) { if (marks.has(p)) continue; const q = d(p, o); if (q < bd) { bd = q; best = p; } } if (best) marks.set(best, o); }
   } else if (att && own && own.role !== 'GK') {
     const fx = t === 0 ? 1 : -1, cands = outs.filter(p => p !== own && p.role !== 'DF').sort((a, b) => d(a, own) - d(b, own)).slice(0, 2);
     cands.forEach((p, i) => { const side = (i === 0 ? (own.y < CY ? 1 : -1) : (own.y < CY ? -1 : 1)); supports.set(p, { x: own.x + fx * 9, y: clamp(own.y + side * 9, 3, H - 3) }); });
   }
-  const tk = h ? 0.45 : D.tackle, press = h ? 1.18 : D.press;
+  const pressMul = tac.press === 0 ? 0.88 : tac.press === 2 ? 1.12 : 1, tk = (h ? 0.45 : D.tackle) * (tac.press === 2 ? 1.15 : tac.press === 0 ? 0.85 : 1), press = (h ? 1.18 : D.press) * pressMul;
+  // 압박 트리거: 공 가진 상대가 자기 골을 보고 있거나 터치가 커졌을 때 더 세게 달라붙는다
+  const trig = own && own.t !== t && (own.kickCD > 0 || Math.cos(own.dir) * (t === 0 ? -1 : 1) > 0.3) ? 1.12 : 1;
   for (const p of team[t]) {
+    if (p.off) continue;
     if (h && p === h.ctrl) continue;
     if (p.slide > 0) { slideCheck(s, p); continue; }
     if (p.role === 'GK') { gkAI(s, p, dt); continue; }
@@ -43,7 +46,7 @@ export function teamAI(s: Sim, t: number, dt: number) {
       if (own) {
         let tx = own.x + own.vx * 0.25, ty = own.y + own.vy * 0.25;
         if (M.protect > 0) { const g = wx(0, t), ux = g - ball.x, uy = CY - ball.y, L = Math.hypot(ux, uy) || 1; tx = ball.x + ux / L * 5.5; ty = ball.y + uy / L * 5.5; }
-        chase(p, tx, ty, press, dt); tryTackle(s, p, own, tk);
+        chase(p, tx, ty, press * trig, dt); tryTackle(s, p, own, tk * trig);
       } else { const q = intercept(s, p); chase(p, q.x, q.y, 1.25, dt); }
       continue;
     }
@@ -51,7 +54,7 @@ export function teamAI(s: Sim, t: number, dt: number) {
     const mk = marks.get(p);
     if (mk) {
       const g = wx(0, t), ux = g - mk.x, uy = CY - mk.y, L = Math.hypot(ux, uy) || 1, tg = targetFor(s, p, att, def);
-      const mx = mk.x + ux / L * 2.2, my = mk.y + uy / L * 2.2; moveTo(p, mx * 0.75 + tg.x * 0.25, my * 0.75 + tg.y * 0.25, 1.05, dt);
+      const md = tac.press === 2 ? 1.6 : tac.press === 0 ? 2.8 : 2.2, mx = mk.x + ux / L * md, my = mk.y + uy / L * md; moveTo(p, mx * 0.75 + tg.x * 0.25, my * 0.75 + tg.y * 0.25, 1.05, dt);
       if (ball.passTarget === mk) tryTackle(s, p, own, tk * 0.5); continue;
     }
     const sp = supports.get(p);

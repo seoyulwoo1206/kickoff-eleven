@@ -10,6 +10,6 @@ export function fillResult(s: Sim, local: number, isGuest: boolean) {
   else line = M.twoP ? (a > b ? 'P1 승리!' : a < b ? 'P2 승리!' : '무승부!') : (a > b ? `${M.teams[0].name}의 승리입니다.` : a < b ? `${M.teams[1].name}에 졌어요. 한 판 더?` : '무승부로 끝났어요.');
   $('rLine').textContent = line; $('againBtn').hidden = isGuest;
   const tp = M.stats.poss[0] + M.stats.poss[1], p0 = Math.round(M.stats.poss[0] / tp * 100);
-  const rows: [string, string | number, string | number][] = [['슈팅', M.stats.shots[0], M.stats.shots[1]], ['유효 슈팅', M.stats.onT[0], M.stats.onT[1]], ['점유율', p0 + '%', (100 - p0) + '%'], ['파울', M.stats.fouls[0], M.stats.fouls[1]], ['오프사이드', M.stats.offs[0], M.stats.offs[1]]];
+  const rows: [string, string | number, string | number][] = [['슈팅', M.stats.shots[0], M.stats.shots[1]], ['유효 슈팅', M.stats.onT[0], M.stats.onT[1]], ['점유율', p0 + '%', (100 - p0) + '%'], ['파울', M.stats.fouls[0], M.stats.fouls[1]], ['오프사이드', M.stats.offs[0], M.stats.offs[1]], ['패스 성공', `${M.stats.passC[0]}/${M.stats.passA[0]}`, `${M.stats.passC[1]}/${M.stats.passA[1]}`], ['경고 · 퇴장', `${M.stats.yel[0]} · ${M.stats.red[0]}`, `${M.stats.yel[1]} · ${M.stats.red[1]}`]];
   $('rStats').innerHTML = rows.map(r => `<div class="rs"><span>${r[1]}</span><em>${r[0]}</em><span>${r[2]}</span></div>`).join('');
 }
