@@ -57,7 +57,7 @@ export class ThreeRenderer implements IRenderer {
     for (const m of this.models.values()) m.setBlob(!shadows);
     this.scene.traverse(o => { const m = (o as THREE.Mesh).material as THREE.Material | undefined; if (m) m.needsUpdate = true; });
   }
-  setCamMode(m: CamMode) { this.mode = m; }
+  setCamMode(m: CamMode) { this.mode = m; if (m === 'intro') { this.camPos.set(CX + 40, 36, CY + 88); this.camLook.set(CX, 1, CY); } }
   resize() {
     const r = this.cv.getBoundingClientRect(); this.cw = r.width; this.ch = r.height;
     this.gl.setSize(this.cw, this.ch, false); this.camera.aspect = this.cw / this.ch; this.camera.updateProjectionMatrix();
@@ -98,7 +98,7 @@ export class ThreeRenderer implements IRenderer {
     this.modelSim = sim; this.namesMode = opts.names;
   }
   /** 월드 → 화면 좌표 (오버레이용) */
-  private toScreen(x: number, z: number, y: number) {
+  private toScreen(x: number, y: number, z = 0) { // 시뮬 (x, y, 높이) → 화면. 월드는 (x, 높이, y)
     const v = this.tmpV.set(x, z, y).project(this.camera);
     return { x: (v.x + 1) / 2 * this.cw + this.shk.x, y: (1 - v.y) / 2 * this.ch + this.shk.y, on: v.z < 1 && v.z > -1 };
   }
@@ -193,6 +193,17 @@ export class ThreeRenderer implements IRenderer {
         { const fp = this.toScreen(c.x, c.y, 0), bw = 30, bh = 3, bx = fp.x - bw / 2, by = fp.y + 4; ctx.fillStyle = 'rgba(9,17,27,.7)'; ctx.fillRect(bx - 1, by - 1, bw + 2, bh + 2); ctx.fillStyle = c.sta > 0.4 ? '#8fe3a3' : '#ff8a5c'; ctx.fillRect(bx, by, bw * c.sta, bh); } // 체력
         if (h.charging) { const fp = this.toScreen(c.x, c.y, 0), bw = 44, bh = 6, bx = fp.x - bw / 2, by = fp.y + 10; ctx.fillStyle = 'rgba(9,17,27,.85)'; ctx.fillRect(bx - 1, by - 1, bw + 2, bh + 2); ctx.fillStyle = h.charge > 0.8 ? '#ff5a4e' : h.col; ctx.fillRect(bx, by, bw * h.charge, bh); ctx.fillStyle = '#fff'; ctx.fillRect(bx + bw * 0.8, by - 2, 1.5, bh + 4); }
       } else { const cx2 = clamp(px, 24, cw - 24), cy2 = clamp(py, 24 + ins.t, ch - 24 - ins.b), a = Math.atan2(py - cy2, px - cx2); ctx.save(); ctx.translate(cx2, cy2); ctx.rotate(a); ctx.fillStyle = h.col; ctx.beginPath(); ctx.moveTo(12, 0); ctx.lineTo(-6, -8); ctx.lineTo(-6, 8); ctx.fill(); ctx.restore(); }
+    }
+    // 선수 이름표: 등번호 + 이름 (가까울수록 선명, 멀면 숨김)
+    ctx.font = '700 11px "IBM Plex Sans KR","Saira Condensed",sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'bottom';
+    for (const p of players) {
+      if (p.off || HU.some(h => h && h.ctrl === p)) continue;
+      const hp = this.toScreen(p.x, p.y, 2.0), fp = this.toScreen(p.x, p.y, 0); if (!hp.on) continue;
+      const hpx = fp.y - hp.y; if (hpx < 26 || hp.x < -20 || hp.x > cw + 20 || hp.y < 0 || hp.y > ch) continue;
+      const a = clamp((hpx - 26) / 30, 0.35, 0.85), kit = M.kit[p.t];
+      ctx.globalAlpha = a; ctx.fillStyle = 'rgba(9,17,27,.7)'; const txt = `${p.num} ${displayName(p, opts.names)}`, w = ctx.measureText(txt).width + 8;
+      ctx.fillRect(hp.x - w / 2, hp.y - 15, w, 14); ctx.fillStyle = p.role === 'GK' ? kit.gk : kit.c1; ctx.fillRect(hp.x - w / 2, hp.y - 15, 3, 14);
+      ctx.fillStyle = '#fff'; ctx.fillText(txt, hp.x + 1, hp.y - 2); ctx.globalAlpha = 1;
     }
     // 미니맵
     const mk = clamp(cw * 0.22 / W, 0.8, 1.4), mw = W * mk, mh = H * mk, mx0 = cw - mw - Math.max(12, ins.r), my0 = ins.t + 56;

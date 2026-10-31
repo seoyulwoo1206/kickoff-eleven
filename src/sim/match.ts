@@ -64,7 +64,7 @@ function makePlayers(s: Sim, squads: [import('../data/squad').SquadDef | null, i
         speed0: 0, sta: 1, kickWind: 0, pending: null, feint: 0, burst: 0, spin: 0, spinDir: 1, off: false, yellow: 0,
       };
       // 속력: 개인 능력치(spd 60→6.2m/s, 80→7.0, 99→7.8)가 있으면 그걸로, 없으면 팀 속도
-      p.speed0 = p.speed = (6.5 + (det.spd - 60) / 40 * 1.8) * mult * (f.role === 'GK' ? 0.92 : 1);
+      p.speed0 = p.speed = (6.0 + (det.spd - 60) / 40 * 1.7) * mult * (f.role === 'GK' ? 0.92 : 1);
       s.players.push(p); s.team[t].push(p);
     });
   }
@@ -84,7 +84,7 @@ export function kickoff(s: Sim, kt: number) {
   M.scorer = null;
   for (const p of players) { if (p.off) continue; let x = p.bx; if (p.role !== 'GK') x = Math.min(x, p.t === kt ? 46 : 41); p.x = wx(x, p.t); p.y = p.by; p.vx = p.vy = 0; p.dir = p.t === 0 ? 0 : Math.PI; p.kickCD = 0; p.stun = 0; p.holdT = 0; p.forcePass = false; p.dive = 0; p.cele = false; }
   const fw = team[kt].filter(p => p.role !== 'GK' && !p.off), tk = fw[fw.length - 2] ?? fw[0], mate = fw[fw.length - 1] ?? fw[0];
-  tk.x = wx(51.7, kt); tk.y = CY; mate.x = wx(50.5, kt); mate.y = CY + 6; tk.dir = kt === 0 ? 0 : Math.PI;
+  tk.x = wx(51.7, kt); tk.y = CY; mate.x = wx(50.5, kt); mate.y = CY + 6; tk.dir = kt === 0 ? Math.PI : 0; mate.dir = tk.dir; // 킥오프 두 선수는 자기 진영을 본다
   placeBall(s, CX, CY); ball.owner = tk; ball.lastTouch = kt;
   if (!HU[kt]) { tk.forcePass = true; tk.decT = 0.25; }
   M.phase = 'kickoff'; M.phaseT = 1.3; M.protect = 0; M.adv = null;
@@ -109,7 +109,7 @@ export function setPiece(s: Sim, type: SetPieceType, t: number, x: number, y: nu
   if (type === 'freekick') buildWall(s, t, x, y);
   if (type === 'penalty' || type === 'corner') M.stops++;
   M.phase = 'setpiece'; M.spType = type; M.phaseT = type === 'penalty' ? 1.4 : 0.8; M.protect = 1.6; M.adv = null;
-  for (const h of HU) { if (!h) continue; h.charging = false; h.lock = 0; if (h.t === t) { if (tk.role !== 'GK') setCtrl(h, tk); } else setCtrl(h, nearestOutfield(s, h.t, ball)); }
+  for (const h of HU) { if (!h) continue; h.charging = false; h.lock = 0; if (h.t === t) setCtrl(h, tk); else setCtrl(h, nearestOutfield(s, h.t, ball)); }
   banner(s, type === 'penalty' ? 'PENALTY' : '', { corner: '코너킥', throw: '스로인', goalkick: '골킥', freekick: '파울 · 프리킥', penalty: '페널티킥' }[type], type === 'penalty' ? 1400 : 900);
   if (type === 'freekick' || type === 'penalty') sfx(s, 'whistle');
 }

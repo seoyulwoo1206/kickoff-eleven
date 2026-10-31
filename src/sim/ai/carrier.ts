@@ -64,6 +64,6 @@ export function aiCarrier(s: Sim, p: Player, dt: number) {
   let dx = t === 0 ? 1 : -1, dy = (CY - p.y) / 40;
   if (nearest && nd < 6) { const w = (6 - nd) / 6 * 1.4; dx += (p.x - nearest.x) / nd * w; dy += (p.y - nearest.y) / nd * w * 1.3; }
   if (p.y < 4) dy += 0.8; if (p.y > H - 4) dy -= 0.8;
-  const m = Math.hypot(dx, dy) || 1, sp = p.speed * (nd > 6 ? 1.28 : nd > 3 ? 1.12 : 1.02) * 0.93 * (p.burst > 0 ? 1.12 : 1); steer(p, dx / m * sp, dy / m * sp, dt); // 공간이 있으면 질주, 압박 땐 몸으로 버티며 전진
-  p.holdT += dt; if (nd > 9 && p.holdT > 0.3 && Math.hypot(p.vx, p.vy) > 5 && wx(p.x, t) < 82 && M.phase === 'live') knockOn(s, p);
+  const m = Math.hypot(dx, dy) || 1, sp = p.speed * (nd > 6 ? 1.2 : nd > 3 ? 1.08 : 1.0) * 0.93 * (p.burst > 0 ? 1.12 : 1); steer(p, dx / m * sp, dy / m * sp, dt); // 공간이 있으면 질주, 압박 땐 몸으로 버티며 전진
+  p.holdT += dt; if (nd > 8 && p.holdT > 0.3 && Math.hypot(p.vx, p.vy) > 5 && wx(p.x, t) < 82 && M.phase === 'live') knockOn(s, p);
 }

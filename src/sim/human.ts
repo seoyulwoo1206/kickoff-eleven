@@ -9,7 +9,9 @@ export function autoCursor(s: Sim, h: Human, dt: number) {
   const { ball, team, INP } = s;
   h.lock = Math.max(0, h.lock - dt);
   const own = ball.owner;
-  if (own && own.t === h.t) { if (own.role !== 'GK') h.ctrl = own; h.had = true; return; }
+  if (own && own.t === h.t) { h.ctrl = own; h.had = true; return; } // 공을 가진 우리 선수가 커서 (키퍼 포함)
+  if (h.ctrl && h.ctrl.role === 'GK') { const nn = nearestToBall(s, h); if (nn) { h.ctrl = nn; h.lock = 0.3; } } // 키퍼가 공을 잃으면 필드 선수로
+  if (!own && ball.knock && ball.knock.t === h.t && ball.knock !== h.ctrl && ball.knock.role !== 'GK') { h.ctrl = ball.knock; return; } // 동료가 터치한 공은 그 선수가
   if (!own && ball.passTarget && ball.passTarget.t === h.t) { if (ball.passTarget.role !== 'GK') h.ctrl = ball.passTarget; return; } // 패스가 가는 동안엔 받는 선수에 고정
   if (!own && ball.knock === h.ctrl) return; // 질주 드리블 중
   if (h.cursor === 'manual') { // 수동: 패스 받을 때, 공을 뺏긴 직후 한 번, 그리고 전환 키로만 바뀐다
@@ -71,7 +73,7 @@ export function humanUpdate(s: Sim, h: Human, dt: number) {
   if (p.spin > 0) { const sp0 = p.speed * 0.6; steer(p, Math.cos(p.dir) * sp0, Math.sin(p.dir) * sp0, dt); } // 룰렛 중엔 돌면서 전진
   else if (mag > 0.15) {
     const [ux, uy] = own ? [mx / mag, my / mag] : assistDir(s, p, mx / mag, my / mag);
-    let sp = p.speed * (sprint ? 1.32 : 1) * (own ? 0.93 : 1) * (p.stun > 0 ? 0.4 : 1) * clamp(mag / 0.7, 0.45, 1) * (p.burst > 0 ? 1.12 : 1) * (kicking ? 0.6 : 1); // 스틱을 살짝 밀면 걷는다
+    let sp = p.speed * (sprint ? 1.24 : 1) * (own ? 0.93 : 1) * (p.stun > 0 ? 0.4 : 1) * clamp(mag / 0.7, 0.45, 1) * (p.burst > 0 ? 1.12 : 1) * (kicking ? 0.6 : 1); // 스틱을 살짝 밀면 걷는다
     if (!own && !ball.owner && d(p, ball) < 1.6 && ball.z < 1) sp *= 0.75; // 공 바로 앞에선 속도를 줄여 흘리지 않게
     steer(p, ux * sp, uy * sp, dt);
   }

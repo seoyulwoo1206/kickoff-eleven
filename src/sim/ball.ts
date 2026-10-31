@@ -58,7 +58,7 @@ export function gain(s: Sim, p: Player) {
   if (ball.passTarget === p && ball.kicker && ball.kicker.t === p.t) M.stats.passC[p.t]++; // 패스 성공
   ball.owner = p; ball.knock = null; ball.lastTouch = p.t; ball.passTarget = null; ball.isShot = false; ball.z = 0; ball.vz = 0; ball.curl = 0; p.holdT = 0; p.decT = Math.max(p.decT, 0.15);
   if (p.role === 'GK') p.dir = p.t === 0 ? 0 : Math.PI;
-  const h = HU[p.t]; if (h && p.role !== 'GK') { h.ctrl = p; h.lock = 0; }
+  const h = HU[p.t]; if (h) { h.ctrl = p; h.lock = 0; } // 공을 잡은 선수에게 커서 (키퍼 포함)
 }
 
 /* ---------- 지면 패스 모델 ----------
