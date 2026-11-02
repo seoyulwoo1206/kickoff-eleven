@@ -59,7 +59,12 @@ export function integrate(s: Sim, dt: number) {
     const a = players[i];
     for (let j = i + 1; j < players.length; j++) {
       const b = players[j], dx = b.x - a.x, dy = b.y - a.y, q2 = dx * dx + dy * dy;
-      if (q2 < 1.21 && q2 > 1e-6) { const q = Math.sqrt(q2), push = (1.1 - q) / 2, ux = dx / q, uy = dy / q; a.x -= ux * push; a.y -= uy * push; b.x += ux * push; b.y += uy * push; }
+      if (q2 < 1.96 && q2 > 1e-6) { // 1.1m 안은 밀어내고, 1.4m 안에서 공 가진 선수는 상대 몸에 막힌다
+        const q = Math.sqrt(q2), push = Math.max(0, 1.1 - q) / 2, ux = dx / q, uy = dy / q; a.x -= ux * push; a.y -= uy * push; b.x += ux * push; b.y += uy * push;
+        if (a.t !== b.t && a.slide <= 0 && b.slide <= 0) { // 공 가진 선수는 상대 몸에 막혀 느려진다 (앞을 막고 선 수비를 뚫고 지나갈 수 없다)
+          const c = ball.owner === a ? a : ball.owner === b ? b : null; if (c && c.spin <= 0) { const o = c === a ? b : a; const ahead = ((o.x - c.x) * c.vx + (o.y - c.y) * c.vy) > 0; if (ahead) { const f = 1 - 0.12 * (1.4 - q) / 1.4; c.vx *= f; c.vy *= f; } }
+        }
+      }
     }
   }
 }

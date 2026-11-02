@@ -74,7 +74,7 @@ export function humanUpdate(s: Sim, h: Human, dt: number) {
   else if (mag > 0.15) {
     const [ux, uy] = own ? [mx / mag, my / mag] : assistDir(s, p, mx / mag, my / mag);
     let sp = p.speed * (sprint ? 1.24 : 1) * (own ? 0.93 : 1) * (p.stun > 0 ? 0.4 : 1) * clamp(mag / 0.7, 0.45, 1) * (p.burst > 0 ? 1.12 : 1) * (kicking ? 0.6 : 1); // 스틱을 살짝 밀면 걷는다
-    if (!own && !ball.owner && d(p, ball) < 1.6 && ball.z < 1) sp *= 0.75; // 공 바로 앞에선 속도를 줄여 흘리지 않게
+    if (!own && !ball.owner && ball.knock !== p && d(p, ball) < 1.6 && ball.z < 1) sp *= 0.75; // 공 바로 앞에선 속도를 줄여 흘리지 않게 (내가 앞에 차 놓은 공은 전속으로 쫓는다)
     steer(p, ux * sp, uy * sp, dt);
   }
   else if (!own && !ball.owner && (ball.passTarget === p || (!(ball.passTarget && ball.passTarget.t === p.t) && d(p, ball) < 10))) { const q = intercept(s, p); chase(p, q.x, q.y, 1, dt); }
@@ -86,6 +86,7 @@ export function humanUpdate(s: Sim, h: Human, dt: number) {
   else if (!own && ball.owner && ball.owner.t !== p.t && d(p, ball.owner) < 4.5) { const o = ball.owner; moveTo(p, o.x, o.y, 0.55, dt); } // 손 놓고 있어도 가까운 상대는 천천히 따라붙는다
   else steer(p, 0, 0, dt);
   if (own) {
+    if (I.press.pass || I.press.lob || I.press.through || I.press.shoot || I.press.chip) p.shield = 0.16; // 누른 순간 의도는 지켜준다: 떼기·와인드업 사이에 뺏기지 않는다
     if (kicking) return; // 와인드업 중엔 새 입력을 받지 않는다
     const anyPress = I.press.pass || I.press.lob || I.press.through || I.press.chip || I.press.shoot || I.down.pass || I.down.lob;
     if (sprint && mag > 0.15 && Math.hypot(p.vx, p.vy) > 5.5 && !h.charging && !anyPress && p.spin <= 0) { knockOn(s, p); return; } // 질주 드리블은 공을 앞에 차 놓고 달린다
@@ -111,7 +112,7 @@ export function humanUpdate(s: Sim, h: Human, dt: number) {
     if (I.down.gkRush) h.gkRush = true;
     // 몸싸움: 공 가진 상대와 부딪히면 버튼 없이도 어깨 싸움으로 공을 뺏을 수 있다 (피지컬·밸런스 대결)
     const o = ball.owner;
-    if (o && o.t !== p.t && o.role !== 'GK' && M.protect <= 0 && p.stun <= 0 && o.spin <= 0) {
+    if (o && o.t !== p.t && o.role !== 'GK' && M.protect <= 0 && p.stun <= 0 && o.spin <= 0 && o.shield <= 0) {
       if (p.kickCD <= 0 && d(p, ball) < 0.7 && ball.z < 0.8) { // 발끝 포크
         p.kickCD = 0.3;
         if (s.rnd() < 0.55 + n(p.attrs.int) * 0.25 - (o.feint > 0 ? 0.3 : 0)) { gain(s, p); o.stun = 0.3; o.kickCD = 0.4; sfx(s, 'tackle'); }

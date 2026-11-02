@@ -14,10 +14,13 @@ export function pressure(s: Sim, p: Player) { let nd = 1e9; for (const o of s.te
 /* ---------- 공 소유·킥 ---------- */
 /** 질주 드리블: 공을 앞에 차 놓고 쫓아간다. 볼컨트롤이 높을수록 짧고 정확 */
 export function knockOn(s: Sim, p: Player) {
-  const { ball } = s;
-  const sp = Math.hypot(p.vx, p.vy), a = Math.atan2(p.vy, p.vx) + (s.rnd() - 0.5) * (0.12 - n(p.attrs.ctl) * 0.08), v = sp * 1.1 + 2.9 - n(p.attrs.ctl) * 1.0;
+  const { ball, M } = s;
+  let nd = 1e9; for (const o of s.team[1 - p.t]) if (!o.off) nd = Math.min(nd, d(o, p));
+  const close = nd < 3.5; // 상대가 가까우면 공을 짧게 차 놓는다 (긴 터치는 바로 뺏긴다)
+  const sp = Math.hypot(p.vx, p.vy), a = Math.atan2(p.vy, p.vx) + (s.rnd() - 0.5) * (0.12 - n(p.attrs.ctl) * 0.08), v = sp * 1.0 + (close ? 1.0 : 2.4) - n(p.attrs.ctl) * 1.0; // 공이 2~3m 앞에서 다시 발에 붙을 정도
+  if (!s.HU[1 - p.t]) M.react[1 - p.t] = Math.max(M.react[1 - p.t], DIFF[M.diff].react * 0.3); // 상대 AI는 터치를 읽는 데 잠깐 걸린다 (0.5면 AI끼리 골 1.57, 0이면 .95)
   ball.owner = null; ball.x = clamp(p.x + Math.cos(a) * 0.8, 0.3, W - 0.3); ball.y = clamp(p.y + Math.sin(a) * 0.8, 0.3, H - 0.3); ball.z = 0; ball.vz = 0;
-  ball.vx = Math.cos(a) * v; ball.vy = Math.sin(a) * v; ball.lastTouch = p.t; ball.kicker = p; ball.passTarget = null; ball.knock = p; ball.isShot = false; ball.curl = 0; p.kickCD = 0.22; ball.spin += 0.5;
+  ball.vx = Math.cos(a) * v; ball.vy = Math.sin(a) * v; ball.lastTouch = p.t; ball.kicker = p; ball.passTarget = null; ball.knock = p; ball.isShot = false; ball.curl = 0; p.kickCD = close ? 0.15 : 0.22; ball.spin += 0.5;
 }
 export function kick(s: Sim, p: Player, vx: number, vy: number, vz = 0, curl = 0) {
   const { ball, M, team } = s;
@@ -117,7 +120,7 @@ export function shortPass(s: Sim, p: Player, ang: number, power = 0) {
     for (const m of s.team[p.t]) {
       if (m === p || m.off) continue; const L = leadPos(p, m), dx = L.x - p.x, dy = L.y - p.y, q = Math.hypot(dx, dy);
       if (q < 2.5 || q > (minC < 0 ? 45 : maxD)) continue; const c = (dx * ax + dy * ay) / q; if (c < minC) continue;
-      const sc = c * 3 - Math.abs(q - 13 - power * 8) / 16 - laneRisk(s, p, L, p.t) * 2.2 - (m.role === 'GK' ? 2 : 0);
+      const sc = Math.min(c, 0.92) / 0.92 * 4 - Math.max(0, q - 9 - power * 20) / 16 - laneRisk(s, p, L, p.t) * 1.2 - (m.role === 'GK' ? 2 : 0); // 조준 방향(±23° 안은 동점)이 가장 중요, 같은 방향이면 가까운 동료(탭) · 길게 누르면 먼 동료, 선로 위험은 참고만
       if (sc > bs) { bs = sc; best = m; }
     }
     if (best) break;
@@ -157,7 +160,7 @@ export function throughPass(s: Sim, p: Player, ang: number, power = 0) {
         }
         if (!meet) continue;
         let open = 99; for (const o of s.team[1 - t]) open = Math.min(open, Math.hypot(o.x + o.vx * meet.tt * 0.5 - meet.x, o.y + o.vy * meet.tt * 0.5 - meet.y));
-        const sc = (wx(meet.x, t) - wx(p.x, t)) / 10 + Math.min(open, 8) / 3 - meet.tt * 0.6 - laneRisk(s, p, meet, t) * 1.2 + v0 * 0.04 - (off ? 0.5 : 0) + Math.max(0, m.vx * ax + m.vy * ay) / 4 - (wx(m.x, t) > offsideLine(s, t) + 1.0 ? 3 : 0);
+        const sc = (wx(meet.x, t) - wx(p.x, t)) / 10 + Math.min(open, 8) / 3 - meet.tt * 0.6 - laneRisk(s, p, meet, t) * 1.2 + v0 * 0.04 - (off ? 0.5 : 0) + Math.max(0, m.vx * ax + m.vy * ay) / 4 - (wx(m.x, t) > offsideLine(s, t) + 1.0 ? 3 : 0) + ((rx * Math.cos(ang) + ry * Math.sin(ang)) / rq) * 2.5; // 조준 방향에 있는 동료 우대
         if (!best || sc > best.sc) best = { sc, m, a, v: v0 };
         break;
       }
@@ -234,7 +237,7 @@ export function foul(s: Sim, by: Player, on: Player) { foulCommitted(s, by, on, 
 /** 스탠딩 태클: 공이 발에서 떨어진 순간(노크온·터치 직후)이 기회. 밸런스 높은 상대는 잘 안 뺏긴다 */
 export function standTackle(s: Sim, p: Player) {
   const { ball, M } = s;
-  const o = ball.owner; if (!o || o.t === p.t || o.role === 'GK' || p.tackleCD > 0 || M.protect > 0) return;
+  const o = ball.owner; if (!o || o.t === p.t || o.role === 'GK' || p.tackleCD > 0 || M.protect > 0 || o.shield > 0) return;
   const q = d(p, o); if (q > 2.4) return; p.tackleCD = 0.5;
   const ux = (o.x - p.x) / (q || 1), uy = (o.y - p.y) / (q || 1); p.vx = ux * p.speed * 1.3; p.vy = uy * p.speed * 1.3; p.dir = Math.atan2(uy, ux); // 발을 뻗는 런지
   const front = Math.cos(o.dir) * (p.x - o.x) + Math.sin(o.dir) * (p.y - o.y) > 0;

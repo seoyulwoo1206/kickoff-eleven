@@ -13,6 +13,7 @@ export function teamAI(s: Sim, t: number, dt: number) {
   const { ball, M, team, HU } = s;
   const D = DIFF[M.diff], own = ball.owner, att = !!own && own.t === t, def = !!own && own.t !== t, h = HU[t];
   const tac = M.tac[t], outs = team[t].filter(p => p.role !== 'GK' && p !== (h && h.ctrl) && !p.off);
+  const humanOn = !!(h && h.ctrl && own && own.t !== t && d(h.ctrl, own) < 3); // 사람 커서 선수가 이미 붙어 있으면 수비수는 마크를 지킨다 (셋이 몰리면 뒷공간이 빈다)
   let chaser: Player | null = null, cover: Player | null = null; const marks = new Map<Player, Player>(), supports = new Map<Player, { x: number; y: number }>();
   if (!own) {
     if (ball.passTarget && ball.passTarget.t === t) chaser = ball.passTarget;
@@ -24,6 +25,7 @@ export function teamAI(s: Sim, t: number, dt: number) {
   } else if (def) {
     const so = outs.slice().sort((a, b) => d(a, ball) - d(b, ball));
     chaser = so[0]; cover = so[1];
+    if (own && !humanOn && wx(own.x, t) < 38) { const df = so.find(p => p !== chaser && p.role === 'DF' && d(p, own) < 14); if (df) cover = df; } // 수비 지역에선 가장 가까운 수비수가 마크를 버리고 드리블러 앞을 막는다
     if (h && h.second && so[2]) cover = so[2]; // 세컨드 디펜더: 둘째도 같이 압박
     // 마크: 공 없는 상대를 위협 순(우리 골에 가까운 순)으로, 가까운 수비·미드필더가 골 쪽에서 막는다
     const g = wx(0, t), threats = team[1 - t].filter(o => o !== own && o.role !== 'GK' && !o.off).sort((a, b) => Math.abs(a.x - g) - Math.abs(b.x - g)).slice(0, 6);
@@ -50,7 +52,10 @@ export function teamAI(s: Sim, t: number, dt: number) {
       } else { const q = intercept(s, p); chase(p, q.x, q.y, 1.25, dt); }
       continue;
     }
-    if (p === cover) { const g = wx(0, t), ux = g - ball.x, uy = CY - ball.y, L = Math.hypot(ux, uy) || 1, k = Math.min(6, L * 0.35); moveTo(p, ball.x + ux / L * k, ball.y + uy / L * k, 1.1, dt); tryTackle(s, p, own, tk * 0.8); continue; }
+    if (p === cover) {
+      if (own && own.t !== t && !humanOn && (d(p, own) < 3.6 || (wx(own.x, t) < 40 && d(p, own) < 9))) { chase(p, own.x + own.vx * 0.2, own.y + own.vy * 0.2, press, dt); tryTackle(s, p, own, tk); continue; } // 드리블러가 코앞까지 오면 물러서지 않고 맞붙는다
+      const g = wx(0, t), ux = g - ball.x, uy = CY - ball.y, L = Math.hypot(ux, uy) || 1, k = Math.min(6, L * 0.35); moveTo(p, ball.x + ux / L * k, ball.y + uy / L * k, 1.1, dt); tryTackle(s, p, own, tk * 0.8); continue;
+    }
     const mk = marks.get(p);
     if (mk) {
       const g = wx(0, t), ux = g - mk.x, uy = CY - mk.y, L = Math.hypot(ux, uy) || 1, tg = targetFor(s, p, att, def);

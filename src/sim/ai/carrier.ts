@@ -8,10 +8,15 @@ import { steer } from '../move';
 
 export function tryTackle(s: Sim, p: Player, own: Player | null, rate: number) {
   const { M, HU, INP, ball } = s;
-  if (!own || own.t === p.t || own.role === 'GK' || M.protect > 0 || p.tackleCD > 0 || p.stun > 0 || p.slide > 0) return;
+  if (!own || own.t === p.t || own.role === 'GK' || M.protect > 0 || p.tackleCD > 0 || p.stun > 0 || p.slide > 0 || own.shield > 0) return;
   const q = d(p, own);
-  if (q < 1.25) {
-    p.tackleCD = 0.45; let r = rate * (0.85 + n(p.attrs.stk) * 0.4) * (1 - n(own.attrs.bal) * 0.2); const h = HU[own.t]; if (h && h.ctrl === own && INP[h.t].down.sprint) r *= 0.85;
+  if (q < 1.35 && p.bodyCD <= 0 && own.spin <= 0) { // 몸싸움: 태클과 별개 (사람 수비수와 같은 식, 난이도 비율로 줄임)
+    p.bodyCD = 0.55; const front = Math.cos(own.dir) * (p.x - own.x) + Math.sin(own.dir) * (p.y - own.y) > 0;
+    const pr = ((front ? 0.4 : 0.26) + (n(p.attrs.str) - n(own.attrs.str) * 0.6 - n(own.attrs.bal) * 0.4) * 0.3 - (own.feint > 0 ? 0.3 : 0)) * Math.min(1, rate / 0.36);
+    if (s.rnd() < pr) { gain(s, p); own.stun = 0.35; own.kickCD = 0.4; sfx(s, 'tackle'); return; }
+  }
+  if (q < 1.45) { // 겹침 밀어내기가 1.1m를 유지하므로 발을 뻗는 거리는 그보다 넓게
+    p.tackleCD = 0.45; const front = Math.cos(own.dir) * (p.x - own.x) + Math.sin(own.dir) * (p.y - own.y) > 0; let r = rate * (front ? 1.3 : 1) * (0.85 + n(p.attrs.stk) * 0.4) * (1 - n(own.attrs.bal) * 0.2); // 앞을 막고 선 수비가 더 잘 뺏는다 const h = HU[own.t]; if (h && h.ctrl === own && INP[h.t].down.sprint) r *= 0.85;
     if (own.feint > 0) r *= 0.5; if (own.spin > 0) r *= 0.3;
     if (s.rnd() < r) { gain(s, p); own.stun = 0.45; own.kickCD = 0.5; sfx(s, 'tackle'); }
   }
