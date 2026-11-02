@@ -190,7 +190,7 @@ export function shoot(s: Sim, p: Player, power: number, aimY: number, finesseIn 
   if (M.spType === 'freekick' && M.protect > 0.3) finesse = true; // 프리킥은 감아찬다
   const aimAng = Math.atan2(ty - ball.y, gx - ball.x);
   let err = (s.rnd() * 2 - 1) * (0.35 + dist * 0.05) * (1.22 - A.fin / 100) * (1 + power * 0.5) * (1 + pressure(s, p) * 0.4);
-  if (power > 0.85) err *= 1 + (power - 0.85) * 4; // 끝까지 채우면 조금 더 흔들린다
+  if (power > 0.9) err *= 1 + (power - 0.9) * 6; // 끝까지 채우면(사람 풀파워) 많이 흔들린다
   if (weakFoot(p, aimAng) && p.def) err *= 1 + (5 - p.def.weak) * 0.09;
   if (finesse) err *= 0.7; if (volley) err *= 1.6;
   if (p.sta < 0.4) err *= 1 + (0.4 - p.sta) * 0.8;

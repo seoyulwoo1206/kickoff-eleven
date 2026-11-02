@@ -11,7 +11,7 @@ export function gkAI(s: Sim, k: Player, dt: number) {
   const { ball, M, team, HU } = s;
   const t = k.t, gx = t === 0 ? 0 : W, sg = t === 0 ? 1 : -1, own = ball.owner;
   const G = k.def?.gk ?? { div: k.attrs.jmp, han: k.attrs.rea, kic: k.attrs.lp, ref: k.attrs.rea, pos: k.attrs.mrk };
-  const skill = (0.47 + n(G.ref) * 0.3 + n(G.div) * 0.1) * (!HU[t] ? DIFF[M.diff].gk : 1);
+  const skill = (0.5 + n(G.ref) * 0.3 + n(G.div) * 0.1) * (!HU[t] ? DIFF[M.diff].gk : 1);
   if (own === k) {
     k.holdT += dt; steer(k, 0, 0, dt); k.dir = t === 0 ? 0 : Math.PI;
     if (k.holdT > 1.0 && M.phase === 'live') { const m = bestAIPass(s, k); if (m) passTo(s, k, m.p, m.loft); else kick(s, k, sg * (20 + n(G.kic) * 6), (s.rnd() - 0.5) * 8, 7); }
@@ -35,7 +35,7 @@ export function gkAI(s: Sim, k: Player, dt: number) {
     if (ball.kicker && ball.kicker.t !== t && ball.shot !== k.lastSave && vlx < -4 && lb <= lk + 0.5 && lb > lk - 1.8 && Math.abs(ball.y - k.y) < 2.9 && ball.z < 2.7) { // 선방 판정
       k.lastSave = ball.shot; const dy = Math.abs(ball.y - k.y), sp = Math.hypot(ball.vx, ball.vy), hi = ball.z > 1.6;
       if (ball.isShot && ball.kicker) M.stats.onT[ball.kicker.t]++; // 골문 안으로 온 슛 = 유효 슈팅
-      let pr = (dy < 0.5 && !hi ? 0.88 : skill * (1 - Math.max(0, dy - 0.5) / 2.8) * (1 - Math.max(0, sp - 20) / 30)) * (hi ? 0.85 : 1);
+      let pr = (dy < 0.5 && !hi ? 0.88 : skill * (1 - Math.max(0, dy - 0.5) / 3.2) * Math.max(0.8, 1 - Math.max(0, sp - 20) / 30)) * (hi ? 0.85 : 1);
       k.dive = 0.5; k.diveDir = Math.sign(ball.y - k.y) || 1;
       if (M.spType === 'penalty' && M.protect > 0) { // 페널티: 한쪽을 찍고 몸을 던진다 (사람 팀 키퍼는 스틱 방향)
         const I = h ? s.INP[t] : null; const guess = I && Math.abs(I.my) > 0.3 ? Math.sign(I.my) : I ? 0 : (s.rnd() < 0.5 ? 1 : -1);
