@@ -37,6 +37,7 @@ export function installTouch(I: Inp, onTouch: () => void, getOpts: () => TouchOp
   bindBtn($('bC'), () => { I.touch = true; onTouch(); keyDown(I, 'sprint'); }, () => keyUp(I, 'sprint'));
   bindBtn($('bD'), () => { I.touch = true; onTouch(); keyDown(I, 'through'); }, () => keyUp(I, 'through'));
   bindBtn($('bL'), () => { I.touch = true; onTouch(); keyDown(I, 'lob'); }, () => keyUp(I, 'lob'));
+  bindBtn($('bR'), () => { I.touch = true; onTouch(); keyDown(I, 'run'); }, () => keyUp(I, 'run'));
   // 오른쪽 빈 공간 스와이프 = 개인기 (방향은 화면 기준 → 경기장 기준으로 그대로 씀)
   const skillArea = $('skillArea'); let skId: number | null = null, skx = 0, sky = 0;
   skillArea.addEventListener('pointerdown', e => { if (skId !== null) return; skId = e.pointerId; skx = e.clientX; sky = e.clientY; try { skillArea.setPointerCapture(e.pointerId); } catch { /* */ } });

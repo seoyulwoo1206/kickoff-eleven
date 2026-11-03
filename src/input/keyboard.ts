@@ -1,12 +1,25 @@
-import { keyDown, keyUp, type Act, type Dir, type Inp } from './actions';
+import { keyDown, keyUp, ACTS, type Act, type Dir, type Inp } from './actions';
 
 export type Key = Act | Dir;
-/* P1: 방향키 + S/A/W/D/Z/Q/E (FC 온라인 배치). P2: IJKL + B/V/N/M/./,/Space */
-const K1_DEFAULT: Record<string, Key> = { ArrowLeft: 'left', ArrowRight: 'right', ArrowUp: 'up', ArrowDown: 'down', KeyS: 'pass', KeyA: 'lob', KeyW: 'through', KeyD: 'shoot', KeyZ: 'chip', KeyQ: 'gkRush', KeyE: 'sprint', ShiftLeft: 'sprint' };
+/* P1: 방향키 + S/A/W/D/Z/Q/X/E (FC 온라인 배치, Q 침투/압박 지원, X 개인기/GK 돌진). P2: IJKL + B/V/N/M/./U/,/Space */
+const K1_DEFAULT: Record<string, Key> = { ArrowLeft: 'left', ArrowRight: 'right', ArrowUp: 'up', ArrowDown: 'down', KeyS: 'pass', KeyA: 'lob', KeyW: 'through', KeyD: 'shoot', KeyZ: 'chip', KeyQ: 'run', KeyX: 'gkRush', KeyE: 'sprint', ShiftLeft: 'sprint' };
 export let K1: Record<string, Key> = { ...K1_DEFAULT };
-/** 키 설정 변경 (null이면 기본으로) */
-export function setK1(m: Record<string, Key> | null) { K1 = m ? { ...m } : { ...K1_DEFAULT }; }
-export const K2: Record<string, Key> = { KeyJ: 'left', KeyL: 'right', KeyI: 'up', KeyK: 'down', KeyB: 'pass', KeyV: 'lob', KeyN: 'through', KeyM: 'shoot', Period: 'chip', Comma: 'gkRush', Space: 'sprint', ShiftRight: 'sprint' };
+/** 키 설정 변경 (null이면 기본으로). 저장된 설정에 없는 새 액션은 기본 키를 붙인다 (그 키를 쓰던 액션은 자기 기본 키로 옮김) */
+export function setK1(m: Record<string, Key> | null) {
+  K1 = m ? { ...m } : { ...K1_DEFAULT };
+  if (!m) return;
+  const have = new Set(Object.values(K1));
+  for (const act of ACTS) {
+    if (have.has(act)) continue;
+    for (const code in K1_DEFAULT) {
+      if (K1_DEFAULT[code] !== act) continue;
+      const other = K1[code];
+      if (other && other !== act) { const oc = Object.keys(K1_DEFAULT).find(c => K1_DEFAULT[c] === other && !K1[c]); if (oc) K1[oc] = other; }
+      K1[code] = act; have.add(act);
+    }
+  }
+}
+export const K2: Record<string, Key> = { KeyJ: 'left', KeyL: 'right', KeyI: 'up', KeyK: 'down', KeyB: 'pass', KeyV: 'lob', KeyN: 'through', KeyM: 'shoot', Period: 'chip', KeyU: 'run', Comma: 'gkRush', Space: 'sprint', ShiftRight: 'sprint' };
 
 export interface KeyboardHooks {
   inp: [Inp, Inp];

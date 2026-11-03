@@ -1,5 +1,5 @@
 import { clamp, d, angDiff, wx } from './util';
-import { CY } from './consts';
+import { W, CY } from './consts';
 import type { Sim, Human, Player } from './types';
 import { sfx } from './events';
 import { gain, knockOn, shortPass, longPass, throughPass, chipShot, shoot, slideTackle, slideCheck, standTackle, intercept, interceptT, queueKick, n } from './ball';
@@ -60,14 +60,31 @@ function skillMove(s: Sim, p: Player, sx: number, sy: number) {
   // 헛다리: 잠깐 태클을 흘리고 가속
   p.feint = sk >= 5 ? 0.45 : 0.35; p.burst = 0.45; return true;
 }
+/** 침투 지시: 조준 방향(스틱, 없으면 얼굴 방향)에 있는 동료가 골 쪽 대각선으로 3초간 뛴다 (오프사이드 라인은 teamAI가 지킨다) */
+export function triggerRun(s: Sim, h: Human, p: Player, aim: number) {
+  const ax = Math.cos(aim), ay = Math.sin(aim); let best: Player | null = null, bs = -1e9;
+  for (const m of s.team[h.t]) {
+    if (m === p || m.role === 'GK' || m.off || m === s.ball.owner) continue;
+    const dx = m.x - p.x, dy = m.y - p.y, q = Math.hypot(dx, dy); if (q < 2 || q > 45) continue;
+    const c = (dx * ax + dy * ay) / q; if (c < 0.2) continue;
+    const sc = c * 3 - q / 30 - (m.runT > 0 ? 1 : 0); if (sc > bs) { bs = sc; best = m; }
+  }
+  if (!best) return;
+  const gx = h.t === 0 ? W : 0, ty = best.y + (CY - best.y) * 0.5; // 골 쪽 대각선으로
+  best.runT = 3; best.runDir = Math.atan2(ty - best.y, gx - best.x); sfx(s, 'kick');
+}
 export function humanUpdate(s: Sim, h: Human, dt: number) {
   const { ball, M, INP } = s;
   const I = INP[h.t], p = h.ctrl; if (!p) return; if (p.off) { switchPlayer(s, h); return; }
   const mx = I.mx, my = I.my, mag = Math.hypot(mx, my), sprint = I.down.sprint; let own = ball.owner === p;
   if (!own && ball.knock === p && d(p, ball) < 1.4 && ball.z < 0.6 && (I.press.pass || I.press.shoot || I.press.lob || I.press.through || I.press.chip || I.rel.pass || I.rel.lob)) { gain(s, p); own = ball.owner === p; } // 질주 드리블 중에도 바로 차거나 패스할 수 있다
-  h.second = false; h.gkRush = false;
+  h.second = false; h.gkRush = false; h.pressT = Math.max(0, h.pressT - dt);
   if (p.slide > 0) { slideCheck(s, p); return; }
   const aim = mag > 0.15 ? Math.atan2(my, mx) : p.dir;
+  if (I.press.run) { // Q: 우리 공이면 침투 지시, 아니면 압박 지원
+    const ours = (ball.owner && ball.owner.t === h.t) || (!ball.owner && ball.lastTouch === h.t && !(ball.kicker && ball.kicker.t !== h.t));
+    if (ours) triggerRun(s, h, p, aim); else h.pressT = 2.5;
+  }
   const kicking = p.kickWind > 0;
   // 이동
   if (p.spin > 0) { const sp0 = p.speed * 0.6; steer(p, Math.cos(p.dir) * sp0, Math.sin(p.dir) * sp0, dt); } // 룰렛 중엔 돌면서 전진

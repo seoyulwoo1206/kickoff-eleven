@@ -13,7 +13,7 @@ export type NetMsg = Snap | InputMsg | { t: 'lobby'; sel: number; len?: number }
 
 export function makeSnap(s: Sim, perf: number, shake: number): Snap {
   const { players, ball, M, HU } = s;
-  const P: number[] = []; for (const p of players) P.push(r2(p.x), r2(p.y), r2(p.dir), r1(p.vx), r1(p.vy), r2(p.slide), r2(p.dive), p.diveDir, r2(p.stun), r2(p.kickCD), r2(p.run % 1000), p.cele ? 1 : 0, r2(p.sta), r2(p.kickWind), r2(p.spin), r2(p.feint), p.off ? 1 : 0);
+  const P: number[] = []; for (const p of players) P.push(r2(p.x), r2(p.y), r2(p.dir), r1(p.vx), r1(p.vy), r2(p.slide), r2(p.dive), p.diveDir, r2(p.stun), r2(p.kickCD), r2(p.run % 1000), p.cele ? 1 : 0, r2(p.sta), r2(p.kickWind), r2(p.spin), r2(p.feint), p.off ? 1 : 0, r2(p.runT), r2(p.runDir));
   const o = ball.owner ? players.indexOf(ball.owner) : -1, st = M.stats;
   return {
     t: 's', tm: r3(perf), P, B: [r2(ball.x), r2(ball.y), r2(ball.z), r1(ball.vx), r1(ball.vy), r1(ball.vz), o, r2(ball.spin % 100), ball.isShot ? 1 : 0],
@@ -26,10 +26,10 @@ export function applySnap(s: Sim, sa: Snap, sb: Snap, f: number, newest: Snap, o
   const { players, ball, M, HU } = s;
   const A = sa.P, B = sb.P;
   players.forEach((p, i) => {
-    const k = i * 17;
+    const k = i * 19;
     p.x = lerp(A[k], B[k], f); p.y = lerp(A[k + 1], B[k + 1], f); p.dir = lerpAng(A[k + 2], B[k + 2], f); p.vx = lerp(A[k + 3], B[k + 3], f); p.vy = lerp(A[k + 4], B[k + 4], f);
     if (B[k + 5] > 0 && p.slide <= 0) onSlide(p.x, p.y);
-    p.slide = B[k + 5]; p.dive = B[k + 6]; p.diveDir = B[k + 7]; p.stun = B[k + 8]; p.kickCD = B[k + 9]; p.run = lerp(A[k + 10], B[k + 10], f); p.cele = !!B[k + 11]; p.sta = B[k + 12] ?? 1; p.kickWind = B[k + 13] ?? 0; p.spin = B[k + 14] ?? 0; p.feint = B[k + 15] ?? 0; p.off = !!B[k + 16];
+    p.slide = B[k + 5]; p.dive = B[k + 6]; p.diveDir = B[k + 7]; p.stun = B[k + 8]; p.kickCD = B[k + 9]; p.run = lerp(A[k + 10], B[k + 10], f); p.cele = !!B[k + 11]; p.sta = B[k + 12] ?? 1; p.kickWind = B[k + 13] ?? 0; p.spin = B[k + 14] ?? 0; p.feint = B[k + 15] ?? 0; p.off = !!B[k + 16]; p.runT = B[k + 17] ?? 0; p.runDir = B[k + 18] ?? 0;
   });
   const a = sa.B, b = sb.B;
   ball.x = lerp(a[0], b[0], f); ball.y = lerp(a[1], b[1], f); ball.z = Math.max(0, lerp(a[2], b[2], f)); ball.vx = b[3]; ball.vy = b[4]; ball.vz = b[5]; ball.owner = b[6] >= 0 ? players[b[6]] : null; ball.spin = lerp(a[7], b[7], f); ball.isShot = !!b[8];

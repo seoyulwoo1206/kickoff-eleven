@@ -35,7 +35,8 @@ export function teamAI(s: Sim, t: number, dt: number) {
     const fx = t === 0 ? 1 : -1, cands = outs.filter(p => p !== own && p.role !== 'DF').sort((a, b) => d(a, own) - d(b, own)).slice(0, 2);
     cands.forEach((p, i) => { const side = (i === 0 ? (own.y < CY ? 1 : -1) : (own.y < CY ? -1 : 1)); supports.set(p, { x: own.x + fx * 9, y: clamp(own.y + side * 9, 3, H - 3) }); });
   }
-  const pressMul = tac.press === 0 ? 0.88 : tac.press === 2 ? 1.12 : 1, tk = (h ? 0.45 : D.tackle) * (tac.press === 2 ? 1.15 : tac.press === 0 ? 0.85 : 1), press = (h ? 1.18 : D.press) * pressMul;
+  const pressing = !!(h && h.pressT > 0); // Q 압박 지원: 추격자는 더 빠르고 세게, 커버도 같이 붙는다
+  const pressMul = (tac.press === 0 ? 0.88 : tac.press === 2 ? 1.12 : 1) * (pressing ? 1.15 : 1), tk = (h ? 0.45 : D.tackle) * (tac.press === 2 ? 1.15 : tac.press === 0 ? 0.85 : 1) * (pressing ? 1.3 : 1), press = (h ? 1.18 : D.press) * pressMul;
   // 압박 트리거: 공 가진 상대가 자기 골을 보고 있거나 터치가 커졌을 때 더 세게 달라붙는다
   const trig = own && own.t !== t && (own.kickCD > 0 || Math.cos(own.dir) * (t === 0 ? -1 : 1) > 0.3) ? 1.12 : 1;
   for (const p of team[t]) {
@@ -44,6 +45,11 @@ export function teamAI(s: Sim, t: number, dt: number) {
     if (p.slide > 0) { slideCheck(s, p); continue; }
     if (p.role === 'GK') { gkAI(s, p, dt); continue; }
     if (own === p) { aiCarrier(s, p, dt); continue; }
+    if (p.runT > 0 && (att || (!own && ball.lastTouch === t))) { // 침투 지시: 지시 방향으로 질주하되 오프사이드 라인 안에서
+      const line = offsideLine(s, t); let tx = p.x + Math.cos(p.runDir) * 12, ty = clamp(p.y + Math.sin(p.runDir) * 12, 2, H - 2);
+      if (wx(tx, t) > line - 0.4) tx = wx(line - 0.4, t);
+      moveTo(p, tx, ty, 1.2, dt); continue;
+    }
     if (p === chaser) {
       if (own) {
         let tx = own.x + own.vx * 0.25, ty = own.y + own.vy * 0.25;
@@ -53,7 +59,7 @@ export function teamAI(s: Sim, t: number, dt: number) {
       continue;
     }
     if (p === cover) {
-      if (own && own.t !== t && !humanOn && (d(p, own) < 3.6 || (wx(own.x, t) < 40 && d(p, own) < 9))) { chase(p, own.x + own.vx * 0.2, own.y + own.vy * 0.2, press, dt); tryTackle(s, p, own, tk); continue; } // 드리블러가 코앞까지 오면 물러서지 않고 맞붙는다
+      if (own && own.t !== t && (pressing || (!humanOn && (d(p, own) < 3.6 || (wx(own.x, t) < 40 && d(p, own) < 9))))) { chase(p, own.x + own.vx * 0.2, own.y + own.vy * 0.2, press, dt); tryTackle(s, p, own, tk); continue; } // 드리블러가 코앞까지 오면 물러서지 않고 맞붙는다
       const g = wx(0, t), ux = g - ball.x, uy = CY - ball.y, L = Math.hypot(ux, uy) || 1, k = Math.min(6, L * 0.35); moveTo(p, ball.x + ux / L * k, ball.y + uy / L * k, 1.1, dt); tryTackle(s, p, own, tk * 0.8); continue;
     }
     const mk = marks.get(p);

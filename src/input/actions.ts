@@ -1,7 +1,7 @@
 /* 입력 액션. 키보드·게임패드·터치가 모두 같은 액션을 낸다.
-   FC 온라인 배치: pass(S) 짧은패스/압박 · lob(A) 롱패스/전환 · through(W) 스루/세컨드 · shoot(D) 슛/슬라이딩 · chip(Z) 칩슛 · gkRush(Q) 골키퍼 돌진 · sprint(E) 질주
+   FC 온라인 배치: pass(S) 짧은패스/압박 · lob(A) 롱패스/전환 · through(W) 스루/세컨드 · shoot(D) 슛/슬라이딩 · chip(Z) 칩슛 · run(Q) 침투 지시/압박 지원 · gkRush(X) 개인기·감아차기/골키퍼 돌진 · sprint(E) 질주
    ACTS의 순서는 온라인 입력 비트마스크의 비트 순서이기도 하다 */
-export const ACTS = ['pass', 'lob', 'through', 'shoot', 'chip', 'gkRush', 'sprint'] as const;
+export const ACTS = ['pass', 'lob', 'through', 'shoot', 'chip', 'gkRush', 'sprint', 'run'] as const; // run(Q): 공격 침투 지시 / 수비 압박 지원
 export type Act = (typeof ACTS)[number];
 export type Dir = 'left' | 'right' | 'up' | 'down';
 

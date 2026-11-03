@@ -112,7 +112,9 @@ export class ThreeRenderer implements IRenderer {
     let tx: number, ty: number;
     if (!sim || !ball) { tx = CX + Math.sin(perf * 0.07) * 22; ty = CY + Math.cos(perf * 0.05) * 8; } else { tx = ball.x + ball.vx * 0.22; ty = ball.y + ball.vy * 0.18; }
     const vh = VW / aspect * 1.5;
-    tx = clamp(tx, VW / 2 - 9, W - VW / 2 + 9); ty = clamp(ty, vh / 2 - 12, H - vh / 2 + 12);
+    // 카메라는 비스듬히 내려다보므로 화면 아래쪽(가까운 터치라인)은 조준점에서 가까운 거리까지만 보인다 → 아래 여유를 따로 계산
+    const hf = this.camera.fov * Math.PI / 360, hc = Math.sin(ELEV) * L + 2, dh = Math.cos(ELEV) * L, near = Math.max(4, dh - hc / Math.tan(ELEV + hf));
+    tx = clamp(tx, VW / 2 - 9, W - VW / 2 + 9); ty = clamp(ty, vh / 2 - 12, H - near + 1.5);
     const k = 1 - Math.pow(0.004, dtR); cam.x += (tx - cam.x) * k; cam.y += (ty - cam.y) * k;
     let px: number, py: number, pz: number, lx = cam.x, ly = 0, lz = cam.y;
     const h = sim?.HU[0]?.ctrl ?? null;
@@ -193,6 +195,25 @@ export class ThreeRenderer implements IRenderer {
         { const fp = this.toScreen(c.x, c.y, 0), bw = 30, bh = 3, bx = fp.x - bw / 2, by = fp.y + 4; ctx.fillStyle = 'rgba(9,17,27,.7)'; ctx.fillRect(bx - 1, by - 1, bw + 2, bh + 2); ctx.fillStyle = c.sta > 0.4 ? '#8fe3a3' : '#ff8a5c'; ctx.fillRect(bx, by, bw * c.sta, bh); } // 체력
         if (h.charging) { const fp = this.toScreen(c.x, c.y, 0), bw = 44, bh = 6, bx = fp.x - bw / 2, by = fp.y + 10; ctx.fillStyle = 'rgba(9,17,27,.85)'; ctx.fillRect(bx - 1, by - 1, bw + 2, bh + 2); ctx.fillStyle = h.charge > 0.8 ? '#ff5a4e' : h.col; ctx.fillRect(bx, by, bw * h.charge, bh); ctx.fillStyle = '#fff'; ctx.fillRect(bx + bw * 0.8, by - 2, 1.5, bh + 4); }
       } else { const cx2 = clamp(px, 24, cw - 24), cy2 = clamp(py, 24 + ins.t, ch - 24 - ins.b), a = Math.atan2(py - cy2, px - cx2); ctx.save(); ctx.translate(cx2, cy2); ctx.rotate(a); ctx.fillStyle = h.col; ctx.beginPath(); ctx.moveTo(12, 0); ctx.lineTo(-6, -8); ctx.lineTo(-6, 8); ctx.fill(); ctx.restore(); }
+    }
+    // 침투 지시 화살표: 뛰는 동료 발 밑에서 지시 방향으로
+    for (const p of players) {
+      if (p.runT <= 0 || p.off) continue;
+      const a = this.toScreen(p.x, p.y, 0.05), b = this.toScreen(p.x + Math.cos(p.runDir) * 4.5, p.y + Math.sin(p.runDir) * 4.5, 0.05); if (!a.on) continue;
+      const ang = Math.atan2(b.y - a.y, b.x - a.x), len = Math.hypot(b.x - a.x, b.y - a.y);
+      ctx.save(); ctx.globalAlpha = clamp(p.runT / 0.4, 0, 1) * 0.95; ctx.translate(a.x, a.y); ctx.rotate(ang);
+      ctx.strokeStyle = '#ffd166'; ctx.lineWidth = 3; ctx.lineCap = 'round'; ctx.beginPath(); ctx.moveTo(6, 0); ctx.lineTo(len - 8, 0); ctx.stroke();
+      ctx.fillStyle = '#ffd166'; ctx.beginPath(); ctx.moveTo(len + 2, 0); ctx.lineTo(len - 12, -7); ctx.lineTo(len - 12, 7); ctx.fill(); ctx.restore();
+    }
+    // 압박 지원 화살표: 가장 가까운 AI 동료 → 공 가진 상대
+    for (const h of HU) {
+      if (!h || h.pressT <= 0 || !ball.owner || ball.owner.t === h.t) continue; const o = ball.owner;
+      let best: Player | null = null, bd = 1e9; for (const p of players) { if (p.t !== h.t || p === h.ctrl || p.role === 'GK' || p.off) continue; const q = Math.hypot(p.x - o.x, p.y - o.y); if (q < bd) { bd = q; best = p; } }
+      if (!best) continue; const a = this.toScreen(best.x, best.y, 0.05), b = this.toScreen(o.x, o.y, 0.05); if (!a.on || !b.on) continue;
+      const ang = Math.atan2(b.y - a.y, b.x - a.x), len = Math.max(0, Math.hypot(b.x - a.x, b.y - a.y) - 14);
+      ctx.save(); ctx.globalAlpha = clamp(h.pressT / 0.4, 0, 1) * 0.9; ctx.translate(a.x, a.y); ctx.rotate(ang);
+      ctx.strokeStyle = '#ff5a4e'; ctx.lineWidth = 2.5; ctx.setLineDash([6, 5]); ctx.beginPath(); ctx.moveTo(8, 0); ctx.lineTo(len - 6, 0); ctx.stroke(); ctx.setLineDash([]);
+      ctx.fillStyle = '#ff5a4e'; ctx.beginPath(); ctx.moveTo(len + 2, 0); ctx.lineTo(len - 10, -6); ctx.lineTo(len - 10, 6); ctx.fill(); ctx.restore();
     }
     // 선수 이름표: 등번호 + 이름 (가까울수록 선명, 멀면 숨김)
     ctx.font = '700 11px "IBM Plex Sans KR","Saira Condensed",sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'bottom';
