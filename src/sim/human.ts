@@ -35,7 +35,7 @@ export function assistDir(s: Sim, p: Player, ux: number, uy: number): [number, n
   const { ball } = s;
   const o = ball.owner; let tx: number, ty: number, w: number;
   if (!o && ball.passTarget && ball.passTarget !== p && ball.passTarget.t === p.t) return [ux, uy]; // 동료에게 가는 패스는 쫓지 않는다
-  if (!o) { const q = intercept(s, p), L = Math.hypot(q.x - p.x, q.y - p.y); tx = q.x; ty = q.y; w = ball.passTarget === p ? (L > 2.5 ? 0.97 : 0.6) : clamp(1 - L / 10, 0, 0.9); }
+  if (!o) { const q = intercept(s, p), L = Math.hypot(q.x - p.x, q.y - p.y); tx = q.x; ty = q.y; w = ball.passTarget === p ? (L > 2.5 ? 0.97 : 0.6) : ball.knock === p && L < 6 ? 0.95 : clamp(1 - L / 10, 0, 0.9); } // 내가 차 놓은 공은 스틱을 돌려도 먼저 줍는다
   else if (o.t !== p.t) { tx = o.x + o.vx * 0.25; ty = o.y + o.vy * 0.25; w = clamp(0.7 - d(p, o) / 10, 0, 0.7); }
   else return [ux, uy];
   const dx = tx - p.x, dy = ty - p.y, L = Math.hypot(dx, dy); if (L < 0.3 || w <= 0) return [ux, uy];
@@ -106,7 +106,7 @@ export function humanUpdate(s: Sim, h: Human, dt: number) {
     if (I.press.pass || I.press.lob || I.press.through || I.press.shoot || I.press.chip) p.shield = 0.16; // 누른 순간 의도는 지켜준다: 떼기·와인드업 사이에 뺏기지 않는다
     if (kicking) return; // 와인드업 중엔 새 입력을 받지 않는다
     const anyPress = I.press.pass || I.press.lob || I.press.through || I.press.chip || I.press.shoot || I.down.pass || I.down.lob;
-    if (sprint && mag > 0.15 && Math.hypot(p.vx, p.vy) > 5.5 && !h.charging && !anyPress && p.spin <= 0) { knockOn(s, p); return; } // 질주 드리블은 공을 앞에 차 놓고 달린다
+    if (sprint && mag > 0.15 && Math.hypot(p.vx, p.vy) > 5.5 && !h.charging && !anyPress && p.spin <= 0 && Math.abs(angDiff(Math.atan2(p.vy, p.vx), Math.atan2(my, mx))) < 0.4) { knockOn(s, p); return; } // 질주 드리블은 공을 앞에 차 놓고 달린다 (도는 중엔 발에 붙여 돈다)
     // 개인기: Q 탭 (폰: 스와이프 → I.skill)
     if (I.press.gkRush) { const sv = I.skill ?? { x: mx, y: my }; I.skill = null; if (skillMove(s, p, sv.x, sv.y)) return; }
     // 패스는 떼는 순간, 누른 시간이 세기 (탭 = 보통). 터치는 pass 길게 = 롱패스

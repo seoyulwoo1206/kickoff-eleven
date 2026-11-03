@@ -89,6 +89,15 @@ export function laneRisk(s: Sim, p: Player, tg: { x: number; y: number }, t: num
   }
   return r;
 }
+/** 코앞 차단: 패스 선로의 첫 3m 안에 상대 발이 있으면(1.1m) 차자마자 막힌다 */
+export function nearBlock(s: Sim, p: Player, tg: { x: number; y: number }, t: number) {
+  const ax = tg.x - p.x, ay = tg.y - p.y, L = Math.hypot(ax, ay) || 1, ux = ax / L, uy = ay / L;
+  for (const o of s.team[1 - t]) {
+    if (o.off) continue; const dx = o.x - p.x, dy = o.y - p.y, u = dx * ux + dy * uy; if (u < 0.3 || u > 3.2) continue;
+    if (Math.abs(-dx * uy + dy * ux) < 1.1) return true;
+  }
+  return false;
+}
 /** 패스 방향 오차 (rad): 패스 능력치·압박·약발·체력 */
 function passErr(s: Sim, p: Player, long: boolean) {
   const skill = long ? p.attrs.lp : p.attrs.sp;
@@ -120,7 +129,7 @@ export function shortPass(s: Sim, p: Player, ang: number, power = 0) {
     for (const m of s.team[p.t]) {
       if (m === p || m.off) continue; const L = leadPos(p, m), dx = L.x - p.x, dy = L.y - p.y, q = Math.hypot(dx, dy);
       if (q < 2.5 || q > (minC < 0 ? 45 : maxD)) continue; const c = (dx * ax + dy * ay) / q; if (c < minC) continue;
-      const sc = Math.min(c, 0.92) / 0.92 * 4 - Math.max(0, q - 9 - power * 20) / 16 - laneRisk(s, p, L, p.t) * 1.2 - (m.role === 'GK' ? 2 : 0) + (m.runT > 0 ? 0.8 : 0); // 조준 방향(±23° 안은 동점)이 가장 중요, 같은 방향이면 가까운 동료(탭) · 길게 누르면 먼 동료, 선로 위험은 참고만
+      const sc = Math.min(c, 0.92) / 0.92 * 4 - Math.max(0, q - 9 - power * 20) / 16 - laneRisk(s, p, L, p.t) * 1.2 - (m.role === 'GK' ? 2 : 0) + (m.runT > 0 ? 0.8 : 0) - (nearBlock(s, p, L, p.t) ? 3 : 0); // 코앞 상대 발에 차 주지 않는다 // 조준 방향(±23° 안은 동점)이 가장 중요, 같은 방향이면 가까운 동료(탭) · 길게 누르면 먼 동료, 선로 위험은 참고만
       if (sc > bs) { bs = sc; best = m; }
     }
     if (best) break;
@@ -160,7 +169,7 @@ export function throughPass(s: Sim, p: Player, ang: number, power = 0) {
         }
         if (!meet) continue;
         let open = 99; for (const o of s.team[1 - t]) open = Math.min(open, Math.hypot(o.x + o.vx * meet.tt * 0.5 - meet.x, o.y + o.vy * meet.tt * 0.5 - meet.y));
-        const sc = (wx(meet.x, t) - wx(p.x, t)) / 10 + Math.min(open, 8) / 3 - meet.tt * 0.6 - laneRisk(s, p, meet, t) * 1.2 + v0 * 0.04 - (off ? 0.5 : 0) + Math.max(0, m.vx * ax + m.vy * ay) / 4 - (wx(m.x, t) > offsideLine(s, t) + 1.0 ? 3 : 0) + ((rx * Math.cos(ang) + ry * Math.sin(ang)) / rq) * 2.5 + (m.runT > 0 ? 1.5 : 0); // 조준 방향에 있는 동료·침투 중인 동료 우대
+        const sc = (wx(meet.x, t) - wx(p.x, t)) / 10 + Math.min(open, 8) / 3 - meet.tt * 0.6 - laneRisk(s, p, meet, t) * 1.2 + v0 * 0.04 - (off ? 0.5 : 0) + Math.max(0, m.vx * ax + m.vy * ay) / 4 - (wx(m.x, t) > offsideLine(s, t) + 1.0 ? 3 : 0) + ((rx * Math.cos(ang) + ry * Math.sin(ang)) / rq) * 2.5 + (m.runT > 0 ? 1.5 : 0) - (nearBlock(s, p, meet, t) ? 3 : 0); // 조준 방향에 있는 동료·침투 중인 동료 우대
         if (!best || sc > best.sc) best = { sc, m, a, v: v0 };
         break;
       }
