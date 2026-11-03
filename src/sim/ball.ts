@@ -17,10 +17,10 @@ export function knockOn(s: Sim, p: Player) {
   const { ball, M } = s;
   let nd = 1e9; for (const o of s.team[1 - p.t]) if (!o.off) nd = Math.min(nd, d(o, p));
   const close = nd < 3.5; // 상대가 가까우면 공을 짧게 차 놓는다 (긴 터치는 바로 뺏긴다)
-  const sp = Math.hypot(p.vx, p.vy), a = Math.atan2(p.vy, p.vx) + (s.rnd() - 0.5) * (0.12 - n(p.attrs.ctl) * 0.08), v = sp * 1.0 + (close ? 1.0 : 2.4) - n(p.attrs.ctl) * 1.0; // 공이 2~3m 앞에서 다시 발에 붙을 정도
+  const sp = Math.hypot(p.vx, p.vy), a = Math.atan2(p.vy, p.vx) + (s.rnd() - 0.5) * (0.12 - n(p.attrs.ctl) * 0.08), v = sp * 1.0 + (close ? 0.8 : 1.6) - n(p.attrs.ctl) * 0.8; // 공이 1~1.5m 앞에서 다시 발에 붙을 정도 (길면 상대가 먼저 닿는다)
   if (!s.HU[1 - p.t]) M.react[1 - p.t] = Math.max(M.react[1 - p.t], DIFF[M.diff].react * 0.3); // 상대 AI는 터치를 읽는 데 잠깐 걸린다 (0.5면 AI끼리 골 1.57, 0이면 .95)
   ball.owner = null; ball.x = clamp(p.x + Math.cos(a) * 0.8, 0.3, W - 0.3); ball.y = clamp(p.y + Math.sin(a) * 0.8, 0.3, H - 0.3); ball.z = 0; ball.vz = 0;
-  ball.vx = Math.cos(a) * v; ball.vy = Math.sin(a) * v; ball.lastTouch = p.t; ball.kicker = p; ball.passTarget = null; ball.knock = p; ball.isShot = false; ball.curl = 0; p.kickCD = close ? 0.15 : 0.22; ball.spin += 0.5;
+  ball.vx = Math.cos(a) * v; ball.vy = Math.sin(a) * v; ball.lastTouch = p.t; ball.kicker = p; ball.passTarget = null; ball.knock = p; ball.isShot = false; ball.curl = 0; p.kickCD = close ? 0.12 : 0.18; ball.spin += 0.5;
 }
 export function kick(s: Sim, p: Player, vx: number, vy: number, vz = 0, curl = 0) {
   const { ball, M, team } = s;
@@ -56,12 +56,14 @@ export function offside(s: Sim, p: Player) {
 }
 export function gain(s: Sim, p: Player) {
   const { ball, M, players, HU } = s;
+  const prev = ball.owner ?? (ball.knock && d(ball.knock, ball) < 2.5 ? ball.knock : null); // 직전 소유자 (노크온 포함)
   if (p.offs && M.phase === 'live' && ball.kicker && ball.kicker.t === p.t && ball.kicker !== p) { offside(s, p); return; }
   for (const q of players) q.offs = false;
   if (ball.passTarget === p && ball.kicker && ball.kicker.t === p.t) M.stats.passC[p.t]++; // 패스 성공
   ball.owner = p; ball.knock = null; ball.lastTouch = p.t; ball.passTarget = null; ball.isShot = false; ball.z = 0; ball.vz = 0; ball.curl = 0; p.holdT = 0; p.decT = Math.max(p.decT, 0.15);
   if (p.role === 'GK') p.dir = p.t === 0 ? 0 : Math.PI;
   const h = HU[p.t]; if (h) { h.ctrl = p; h.lock = 0; } // 공을 잡은 선수에게 커서 (키퍼 포함)
+  const ho = HU[1 - p.t]; if (ho && prev && prev === ho.ctrl) ho.lostT = 0.6; // 사람이 방금 뺏겼다
 }
 
 /* ---------- 지면 패스 모델 ----------
@@ -322,7 +324,7 @@ export function ballControl(s: Sim) {
   for (const p of players) {
     if (p.kickCD > 0 || p.stun > 0 || p.off) continue; const gk = p.role === 'GK', mine = pt === p; if (ball.z > (gk ? 2.4 : mine ? 2.2 : 1.7)) continue;
     if (pt && !mine && pt.t === p.t && !gk && sp > 5) continue;
-    const q = d(p, ball), reach = gk ? 1.1 : mine ? 1.5 : 0.95; if (q < reach && q < bd) { bd = q; best = p; }
+    const q = d(p, ball), reach = gk ? 1.1 : mine ? 1.5 : ball.knock === p ? 1.4 : 0.95; if (q < reach && q < bd) { bd = q; best = p; } // 자기가 차 놓은 공은 발을 뻗어 다시 잡는다
   }
   if (!best) return;
   if (ball.z > 0.9 && best.role !== 'GK') { // 헤딩 / 가슴 트래핑

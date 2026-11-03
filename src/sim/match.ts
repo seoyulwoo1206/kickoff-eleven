@@ -17,7 +17,7 @@ import { autoCursor, humanUpdate } from './human';
 import { teamAI } from './ai/team';
 
 function makeHuman(t: number, c: HumanCfg | null): Human | null {
-  return c ? { t, ctrl: null, lock: 0, charge: 0, charging: false, second: false, gkRush: false, pressT: 0, col: c.col, tag: c.tag, cursor: c.cursor, had: false } : null;
+  return c ? { t, ctrl: null, lock: 0, charge: 0, charging: false, second: false, gkRush: false, pressT: 0, lostT: 0, col: c.col, tag: c.tag, cursor: c.cursor, had: false } : null;
 }
 /** 경기 생성. inp를 주면 그 입력 객체를 그대로 읽는다 (앱의 키보드/터치/네트워크 입력). */
 export function createMatch(cfg: MatchCfg, inp?: [Inp, Inp]): Sim {

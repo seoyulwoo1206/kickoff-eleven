@@ -36,7 +36,7 @@ export function assistDir(s: Sim, p: Player, ux: number, uy: number): [number, n
   const o = ball.owner; let tx: number, ty: number, w: number;
   if (!o && ball.passTarget && ball.passTarget !== p && ball.passTarget.t === p.t) return [ux, uy]; // 동료에게 가는 패스는 쫓지 않는다
   if (!o) { const q = intercept(s, p), L = Math.hypot(q.x - p.x, q.y - p.y); tx = q.x; ty = q.y; w = ball.passTarget === p ? (L > 2.5 ? 0.97 : 0.6) : ball.knock === p && L < 6 ? 0.95 : clamp(1 - L / 10, 0, 0.9); } // 내가 차 놓은 공은 스틱을 돌려도 먼저 줍는다
-  else if (o.t !== p.t) { tx = o.x + o.vx * 0.25; ty = o.y + o.vy * 0.25; w = clamp(0.7 - d(p, o) / 10, 0, 0.7); }
+  else if (o.t !== p.t) { tx = o.x + o.vx * 0.25; ty = o.y + o.vy * 0.25; const h = s.HU[p.t], just = !!(h && h.ctrl === p && h.lostT > 0 && d(p, o) < 3.5); w = just ? 0.85 : clamp(0.7 - d(p, o) / 10, 0, 0.7); if (just) { const dx = tx - p.x, dy = ty - p.y, L = Math.hypot(dx, dy) || 1, ua = Math.atan2(uy, ux), ta = Math.atan2(dy / L, dx / L); const ra = ua + angDiff(ua, ta) * w; return [Math.cos(ra), Math.sin(ra)]; } } // 방금 뺏긴 공은 스틱이 앞을 향해도 돌아본다
   else return [ux, uy];
   const dx = tx - p.x, dy = ty - p.y, L = Math.hypot(dx, dy); if (L < 0.3 || w <= 0) return [ux, uy];
   const ax = dx / L, ay = dy / L, dot = ux * ax + uy * ay, mine = ball.passTarget === p || ball.knock === p;
@@ -78,7 +78,7 @@ export function humanUpdate(s: Sim, h: Human, dt: number) {
   const I = INP[h.t], p = h.ctrl; if (!p) return; if (p.off) { switchPlayer(s, h); return; }
   const mx = I.mx, my = I.my, mag = Math.hypot(mx, my), sprint = I.down.sprint; let own = ball.owner === p;
   if (!own && ball.knock === p && d(p, ball) < 1.4 && ball.z < 0.6 && (I.press.pass || I.press.shoot || I.press.lob || I.press.through || I.press.chip || I.rel.pass || I.rel.lob)) { gain(s, p); own = ball.owner === p; } // 질주 드리블 중에도 바로 차거나 패스할 수 있다
-  h.second = false; h.gkRush = false; h.pressT = Math.max(0, h.pressT - dt);
+  h.second = false; h.gkRush = false; h.pressT = Math.max(0, h.pressT - dt); h.lostT = Math.max(0, h.lostT - dt);
   if (p.slide > 0) { slideCheck(s, p); return; }
   const aim = mag > 0.15 ? Math.atan2(my, mx) : p.dir;
   if (I.press.run) { // Q: 우리 공이면 침투 지시, 아니면 압박 지원

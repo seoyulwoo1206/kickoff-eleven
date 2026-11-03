@@ -31,7 +31,7 @@ export interface Ball {
 }
 export interface Human {
   t: number; ctrl: Player | null; lock: number; charge: number; charging: boolean;
-  second: boolean; gkRush: boolean; pressT: number; col: string; tag: string; cursor: 'manual' | 'auto'; had: boolean; // pressT: 압박 지원(Q) 남은 시간
+  second: boolean; gkRush: boolean; pressT: number; lostT: number; /* lostT: 방금 공을 뺏긴 뒤 남은 시간 (그동안은 공을 돌아본다) */ col: string; tag: string; cursor: 'manual' | 'auto'; had: boolean; // pressT: 압박 지원(Q) 남은 시간
 }
 export interface Stats { shots: number[]; onT: number[]; poss: number[]; fouls: number[]; offs: number[]; yel: number[]; red: number[]; passA: number[]; passC: number[]; }
 export interface MatchInfo {
