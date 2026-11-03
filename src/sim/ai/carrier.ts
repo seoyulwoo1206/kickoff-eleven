@@ -1,5 +1,5 @@
 import { W, H, CY } from '../consts';
-import { d, wx } from '../util';
+import { d, wx, clamp } from '../util';
 import { DIFF } from '../../data/teams';
 import type { Sim, Player } from '../types';
 import { sfx } from '../events';
@@ -10,13 +10,18 @@ export function tryTackle(s: Sim, p: Player, own: Player | null, rate: number) {
   const { M, HU, INP, ball } = s;
   if (!own || own.t === p.t || own.role === 'GK' || M.protect > 0 || p.tackleCD > 0 || p.stun > 0 || p.slide > 0 || own.shield > 0) return;
   const q = d(p, own);
-  if (q < 1.35 && p.bodyCD <= 0 && own.spin <= 0) { // 몸싸움: 태클과 별개 (사람 수비수와 같은 식, 난이도 비율로 줄임)
-    p.bodyCD = 0.55; const front = Math.cos(own.dir) * (p.x - own.x) + Math.sin(own.dir) * (p.y - own.y) > 0;
-    const pr = ((front ? 0.4 : 0.26) + (n(p.attrs.str) - n(own.attrs.str) * 0.6 - n(own.attrs.bal) * 0.4) * 0.3 - (own.feint > 0 ? 0.3 : 0)) * Math.min(1, rate / 0.36);
+  // 공 노출: 공이 수비 발에 닿는 거리(1.0m)면 그대로, 몸으로 가려 1.7m 밖이면 거의 못 뺏는다. 공을 간수하는 선수(ctl)는 더 잘 지킨다
+  const db = d(p, ball), expo = clamp((1.7 - db) / 0.7, 0.12, 1) * (1 - n(own.attrs.ctl) * 0.3);
+  const front = Math.cos(own.dir) * (p.x - own.x) + Math.sin(own.dir) * (p.y - own.y) > 0; // 수비가 드리블러 앞(얼굴 쪽)에 있다
+  const loose = own.kickCD > 0 || Math.hypot(own.vx, own.vy) > 6; // 터치 직후·빨리 달릴 땐 공이 발에서 떨어져 있다
+  if (q < 1.35 && front && p.bodyCD <= 0 && own.spin <= 0) { // 몸싸움: 앞에서 막아설 때만 (뒤에서 밀면 파울), 태클과 별개
+    p.bodyCD = 0.55;
+    const pr = (0.3 + (n(p.attrs.str) - n(own.attrs.str) * 0.6 - n(own.attrs.bal) * 0.4) * 0.3 - (own.feint > 0 ? 0.3 : 0)) * Math.min(1, rate / 0.36) * expo * (loose ? 1.3 : 0.8);
     if (s.rnd() < pr) { gain(s, p); own.stun = 0.35; own.kickCD = 0.4; sfx(s, 'tackle'); return; }
   }
   if (q < 1.45) { // 겹침 밀어내기가 1.1m를 유지하므로 발을 뻗는 거리는 그보다 넓게
-    p.tackleCD = 0.45; const front = Math.cos(own.dir) * (p.x - own.x) + Math.sin(own.dir) * (p.y - own.y) > 0; let r = rate * (front ? 1.3 : 1) * (0.85 + n(p.attrs.stk) * 0.4) * (1 - n(own.attrs.bal) * 0.2); // 앞을 막고 선 수비가 더 잘 뺏는다 const h = HU[own.t]; if (h && h.ctrl === own && INP[h.t].down.sprint) r *= 0.85;
+    p.tackleCD = 0.45; let r = rate * (front ? 1.3 : 1) * (0.85 + n(p.attrs.stk) * 0.4) * (1 - n(own.attrs.bal) * 0.2) * expo * (loose ? 1.4 : 0.7); // 앞을 막고 선 수비가, 공이 발에서 떨어졌을 때 더 잘 뺏는다
+    const h = HU[own.t]; if (h && h.ctrl === own && INP[h.t].down.sprint) r *= 0.85;
     if (own.feint > 0) r *= 0.5; if (own.spin > 0) r *= 0.3;
     if (s.rnd() < r) { gain(s, p); own.stun = 0.45; own.kickCD = 0.5; sfx(s, 'tackle'); }
   }
