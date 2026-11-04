@@ -324,9 +324,14 @@ export function ballControl(s: Sim) {
   for (const p of players) {
     if (p.kickCD > 0 || p.stun > 0 || p.off) continue; const gk = p.role === 'GK', mine = pt === p; if (ball.z > (gk ? 2.4 : mine ? 2.2 : 1.7)) continue;
     if (pt && !mine && pt.t === p.t && !gk && sp > 5) continue;
-    const q = d(p, ball), reach = gk ? 1.1 : mine ? 1.5 : ball.knock === p ? 1.4 : 0.95; if (q < reach && q < bd) { bd = q; best = p; } // 자기가 차 놓은 공은 발을 뻗어 다시 잡는다
+    const passing = !mine && ball.knock !== p && sp > 8; // 나한테 오는 공이 아닌데 지나간다 → 발을 뻗어 끊는 시도
+    const q = d(p, ball), reach = gk ? 1.1 : mine ? 1.5 : ball.knock === p ? 1.4 : passing ? 1.15 + n(p.attrs.int) * 0.15 : 0.95; if (q < reach && q < bd) { bd = q; best = p; } // 자기가 차 놓은 공은 발을 뻗어 다시 잡는다
   }
   if (!best) return;
+  if (best.role !== 'GK' && ball.passTarget !== best && ball.knock !== best && sp > 8) { // 가로채기 판정: 빠른 공일수록·가로채기 능력이 낮을수록 헛발 (한 번 헛디디면 .25초 다시 못 뻗음)
+    const pr = clamp(1.35 - sp / 30, 0.3, 1) * (0.9 + n(best.attrs.int) * 0.2) * (best.stun > 0 ? 0 : 1);
+    if (s.rnd() >= pr) { best.kickCD = 0.25; return; }
+  }
   if (ball.z > 0.9 && best.role !== 'GK') { // 헤딩 / 가슴 트래핑
     const t = best.t, gx = t === 0 ? W : 0; const dG = Math.hypot(gx - best.x, CY - best.y), mine = ball.passTarget === best;
     if (dG < 22 && sp > 8 && (!mine || ball.z > 1.5)) { const dx = gx - ball.x, dy = CY + (s.rnd() - 0.5) * (6 - n(best.attrs.hea) * 3) - ball.y, q = Math.hypot(dx, dy); const hv = 13 + n(best.attrs.hea) * 4; ball.vx = dx / q * hv; ball.vy = dy / q * hv; ball.vz = -1; ball.lastTouch = t; ball.kicker = best; ball.shot++; ball.isShot = true; best.kickCD = 0.3; M.stats.shots[t]++; sfx(s, 'kick'); }

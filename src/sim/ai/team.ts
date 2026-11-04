@@ -75,6 +75,10 @@ export function teamAI(s: Sim, t: number, dt: number) {
     if (mk) {
       const g = wx(0, t), ux = g - mk.x, uy = CY - mk.y, L = Math.hypot(ux, uy) || 1, tg = targetFor(s, p, att, def);
       const md = tac.press === 2 ? 1.6 : tac.press === 0 ? 2.8 : 2.2, mx = mk.x + ux / L * md, my = mk.y + uy / L * md; moveTo(p, mx * 0.75 + tg.x * 0.25, my * 0.75 + tg.y * 0.25, 1.05, dt);
+      if (ball.passTarget === mk && !ball.owner) { // 마크 상대에게 오는 패스: 받기 전에 닿을 수 있으면 선로로 나가 끊는다
+        const bs = Math.hypot(ball.vx, ball.vy) || 1, tm = d(ball, mk) / bs, ti = interceptT(s, p);
+        if (ti < tm + 0.05 && ti < 1.5) { const q = intercept(s, p); chase(p, q.x, q.y, 1.25, dt); continue; }
+      }
       if (ball.passTarget === mk) tryTackle(s, p, carrier, tk * 0.5); continue;
     }
     const sp = supports.get(p);

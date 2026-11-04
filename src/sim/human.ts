@@ -121,7 +121,11 @@ export function humanUpdate(s: Sim, h: Human, dt: number) {
     }
   } else {
     if (h.charging) { h.charging = false; h.charge = 0; }
-    if (I.press.pass) standTackle(s, p);
+    if (I.press.pass && !ball.owner && ball.z < 1.3 && d(p, ball) < 1.7 && p.kickCD <= 0 && !(ball.passTarget === p)) { // 가로채기 런지: 지나가는 공에 발을 뻗는다
+      const sp = Math.hypot(ball.vx, ball.vy), dx = ball.x - p.x, dy = ball.y - p.y, q = Math.hypot(dx, dy) || 1; p.vx = dx / q * p.speed * 1.2; p.vy = dy / q * p.speed * 1.2; p.dir = Math.atan2(dy, dx);
+      if (s.rnd() < clamp(1.4 - sp / 30, 0.4, 1) * (0.9 + n(p.attrs.int) * 0.2)) { gain(s, p); sfx(s, 'tackle'); } else p.kickCD = 0.3;
+    }
+    else if (I.press.pass) standTackle(s, p);
     else if (I.down.pass && I.holdT.pass > 0.25 && ball.owner && ball.owner.t !== p.t && d(p, ball.owner) < 1.8 && p.tackleCD <= 0 && (ball.owner.kickCD > 0 || Math.hypot(ball.owner.vx, ball.owner.vy) > 6)) standTackle(s, p); // 압박 중 공이 발에서 떨어지면 알아서 태클
     if (I.press.shoot) slideTackle(s, p, aim);
     if (I.press.lob) switchPlayer(s, h);
