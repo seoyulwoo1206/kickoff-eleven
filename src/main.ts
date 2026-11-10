@@ -45,6 +45,14 @@ function makeRenderer(): IRenderer {
 const R: IRenderer = makeRenderer();
 const CAMS: CamMode[] = ['tv', 'pro', 'top'], CAM_NAME: Record<CamMode, string> = { tv: '중계', pro: '선수 뒤', top: '탑뷰', intro: '입장' };
 let camMode: CamMode = 'tv';
+const VIEWS: [number, string][] = [[1, '가깝게'], [1.35, '보통'], [1.75, '넓게'], [2.4, '전체']];
+/** 시야 배율 적용 (R 키·일시정지 메뉴 버튼은 단계 순환, 마우스 휠은 조금씩) */
+function setView(v: number, save = true) {
+  opts.view = Math.round(Math.max(1, Math.min(2.4, v)) * 100) / 100; R.setView?.(opts.view); if (save) saveOpts();
+  const near = VIEWS.reduce((a, b) => Math.abs(b[0] - opts.view) < Math.abs(a[0] - opts.view) ? b : a);
+  $('viewBtn').textContent = '시야: ' + (Math.abs(near[0] - opts.view) < 0.03 ? near[1] : '×' + opts.view.toFixed(2));
+}
+function cycleView() { const i = VIEWS.findIndex(v => v[0] > opts.view + 0.03); setView(VIEWS[i < 0 ? 0 : i][0]); }
 function cycleCamera() { camMode = CAMS[(CAMS.indexOf(camMode) + 1) % CAMS.length]; R.setCamMode?.(camMode); $('camBtn').textContent = '카메라: ' + CAM_NAME[camMode]; }
 let perf = 0, lastTs = 0, acc = 0, simLast = 0;
 const snapBuf: SnapBuf = { buf: [], off: null };
@@ -186,7 +194,7 @@ function netInterpNow() { if (sim) netInterp(sim, snapBuf, perf, (x, y) => R.puf
 window.setInterval(() => { if (NET.role === 'guest' && state === 'play' && sim) { readInput(INP[0], STEP); const m = encodeInput(INP[0], inSt); if (m) netSend(m); clearPresses(INP[0]); } }, 1000 / 60);
 
 /* ---------- 입력 ---------- */
-installKeyboard({ inp: INP, isPlaying: () => state === 'play', hasLocalP2: () => !!(sim && sim.M.twoP && !NET.role), togglePause: () => { if (state === 'play') pauseGame(); else if (state === 'paused') resumeGame(); }, cycleCamera });
+installKeyboard({ inp: INP, isPlaying: () => state === 'play', hasLocalP2: () => !!(sim && sim.M.twoP && !NET.role), togglePause: () => { if (state === 'play') pauseGame(); else if (state === 'paused') resumeGame(); }, cycleCamera, cycleView });
 installTouch(INP[0], () => { if (!isTouch) { isTouch = true; document.body.classList.add('touch'); if (state === 'play' || state === 'paused') $('touch').hidden = false; } }, () => ({ stickSprint: opts.stickSprint }));
 if (isTouch) document.body.classList.add('touch');
 applyTouchStyle(opts.btnSize, opts.btnAlpha);
@@ -265,7 +273,8 @@ loadKeys(); installKeyCapture();
 $('keysBtn').addEventListener('click', () => { renderKeys(); $('keys').hidden = false; });
 $('keysClose').addEventListener('click', () => { $('keys').hidden = true; });
 bindSeg('segGfx', opts.gfx, v => { opts.gfx = v as typeof opts.gfx; R.setQuality?.(opts.gfx); saveOpts(); });
-$('camBtn').addEventListener('click', cycleCamera);
+$('camBtn').addEventListener('click', cycleCamera); $('viewBtn').addEventListener('click', cycleView); setView(opts.view, false);
+window.addEventListener('wheel', e => { if (state === 'play' && !e.ctrlKey) setView(opts.view + Math.sign(e.deltaY) * 0.1); }, { passive: true });
 bindSeg('segSnd', audio.on ? 'on' : 'off', v => { audio.on = v === 'on'; opts.sound = audio.on; });
 $('startBtn').addEventListener('click', () => { ensureAudio(); if (opts.mode === 'cup') { openCup(); return; } startMatch(); });
 $('pauseBtn').addEventListener('click', () => pauseGame());

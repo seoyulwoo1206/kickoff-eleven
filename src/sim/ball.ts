@@ -43,6 +43,25 @@ export function runPending(s: Sim, p: Player, dt: number) {
   if (s.ball.owner !== p) { p.kickWind = 0; p.pending = null; return; }
   if (p.kickWind <= 0) { const fn = p.pending; p.pending = null; p.kickWind = 0; fn(); }
 }
+/** 드리블 방향 전환: 공 가진 선수가 달리던 방향에서 52° 넘게 꺾으면, 3.4m 안에서 따라 움직이던 AI 수비수는 속아 넘어갈 수 있다(잠깐 휘청임).
+    (판정 각도는 지금 속도와 0.28초 늦은 속도 사이 39°.) 민첩·볼 컨트롤·개인기 등급이 높을수록, 헛다리 직후일수록 잘 속고, 수비수의 반응·민첩이 높으면 덜 속는다. 서 있는 수비수는 속지 않는다 */
+export function dribbleCut(s: Sim) {
+  const { ball, M, HU } = s, c = ball.owner ?? (ball.knock && d(ball.knock, ball) < 2.2 ? ball.knock : null); // 질주로 차 놓은 상태도 드리블로 본다
+  if (!c || c.role === 'GK' || c.cutCD > 0 || M.phase !== 'live') return;
+  { const hc = HU[c.t]; if (!hc || hc.ctrl !== c) return; } // 사람이 조작하는 선수만 (AI 드리블러까지 되면 상대 슈팅이 6→24로 늘었다)
+  const sp = Math.hypot(c.vx, c.vy), ls = Math.hypot(c.lagVx, c.lagVy); if (sp < 3.2 || ls < 2.2) return;
+  if ((c.vx * c.lagVx + c.vy * c.lagVy) / (sp * ls) > 0.78) return;
+  { const I = s.INP[c.t], m = Math.hypot(I.mx, I.my); if (m < 0.5 || (I.mx * c.lagVx + I.my * c.lagVy) / (m * ls) > 0.78 || (I.mx * c.vx + I.my * c.vy) / (m * sp) < 0.6) return; } // 스틱을 실제로 꺾었을 때만 (몸에 부딪혀 속도가 틀어진 건 방향 전환이 아니다 — 이게 없으면 직진만으로 2분에 1골) // 39° 넘게 꺾었을 때
+  c.cutCD = 0.7; let beat = false;
+  for (const o of s.team[1 - c.t]) {
+    if (o.off || o.role === 'GK' || o.stun > 0 || o.beatT > 0 || d(o, c) > 3.4 || Math.hypot(o.vx, o.vy) < 2) continue; // 이미 제쳐진 수비수는 다시 속지 않는다 (연속 방향 전환으로 묶어 두는 것 방지)
+    const h = HU[o.t]; if (h && h.ctrl === o) continue; // 사람이 조작하는 수비수는 스스로 판단한다
+    const diff = HU[o.t] ? 1 : clamp(DIFF[M.diff].react / 0.28, 0.6, 1.4); // 쉬움은 더 잘 속고 어려움은 덜 속는다
+    const pb = clamp((0.42 + n(c.attrs.agi) * 0.25 + n(c.attrs.ctl) * 0.12 + (c.skill - 3) * 0.05 - n(o.attrs.rea) * 0.2 - n(o.attrs.agi) * 0.12 + (c.feint > 0 ? 0.25 : 0)) * diff, 0.08, 0.9);
+    if (s.rnd() < pb) { o.stun = Math.max(o.stun, c.feint > 0 ? 0.6 : 0.45); o.beatT = 1.5; beat = true; } // 속으면 잠깐 휘청이고, 그 뒤 1.5초는 따라가기 급급하다
+  }
+  if (beat) c.burst = Math.max(c.burst, 0.8); // 제친 순간 치고 나간다
+}
 /** 팀 t 기준 좌표의 오프사이드 라인 (뒤에서 두 번째 상대 또는 공 위치, 상대 진영에서만) */
 export function offsideLine(s: Sim, t: number) {
   const xs = s.team[1 - t].filter(o => !o.off).map(o => wx(o.x, t)).sort((a, b) => b - a); return Math.max(xs[1] || 0, wx(s.ball.x, t), 52.5);
@@ -57,12 +76,13 @@ export function offside(s: Sim, p: Player) {
 export function gain(s: Sim, p: Player) {
   const { ball, M, players, HU } = s;
   const prev = ball.owner ?? (ball.knock && d(ball.knock, ball) < 2.5 ? ball.knock : null); // 직전 소유자 (노크온 포함)
+  const wasPass = ball.passTarget === p;
   if (p.offs && M.phase === 'live' && ball.kicker && ball.kicker.t === p.t && ball.kicker !== p) { offside(s, p); return; }
   for (const q of players) q.offs = false;
   if (ball.passTarget === p && ball.kicker && ball.kicker.t === p.t) M.stats.passC[p.t]++; // 패스 성공
-  ball.owner = p; ball.knock = null; ball.lastTouch = p.t; ball.passTarget = null; ball.isShot = false; ball.z = 0; ball.vz = 0; ball.curl = 0; p.holdT = 0; p.decT = Math.max(p.decT, 0.15);
+  ball.owner = p; ball.knock = null; ball.lastTouch = p.t; ball.passTarget = null; ball.isShot = false; ball.z = 0; ball.vz = 0; ball.curl = 0; p.holdT = 0; p.decT = Math.max(p.decT, 0.15); p.cutCD = Math.max(p.cutCD, 0.45);
   if (p.role === 'GK') p.dir = p.t === 0 ? 0 : Math.PI;
-  const h = HU[p.t]; if (h) { h.ctrl = p; h.lock = 0; } // 공을 잡은 선수에게 커서 (키퍼 포함)
+  const h = HU[p.t]; if (h) { h.ctrl = p; h.lock = 0; if (wasPass) p.shield = Math.max(p.shield, 0.3); } // 공을 잡은 선수에게 커서 (키퍼 포함). 패스를 받은 직후 .3초는 뺏기지 않는다
   const ho = HU[1 - p.t]; if (ho && prev && prev === ho.ctrl) ho.lostT = 0.6; // 사람이 방금 뺏겼다
 }
 
@@ -113,12 +133,12 @@ export function passTo(s: Sim, p: Player, m: Player, loft: boolean, power = 0) {
   const { ball, HU } = s;
   let q = d(p, m);
   const e = passErr(s, p, loft);
-  if (loft || q > 34) { // 로빙: 체공 시간으로 리드
+  if (loft || q > 28) { // 로빙: 체공 시간으로 리드 (28m 넘는 패스는 땅볼로 굴리지 않는다 — 운동장을 가르는 레이저 패스 방지)
     let L = { x: m.x, y: m.y }, T = 0.9, vz = 6;
     for (let i = 0; i < 3; i++) { L = lead(m, T); q = Math.hypot(L.x - p.x, L.y - p.y) || 1; vz = clamp(q * 0.24, 4.5, 9.5); T = 2 * vz / G; }
     const dx = L.x - p.x, dy = L.y - p.y, v = q / T * (1.08 + power * 0.08); p.dir = Math.atan2(dy, dx) + e; const [kx, ky] = rot(dx / q * v, dy / q * v, e); kick(s, p, kx, ky, vz);
   } else { // 지면: 받는 자리에 11m/s(+세기)로 도착
-    const g = groundLead(p, m, 11 + power * 5), dx = g.x - p.x, dy = g.y - p.y, gv = Math.max(14, g.v); q = Math.hypot(dx, dy) || 1;
+    const g = groundLead(p, m, 11 + power * 5), dx = g.x - p.x, dy = g.y - p.y, gv = Math.min(Math.max(14, g.v), 24); q = Math.hypot(dx, dy) || 1;
     p.dir = Math.atan2(dy, dx) + e; const [kx, ky] = rot(dx / q * gv, dy / q * gv, e); kick(s, p, kx, ky, 0);
   }
   ball.passTarget = m; s.M.stats.passA[p.t]++;
@@ -126,11 +146,11 @@ export function passTo(s: Sim, p: Player, m: Player, loft: boolean, power = 0) {
 }
 export function shortPass(s: Sim, p: Player, ang: number, power = 0) {
   const ax = Math.cos(ang), ay = Math.sin(ang); let best: Player | null = null, bs = -1e9;
-  const maxD = 32 + power * 10;
+  const maxD = 22 + power * 14; // 탭은 22m 안의 동료에게만, 길게 누르면 36m까지
   for (const minC of [0.45, 0.1, -1]) { // 조준 방향 안에 없으면 각도를 넓히고, 그래도 없으면 방향에 가장 가까운 동료에게라도 준다
     for (const m of s.team[p.t]) {
       if (m === p || m.off) continue; const L = leadPos(p, m), dx = L.x - p.x, dy = L.y - p.y, q = Math.hypot(dx, dy);
-      if (q < 2.5 || q > (minC < 0 ? 45 : maxD)) continue; const c = (dx * ax + dy * ay) / q; if (c < minC) continue;
+      if (q < 2.5 || q > (minC < 0 ? Math.max(26, maxD) : maxD)) continue; const c = (dx * ax + dy * ay) / q; if (c < minC) continue;
       const sc = Math.min(c, 0.92) / 0.92 * 4 - Math.max(0, q - 9 - power * 20) / 16 - laneRisk(s, p, L, p.t) * 1.2 - (m.role === 'GK' ? 2 : 0) + (m.runT > 0 ? 0.8 : 0) - (nearBlock(s, p, L, p.t) ? 3 : 0); // 코앞 상대 발에 차 주지 않는다 // 조준 방향(±23° 안은 동점)이 가장 중요, 같은 방향이면 가까운 동료(탭) · 길게 누르면 먼 동료, 선로 위험은 참고만
       if (sc > bs) { bs = sc; best = m; }
     }
@@ -153,15 +173,15 @@ export function longPass(s: Sim, p: Player, ang: number, power = 0.5) {
   if (best) passTo(s, p, best, true, power); else { p.dir = ang; kick(s, p, ax * (16 + power * 10), ay * (16 + power * 10), 6 + power * 3); }
 }
 /** 스루패스: 조준 방향(±12° 보정)으로 공을 차고, 그 공 선로에 가장 먼저 뛰어들 수 있는 동료를 받는 선수로 정한다 */
-export function throughPass(s: Sim, p: Player, ang: number, power = 0) {
+export function throughPass(s: Sim, p: Player, ang: number, power = 0, maxR = power > 0.5 ? 42 : 32) { // maxR: 받는 선수까지 최대 거리 (질주 누른 채면 길게, AI는 30m)
   const t = p.t, opps = s.team[1 - t].filter(o => !o.off), line = offsideLine(s, t);
   let best: { sc: number; m: Player; a: number; v: number } | null = null;
-  const speeds = power > 0.5 ? [30, 26, 22, 18, 15] : [26, 22, 18, 15, 12];
+  const speeds = power > 0.5 ? [27, 24, 21, 18, 15] : [24, 21, 18, 15, 12];
   for (const off of [0, -0.21, 0.21]) {
     const a = ang + off, ax = Math.cos(a), ay = Math.sin(a);
     for (const m of s.team[t]) {
       if (m === p || m.role === 'GK' || m.off) continue;
-      const rx = m.x - p.x, ry = m.y - p.y, rq = Math.hypot(rx, ry); if (rq < 2 || rq > 45) continue;
+      const rx = m.x - p.x, ry = m.y - p.y, rq = Math.hypot(rx, ry); if (rq < 2 || rq > maxR) continue;
       if ((rx * ax + ry * ay) / rq < 0.6) continue; // 선로 기준 ±53° 밖의 동료는 제외
       for (const v0 of speeds) { // 모든 속도를 따져 가장 좋은 공을 고른다 (빠르기만 한 공은 받는 선수를 지나친다)
         let v = v0, dist = 0, cut = false, meet: { x: number; y: number; tt: number; v: number } | null = null;
@@ -329,7 +349,8 @@ export function ballControl(s: Sim) {
   const sp = Math.hypot(ball.vx, ball.vy); let best: Player | null = null, bd = 1e9;
   const pt = ball.passTarget;
   for (const p of players) {
-    if (p.kickCD > 0 || p.stun > 0 || p.off) continue; const gk = p.role === 'GK', mine = pt === p; if (ball.z > (gk ? 2.4 : mine ? 2.2 : 1.7)) continue;
+    if (p.kickCD > 0 || p.stun > 0 || p.off) continue; if (p.beatT > 0 && ball.knock && ball.knock.t !== p.t) continue; // 방금 제쳐진 수비수는 상대가 차 놓은 공에 발을 못 댄다
+    const gk = p.role === 'GK', mine = pt === p; if (ball.z > (gk ? 2.4 : mine ? 2.2 : 1.7)) continue;
     if (pt && !mine && pt.t === p.t && !gk && sp > 5) continue;
     const passing = !mine && ball.knock !== p && sp > 8; // 나한테 오는 공이 아닌데 지나간다 → 발을 뻗어 끊는 시도
     const q = d(p, ball), reach = gk ? 1.1 : mine ? 1.5 : ball.knock === p ? 1.4 : passing ? 1.15 + n(p.attrs.int) * 0.15 : 0.95; if (q < reach && q < bd) { bd = q; best = p; } // 자기가 차 놓은 공은 발을 뻗어 다시 잡는다

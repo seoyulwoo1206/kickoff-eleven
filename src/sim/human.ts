@@ -60,6 +60,12 @@ function skillMove(s: Sim, p: Player, sx: number, sy: number) {
   // 헛다리: 잠깐 태클을 흘리고 가속
   p.feint = sk >= 5 ? 0.45 : 0.35; p.burst = 0.45; return true;
 }
+/** 달리는 방향 앞 5.2m 안(±75°)에 상대가 있는가 — 있으면 질주해도 공을 차 놓지 않고 발에 붙여 몬다 (차 놓으면 그대로 뺏긴다) */
+function oppAhead(s: Sim, p: Player) {
+  const sp = Math.hypot(p.vx, p.vy) || 1, ux = p.vx / sp, uy = p.vy / sp;
+  for (const o of s.team[1 - p.t]) { if (o.off) continue; const dx = o.x - p.x, dy = o.y - p.y, q = Math.hypot(dx, dy); if (q < 5.2 && (dx * ux + dy * uy) / (q || 1) > 0.26) return true; }
+  return false;
+}
 /** 침투 지시: 조준 방향(스틱, 없으면 얼굴 방향)에 있는 동료가 골 쪽 대각선으로 3초간 뛴다 (오프사이드 라인은 teamAI가 지킨다) */
 export function triggerRun(s: Sim, h: Human, p: Player, aim: number) {
   const ax = Math.cos(aim), ay = Math.sin(aim); let best: Player | null = null, bs = -1e9;
@@ -107,7 +113,7 @@ export function humanUpdate(s: Sim, h: Human, dt: number) {
     if (I.press.pass || I.press.lob || I.press.through || I.press.shoot || I.press.chip) p.shield = 0.16; // 누른 순간 의도는 지켜준다: 떼기·와인드업 사이에 뺏기지 않는다
     if (kicking) return; // 와인드업 중엔 새 입력을 받지 않는다
     const anyPress = I.press.pass || I.press.lob || I.press.through || I.press.chip || I.press.shoot || I.down.pass || I.down.lob || I.down.shoot || I.rel.pass || I.rel.lob || I.rel.shoot; // 떼는 틱(rel)도 입력 중: 빠지면 질주 중 패스가 노크온에 먹힌다
-    if (sprint && mag > 0.15 && Math.hypot(p.vx, p.vy) > 5.5 && !h.charging && !anyPress && p.spin <= 0 && Math.abs(angDiff(Math.atan2(p.vy, p.vx), Math.atan2(my, mx))) < 0.4) { knockOn(s, p); return; } // 질주 드리블은 공을 앞에 차 놓고 달린다 (도는 중엔 발에 붙여 돈다)
+    if (sprint && mag > 0.15 && Math.hypot(p.vx, p.vy) > 5.5 && !h.charging && !anyPress && p.spin <= 0 && Math.abs(angDiff(Math.atan2(p.vy, p.vx), Math.atan2(my, mx))) < 0.4 && !oppAhead(s, p)) { knockOn(s, p); return; } // 질주 드리블은 공을 앞에 차 놓고 달린다 (도는 중엔 발에 붙여 돈다)
     // 개인기: Q 탭 (폰: 스와이프 → I.skill)
     if (I.press.gkRush) { const sv = I.skill ?? { x: mx, y: my }; I.skill = null; if (skillMove(s, p, sv.x, sv.y)) return; }
     // 패스는 떼는 순간, 누른 시간이 세기 (탭 = 보통). 터치는 pass 길게 = 롱패스

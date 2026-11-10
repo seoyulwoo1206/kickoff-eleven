@@ -11,7 +11,7 @@ export type SfxType = 'kick' | 'tackle' | 'post' | 'whistle' | 'long' | 'goal';
 export interface Player {
   t: number; i: number; role: Role; bx: number; by: number; num: number;
   x: number; y: number; vx: number; vy: number; dir: number; speed: number;
-  kickCD: number; stun: number; tackleCD: number; bodyCD: number; reactT: number; shield: number; runT: number; runDir: number; // runT: 침투 지시 남은 시간, runDir 방향 // shield: 사람이 패스·슛 키를 누른 직후 .16초는 뺏기지 않는다 (탭이 떼는 순간 실행되므로)
+  kickCD: number; stun: number; tackleCD: number; bodyCD: number; reactT: number; shield: number; lagVx: number; lagVy: number; cutCD: number; beatT: number; /* beatT: 드리블에 제쳐진 뒤 따라가기 급급한 시간 */ runT: number; runDir: number; // runT: 침투 지시 남은 시간, runDir 방향 // shield: 사람이 패스·슛 키를 누른 직후 .16초는 뺏기지 않는다 (탭이 떼는 순간 실행되므로)
   offs: boolean; slide: number; decT: number; holdT: number; lastSave: number;
   dive: number; diveDir: number; run: number; forcePass: boolean; forceShot: boolean; cele: boolean;
   hair: string; skin: string;

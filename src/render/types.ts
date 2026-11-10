@@ -14,6 +14,8 @@ export interface IRenderer {
   reset(): void;
   setQuality?(q: Quality): void;
   setCamMode?(m: CamMode): void;
+  /** 시야 배율: 1 가깝게(가로 38m) ~ 2.4 전체(91m) */
+  setView?(v: number): void;
   /** 최근 프레임 평균 fps (자동 품질 조절용) */
   fps?: number;
 }

@@ -24,7 +24,7 @@ export class ThreeRenderer implements IRenderer {
   private models = new Map<Player, PlayerModel>(); private modelSim: Sim | null = null; private namesMode = opts.names;
   private ball: THREE.Mesh; private ballShadow: THREE.Mesh; private rings: THREE.Mesh[] = [];
   private puffs: Puff[] = []; private puffTex: THREE.Texture; private blobTex: THREE.Texture;
-  private ov: CanvasRenderingContext2D; private lastPhase = ''; private camPos = new THREE.Vector3(); private camLook = new THREE.Vector3(CX, 0, CY);
+  private ov: CanvasRenderingContext2D; private view = 1.35; private lead = 0; private wide = 0; private lastPhase = ''; private camPos = new THREE.Vector3(); private camLook = new THREE.Vector3(CX, 0, CY);
   private tmpV = new THREE.Vector3(); private shk = { x: 0, y: 0 }; private crowdT = 0;
   // 골 리플레이: 최근 4초를 링버퍼에 담아두고 골 1.3초 뒤부터 0.55배속으로 보여준다
   private frames: Frame[] = []; private goalAt = -1; private replay = false; private replayT = 0; private pose: PoseState[] = []; private rBall = { x: 0, y: 0, z: 0, vx: 0, vy: 0, owner: null as Player | null };
@@ -57,6 +57,7 @@ export class ThreeRenderer implements IRenderer {
     for (const m of this.models.values()) m.setBlob(!shadows);
     this.scene.traverse(o => { const m = (o as THREE.Mesh).material as THREE.Material | undefined; if (m) m.needsUpdate = true; });
   }
+  setView(v: number) { this.view = clamp(v, 1, 2.4); }
   setCamMode(m: CamMode) { this.mode = m; if (m === 'intro') { this.camPos.set(CX + 40, 36, CY + 88); this.camLook.set(CX, 1, CY); } }
   resize() {
     const r = this.cv.getBoundingClientRect(); this.cw = r.width; this.ch = r.height;
@@ -65,7 +66,7 @@ export class ThreeRenderer implements IRenderer {
     const cs = getComputedStyle(this.insetEl);
     this.ins = { t: parseFloat(cs.paddingTop) || 0, r: parseFloat(cs.paddingRight) || 0, b: parseFloat(cs.paddingBottom) || 0, l: parseFloat(cs.paddingLeft) || 0 };
   }
-  reset() { for (const q of this.puffs) { q.sp.visible = false; q.t = 2; } this.cam.x = CX; this.cam.y = CY; this.cam.z = 1; this.lastPhase = ''; this.frames.length = 0; this.goalAt = -1; this.replay = false; }
+  reset() { for (const q of this.puffs) { q.sp.visible = false; q.t = 2; } this.cam.x = CX; this.cam.y = CY; this.cam.z = 1; this.lead = 0; this.lastPhase = ''; this.frames.length = 0; this.goalAt = -1; this.replay = false; }
   private pushFrame(sim: Sim, perf: number) {
     const n = sim.players.length; let f = this.frames.length > 260 ? this.frames.shift()! : { t: 0, P: new Float32Array(n * PF), B: new Float32Array(BF) };
     if (f.P.length !== n * PF) f = { t: 0, P: new Float32Array(n * PF), B: new Float32Array(BF) };
@@ -107,10 +108,17 @@ export class ThreeRenderer implements IRenderer {
     const zt = sim && sim.M.phase === 'goal' ? 1.3 : sim && ball && ball.isShot && !ball.owner ? 1.08 : 1;
     cam.z += (zt - cam.z) * (1 - Math.pow(zt > cam.z ? 0.03 : 0.3, dtR));
     const aspect = this.cw / Math.max(1, this.ch);
-    const VW = (this.cw < 600 ? 30 : aspect > 1.9 ? 34 : 38) / cam.z; // 화면에 보이는 가로 폭 (m)
+    // 시야: 기본 폭 × 시야 배율(view). 공이 중원에 있을 땐 10% 더 넓게(전개를 본다), 골 앞에선 원래대로
+    const midT = sim && ball && sim.M.phase !== 'goal' ? 1 - clamp((Math.abs(ball.x - CX) - 18) / 22, 0, 1) : 0; this.wide += (midT - this.wide) * (1 - Math.pow(0.35, dtR));
+    const VW = (this.cw < 600 ? 30 : aspect > 1.9 ? 34 : 38) * this.view * (1 + 0.1 * this.wide) / cam.z; // 화면에 보이는 가로 폭 (m)
     const L = VW / (2 * Math.tan(this.camera.fov * Math.PI / 360) * aspect); // 그 폭이 보이는 거리
     let tx: number, ty: number;
-    if (!sim || !ball) { tx = CX + Math.sin(perf * 0.07) * 22; ty = CY + Math.cos(perf * 0.05) * 8; } else { tx = ball.x + ball.vx * 0.22; ty = ball.y + ball.vy * 0.18; }
+    if (!sim || !ball) { tx = CX + Math.sin(perf * 0.07) * 22; ty = CY + Math.cos(perf * 0.05) * 8; } else {
+      // 공만 따라가지 않고 공을 가진 팀이 공격하는 쪽을 미리 보여 준다 (앞에 선 동료·수비 라인이 보이게)
+      const pt = ball.owner ? ball.owner.t : ball.knock ? ball.knock.t : ball.lastTouch, tl = sim.M.phase === 'live' && (pt === 0 || pt === 1) ? (pt === 0 ? 1 : -1) * VW * 0.11 : 0;
+      this.lead += (tl - this.lead) * (1 - Math.pow(0.3, dtR));
+      tx = ball.x + ball.vx * 0.22 + this.lead; ty = ball.y + ball.vy * 0.18;
+    }
     const vh = VW / aspect * 1.5;
     // 카메라는 비스듬히 내려다보므로 화면 아래쪽(가까운 터치라인)은 조준점에서 가까운 거리까지만 보인다 → 아래 여유를 따로 계산
     const hf = this.camera.fov * Math.PI / 360, hc = Math.sin(ELEV) * L + 2, dh = Math.cos(ELEV) * L, near = Math.max(4, dh - hc / Math.tan(ELEV + hf));
@@ -137,6 +145,7 @@ export class ThreeRenderer implements IRenderer {
     this.camera.position.copy(this.camPos); if (sh > 0) { this.camera.position.x += this.shk.x * 0.02; this.camera.position.y += this.shk.y * 0.02; }
     this.camera.lookAt(this.camLook);
     // 햇빛은 카메라 조준점을 따라가며 그림자 범위를 유지
+    { const sc = this.sun.shadow.camera, sw = Math.max(42, VW * 0.8); if (Math.abs(sc.right - sw) > 1) { sc.left = -sw; sc.right = sw; sc.top = sw * 0.72; sc.bottom = -sw * 0.72; sc.updateProjectionMatrix(); } } // 넓은 시야에선 그림자 범위도 넓힌다
     this.sun.position.set(cam.x - 30, 95, cam.y + 45); this.sun.target.position.set(cam.x, 0, cam.y); this.sun.target.updateMatrixWorld();
   }
   private updatePuffs(dt: number) {
@@ -228,7 +237,7 @@ export class ThreeRenderer implements IRenderer {
       ctx.fillStyle = '#fff'; ctx.fillText(txt, hp.x + 1, hp.y - 2); ctx.globalAlpha = 1;
     }
     // 미니맵
-    const mk = clamp(cw * 0.22 / W, 0.8, 1.4), mw = W * mk, mh = H * mk, mx0 = cw - mw - Math.max(12, ins.r), my0 = ins.t + 56;
+    const mk = clamp(cw * 0.22 / W, 0.8, 1.6), mw = W * mk, mh = H * mk, mx0 = cw - mw - Math.max(12, ins.r), my0 = ins.t + 56;
     ctx.fillStyle = 'rgba(9,17,27,.62)'; ctx.fillRect(mx0 - 3, my0 - 3, mw + 6, mh + 6); ctx.strokeStyle = 'rgba(238,243,234,.35)'; ctx.lineWidth = 1; ctx.strokeRect(mx0, my0, mw, mh);
     ctx.beginPath(); ctx.moveTo(mx0 + mw / 2, my0); ctx.lineTo(mx0 + mw / 2, my0 + mh); ctx.stroke();
     for (const p of players) { const kit = M.kit[p.t]; ctx.fillStyle = p.role === 'GK' ? kit.gk : kit.c1; const hh = HU.find(h => h && h.ctrl === p); ctx.beginPath(); ctx.arc(mx0 + p.x * mk, my0 + p.y * mk, hh ? 3.2 : 2.3, 0, 7); ctx.fill(); if (hh) { ctx.strokeStyle = hh.col; ctx.lineWidth = 1.5; ctx.stroke(); } }

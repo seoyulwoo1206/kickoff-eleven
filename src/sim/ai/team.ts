@@ -9,6 +9,16 @@ import { gkAI } from './gk';
 
 /* 팀 AI: 공 없을 땐 가장 빨리 닿는 선수가 추격. 수비 땐 가장 가까운 AI가 (사람과 별개로) 항상 압박, 둘째는 골 쪽 커버,
    나머지 DF/MF는 근처 상대를 골 쪽에서 마크. 공격 땐 공 가진 선수 주변 둘이 앞 좌우로 패스 받을 자리를 잡는다 */
+/** 압박하는 수비수의 속도: 방금 제쳐졌으면 0.9, 사람이 조작하는 드리블러를 골에서 27m 밖에서 앞을 막아선 3m 안에선 덤비지 않고 따라붙는 속도(1.02)까지만.
+    옆·뒤에서 쫓는 수비수와 AI 드리블러 상대는 그대로 전속 */
+/** 드리블러가 어디로 갈지 수비가 읽는 양: 사람이 조작하는 선수는 눈에 비친(0.28초 늦은) 속도로 — 방향 전환에 한 박자 늦는다. AI 드리블러는 실제 속도 */
+function seen(s: Sim, c: Player) { const h = s.HU[c.t]; return h && h.ctrl === c ? { x: c.lagVx * 0.3, y: c.lagVy * 0.3 } : { x: c.vx * 0.25, y: c.vy * 0.25 }; }
+function jockey(s: Sim, p: Player, c: Player, v: number) {
+  if (p.beatT > 0) return 0.9;
+  const h = s.HU[c.t]; if (!h || h.ctrl !== c || d(p, c) > 3 || wx(c.x, c.t) > 78) return v;
+  const front = Math.cos(c.dir) * (p.x - c.x) + Math.sin(c.dir) * (p.y - c.y) > 0;
+  return front ? Math.min(v, 1.02) : v;
+}
 export function teamAI(s: Sim, t: number, dt: number) {
   const { ball, M, team, HU } = s;
   const D = DIFF[M.diff], own = ball.owner, h = HU[t];
@@ -93,14 +103,14 @@ export function teamAI(s: Sim, t: number, dt: number) {
     }
     if (p === chaser) {
       if (own || (knocker && knocker.t === t)) { if (!own) { const q = intercept(s, p); chase(p, q.x, q.y, 1.25, dt); continue; }
-        let tx = own.x + own.vx * 0.25, ty = own.y + own.vy * 0.25;
+        const sv = seen(s, own); let tx = own.x + sv.x, ty = own.y + sv.y;
         if (M.protect > 0) { const g = wx(0, t), ux = g - ball.x, uy = CY - ball.y, L = Math.hypot(ux, uy) || 1; tx = ball.x + ux / L * 5.5; ty = ball.y + uy / L * 5.5; }
-        chase(p, tx, ty, press * trig, dt); tryTackle(s, p, own, tk * trig);
+        chase(p, tx, ty, jockey(s, p, own, press * trig), dt); tryTackle(s, p, own, tk * trig); // 3m 안에선 덤비지 않고 따라붙는 속도로
       } else { const q = intercept(s, p); chase(p, q.x, q.y, 1.25, dt); if (knocker && knocker.t !== t) tryTackle(s, p, knocker, tk * trig); } // 노크온 중인 상대는 공이 발에서 떨어져 있으니 발을 뻗어 끊는다
       continue;
     }
     if (p === cover) {
-      if (carrier && carrier.t !== t && (pressing || (!humanOn && (d(p, carrier) < 3.6 || (wx(carrier.x, t) < 40 && d(p, carrier) < 9))))) { chase(p, carrier.x + carrier.vx * 0.2, carrier.y + carrier.vy * 0.2, press, dt); tryTackle(s, p, carrier, tk); continue; } // 드리블러가 코앞까지 오면 물러서지 않고 맞붙는다
+      if (carrier && carrier.t !== t && (pressing || (!humanOn && (d(p, carrier) < 3.6 || (wx(carrier.x, t) < 40 && d(p, carrier) < 9))))) { chase(p, carrier.x + seen(s, carrier).x, carrier.y + seen(s, carrier).y, jockey(s, p, carrier, press), dt); tryTackle(s, p, carrier, tk); continue; } // 드리블러가 코앞까지 오면 물러서지 않고 맞붙는다
       const g = wx(0, t), ux = g - ball.x, uy = CY - ball.y, L = Math.hypot(ux, uy) || 1, k = Math.min(6, L * 0.35); moveTo(p, ball.x + ux / L * k, ball.y + uy / L * k, 1.1, dt); tryTackle(s, p, carrier, tk * 0.8); continue;
     }
     const mk = marks.get(p);

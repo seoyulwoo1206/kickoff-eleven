@@ -34,8 +34,8 @@ export const TEAMS: TeamDef[] = [
 export const DIFF: Record<DiffKey, DiffDef> = {
   // 난이도는 속도 치트 없이 반응 시간·판단 실수·압박·태클·키퍼로만 (spd는 1로 고정)
   easy: { spd: 1, react: 0.5, tackle: 0.1, err: 1.3, gk: 0.85, press: 0.9 },
-  normal: { spd: 1, react: 0.28, tackle: 0.18, err: 0.8, gk: 1, press: 1.12 },
-  hard: { spd: 1, react: 0.14, tackle: 0.28, err: 0.55, gk: 1.12, press: 1.3 },
+  normal: { spd: 1, react: 0.28, tackle: 0.18, err: 0.8, gk: 1, press: 1.05 },
+  hard: { spd: 1, react: 0.14, tackle: 0.28, err: 0.55, gk: 1.12, press: 1.2 },
 };
 /** 4-4-2 기본 위치 (팀 0 기준, 팀 1은 wx로 뒤집음) */
 export const FORM: [Role, number, number][] = [['GK', 4, 34], ['DF', 17, 10], ['DF', 15, 26], ['DF', 15, 42], ['DF', 17, 58], ['MF', 33, 12], ['MF', 30, 28], ['MF', 30, 40], ['MF', 33, 56], ['FW', 46, 28], ['FW', 46, 40]];

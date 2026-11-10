@@ -11,7 +11,7 @@ import { FORMATIONS, type Slot } from '../data/formations';
 import { newInp, readInput, clearPresses, type Inp } from '../input/actions';
 import type { Sim, MatchCfg, Player, Human, HumanCfg, SetPieceType } from './types';
 import { banner, sfx, crowdSwell, shake } from './events';
-import { computePred, updateBall, ballControl, runPending } from './ball';
+import { computePred, updateBall, ballControl, runPending, dribbleCut } from './ball';
 import { steer, moveTo, integrate } from './move';
 import { autoCursor, humanUpdate } from './human';
 import { teamAI } from './ai/team';
@@ -57,7 +57,7 @@ function makePlayers(s: Sim, squads: [import('../data/squad').SquadDef | null, i
         gk: f.role === 'GK' ? { div: T.def, han: T.def - 2, kic: 65, ref: T.def + 2, pos: T.def } : undefined });
       const p: Player = {
         t, i, role: f.role, bx: f.x, by: f.y, num: d ? d.num : NUMS[i], x: 0, y: 0, vx: 0, vy: 0, dir: t === 0 ? 0 : Math.PI, speed: 0,
-        kickCD: 0, stun: 0, tackleCD: 0, bodyCD: 0, reactT: 0, shield: 0, runT: 0, runDir: 0, offs: false, slide: 0, decT: 0, holdT: 0, lastSave: -1, dive: 0, diveDir: 0, run: s.rnd() * 10,
+        kickCD: 0, stun: 0, tackleCD: 0, bodyCD: 0, reactT: 0, shield: 0, lagVx: 0, lagVy: 0, cutCD: 0, beatT: 0, runT: 0, runDir: 0, offs: false, slide: 0, decT: 0, holdT: 0, lastSave: -1, dive: 0, diveDir: 0, run: s.rnd() * 10,
         forcePass: false, forceShot: false, cele: false, hair: HAIR[(i * 7 + t * 3) % HAIR.length], skin: SKIN[(i * 5 + t * 2) % SKIN.length],
         name: d ? d.name : `${T.code} ${NUMS[i]}`, nameEn: d ? d.nameEn : `${T.code} ${NUMS[i]}`, pos: d ? d.pos : f.pos, ovr: d ? overall(d) : Math.round((T.atk + T.def + T.spd) / 3),
         foot: d ? d.foot : 'R', skill: d ? d.skill : 2, attrs: det, def: d,
@@ -168,7 +168,7 @@ export function step(s: Sim, dt: number) {
   else if (ph === 'full') return;
   M.protect = Math.max(0, M.protect - dt); M.react[0] = Math.max(0, M.react[0] - dt); M.react[1] = Math.max(0, M.react[1] - dt);
   for (const p of players) {
-    p.kickCD = Math.max(0, p.kickCD - dt); p.stun = Math.max(0, p.stun - dt); p.tackleCD = Math.max(0, p.tackleCD - dt); p.bodyCD = Math.max(0, p.bodyCD - dt); p.shield = Math.max(0, p.shield - dt); p.runT = Math.max(0, p.runT - dt); p.reactT = Math.max(0, p.reactT - dt); p.dive = Math.max(0, p.dive - dt);
+    p.kickCD = Math.max(0, p.kickCD - dt); p.stun = Math.max(0, p.stun - dt); p.tackleCD = Math.max(0, p.tackleCD - dt); p.bodyCD = Math.max(0, p.bodyCD - dt); p.shield = Math.max(0, p.shield - dt); p.runT = Math.max(0, p.runT - dt); p.cutCD = Math.max(0, p.cutCD - dt); p.beatT = Math.max(0, p.beatT - dt); p.reactT = Math.max(0, p.reactT - dt); p.dive = Math.max(0, p.dive - dt);
     p.feint = Math.max(0, p.feint - dt); p.burst = Math.max(0, p.burst - dt); if (p.spin > 0) { p.spin -= dt; p.dir += p.spinDir * Math.PI * 2 / 0.5 * dt; if (p.spin <= 0) p.spin = 0; }
     if (p.slide > 0) { p.slide -= dt; p.vx *= 1 - 2.5 * dt; p.vy *= 1 - 2.5 * dt; if (p.slide <= 0) { p.slide = 0; p.stun = Math.max(p.stun, 0.45); } }
     // 체력: 질주하면 빠르게, 달리면 천천히 닳고 걸으면 회복. 한 경기 내내 질주하면 다 닳는 정도 (스태미나 능력치로 보정)
@@ -177,9 +177,10 @@ export function step(s: Sim, dt: number) {
     runPending(s, p, dt);
   }
   if (!ball.owner) computePred(s);
-  if (M.phase === 'live') { for (const h of HU) { if (h) { autoCursor(s, h, dt); humanUpdate(s, h, dt); } } teamAI(s, 0, dt); teamAI(s, 1, dt); }
+  if (M.phase === 'live') { for (const h of HU) { if (h) { autoCursor(s, h, dt); humanUpdate(s, h, dt); } } teamAI(s, 0, dt); teamAI(s, 1, dt); dribbleCut(s); }
   else if (M.phase === 'goal') celebrate(s, dt);
   else for (const p of players) steer(p, 0, 0, dt);
+  { const k = Math.min(1, dt / 0.28); for (const p of players) { p.lagVx += (p.vx - p.lagVx) * k; p.lagVy += (p.vy - p.lagVy) * k; } } // 상대 눈에 비치는 속도: 0.28초 늦게 따라온다
   integrate(s, dt); updateBall(s, dt);
   if (M.phase === 'live') { ballControl(s); checkOut(s); updateAdvantage(s, dt); }
   if (M.phase === 'live') M.stats.poss[ball.owner ? ball.owner.t : ball.lastTouch] += dt;

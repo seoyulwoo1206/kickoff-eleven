@@ -20,7 +20,7 @@ export class Renderer implements IRenderer {
   dpr = 1; cw = 0; ch = 0; ins = { t: 0, r: 0, b: 0, l: 0 };
   cam = { x: CX, y: CY, shake: 0, z: 1 };
   parts: Part[] = [];
-  private focal = 1; private cth = 1; private sth = 0; private VW = 36; private depth0 = 1; private shk = { x: 0, y: 0 };
+  private focal = 1; private cth = 1; private sth = 0; private VW = 36; private view = 1.35; private depth0 = 1; private shk = { x: 0, y: 0 };
   private pitchTex: HTMLCanvasElement | null = null; private crowdTex: HTMLCanvasElement | null = null;
   constructor(public cv: HTMLCanvasElement, private insetEl: HTMLElement) { this.ctx = cv.getContext('2d')!; }
   reset() { this.parts.length = 0; this.cam.x = CX; this.cam.y = CY; this.cam.z = 1; }
@@ -35,6 +35,7 @@ export class Renderer implements IRenderer {
     for (let i = 0; i < n; i++) { const a = rnd() * Math.PI * 2, v = rnd() * sp; parts.push({ x, y, vx: Math.cos(a) * v, vy: Math.sin(a) * v, life: 0.45 + rnd() * 0.4, t: 0, r: 0.2 + rnd() * 0.3 }); }
   }
   private updateParts(dt: number) { const parts = this.parts; for (let i = parts.length - 1; i >= 0; i--) { const q = parts[i]; q.t += dt; if (q.t >= q.life) { parts.splice(i, 1); continue; } q.x += q.vx * dt; q.y += q.vy * dt; q.vx *= 1 - 4 * dt; q.vy *= 1 - 4 * dt; } }
+  setView(v: number) { this.view = Math.max(1, Math.min(2.4, v)); }
   private setupCam() { const th = Math.atan2(CAM.Hc, CAM.D); this.cth = Math.cos(th); this.sth = Math.sin(th); this.depth0 = Math.hypot(CAM.D, CAM.Hc); this.focal = this.cw / this.VW * this.depth0; }
   proj(x: number, y: number, z = 0): P3 {
     const rx = x - this.cam.x, ry = this.cam.y + CAM.D - y, rz = z - CAM.Hc, d = ry * this.cth - rz * this.sth, k = this.focal / Math.max(d, 1);
@@ -219,7 +220,7 @@ export class Renderer implements IRenderer {
     const ball = sim?.ball;
     const zt = sim && sim.M.phase === 'goal' ? 1.32 : sim && ball && ball.isShot && !ball.owner ? 1.07 : 1; // 골·슛 때 카메라가 살짝 들어간다
     cam.z += (zt - cam.z) * (1 - Math.pow(zt > cam.z ? 0.03 : 0.3, dtR));
-    this.VW = (cw < 600 ? 32 : cw <= 960 ? 40 : 36) / cam.z; this.setupCam(); // 폰 가로는 동료가 보이게 조금 더 넓게
+    this.VW = (cw < 600 ? 32 : cw <= 960 ? 40 : 36) * (0.75 + this.view * 0.25) / cam.z; this.setupCam(); // 폰 가로는 동료가 보이게 조금 더 넓게
     if (sim && !paused) this.updateParts(dtR);
     const vw = this.VW, vh = ch * this.VW / (cw * this.sth);
     let tx: number, ty: number;

@@ -2,7 +2,7 @@ import { W, H, CY } from '../consts';
 import { d, wx, clamp } from '../util';
 import { DIFF } from '../../data/teams';
 import type { Sim, Player } from '../types';
-import { sfx } from '../events';
+import { sfx, puff } from '../events';
 import { gain, knockOn, passTo, throughPass, chipShot, shoot, slideTackle, leadPos, laneRisk, offsideLine, queueKick, n } from '../ball';
 import { steer } from '../move';
 
@@ -14,16 +14,28 @@ export function tryTackle(s: Sim, p: Player, own: Player | null, rate: number) {
   const db = d(p, ball), expo = clamp((1.7 - db) / 0.7, 0.12, 1) * (1 - n(own.attrs.ctl) * 0.3);
   const front = Math.cos(own.dir) * (p.x - own.x) + Math.sin(own.dir) * (p.y - own.y) > 0; // 수비가 드리블러 앞(얼굴 쪽)에 있다
   const loose = own.kickCD > 0 || Math.hypot(own.vx, own.vy) > 6; // 터치 직후·빨리 달릴 땐 공이 발에서 떨어져 있다
+  const hc = !!HU[own.t] && HU[own.t]!.ctrl === own, soft = hc && wx(own.x, own.t) < 78; // 사람이 조작하는 드리블러: 뒤에서는 잘 못 뺏고, 골에서 27m 밖(soft)이면 수비가 덤비지 않고 지켜본다. AI 드리블러에겐 예전 그대로
   if (q < 1.35 && front && p.bodyCD <= 0 && own.spin <= 0) { // 몸싸움: 앞에서 막아설 때만 (뒤에서 밀면 파울), 태클과 별개
     p.bodyCD = 0.55;
     const pr = (0.3 + (n(p.attrs.str) - n(own.attrs.str) * 0.6 - n(own.attrs.bal) * 0.4) * 0.3 - (own.feint > 0 ? 0.3 : 0)) * Math.min(1, rate / 0.36) * expo * (loose ? 1.3 : 0.8);
-    if (s.rnd() < pr) { gain(s, p); own.stun = 0.35; own.kickCD = 0.4; sfx(s, 'tackle'); return; }
+    if (s.rnd() < pr) {
+      if (hc && s.rnd() < 0.5) { // 어깨 싸움에 밀려 공이 흐른다 (깨끗이 뺏기지 않고 둘 다 다시 다툰다)
+        const a = own.dir + (s.rnd() < 0.5 ? 1 : -1) * (0.9 + s.rnd() * 0.8);
+        ball.owner = null; ball.knock = null; ball.vx = Math.cos(a) * 4.5; ball.vy = Math.sin(a) * 4.5; ball.vz = 0.6; ball.lastTouch = p.t; ball.kicker = p; ball.shot++; ball.passTarget = null; ball.curl = 0;
+        own.kickCD = 0.22; p.stun = Math.max(p.stun, 0.2); puff(s, own.x, own.y, 4, 1.4); sfx(s, 'tackle'); return;
+      }
+      gain(s, p); own.stun = 0.35; own.kickCD = 0.4; sfx(s, 'tackle'); return;
+    }
+    if (hc) { if (soft) p.stun = Math.max(p.stun, 0.08 + clamp(n(own.attrs.str) - n(p.attrs.str), 0, 0.5) * 0.3); puff(s, own.x, own.y, 3, 1.2); } // 버텨 냈다: 부딪힌 수비가 튕겨 나가 잠깐 틈이 생긴다
   }
   if (q < 1.45) { // 겹침 밀어내기가 1.1m를 유지하므로 발을 뻗는 거리는 그보다 넓게
-    p.tackleCD = 0.45; let r = rate * (front ? 1.3 : 1) * (0.85 + n(p.attrs.stk) * 0.4) * (1 - n(own.attrs.bal) * 0.2) * expo * (loose ? 1.4 : 0.7); // 앞을 막고 선 수비가, 공이 발에서 떨어졌을 때 더 잘 뺏는다
+    const rush = soft && (p.vx * (own.x - p.x) + p.vy * (own.y - p.y)) / (q || 1) > 5.8; // 수비수 자신이 5.8m/s 넘게 달려들 때 (드리블러가 서 있는 수비에게 달려가는 건 해당 없음) // 달려들며 뻗는 발: 덜 정확하고, 헛디디면 그대로 지나친다
+    p.tackleCD = 0.45; let r = rate * (front ? 1.3 : hc ? 0.4 : 1) * (p.beatT > 0 ? 0.5 : 1) * (0.85 + n(p.attrs.stk) * 0.4) * (1 - n(own.attrs.bal) * 0.2) * expo * (loose ? 1.4 : 0.7); // 앞을 막고 선 수비가, 공이 발에서 떨어졌을 때 더 잘 뺏는다
     const h = HU[own.t]; if (h && h.ctrl === own && INP[h.t].down.sprint) r *= 0.85;
-    if (own.feint > 0) r *= 0.5; if (own.spin > 0) r *= 0.3;
-    if (s.rnd() < r) { gain(s, p); own.stun = 0.45; own.kickCD = 0.5; sfx(s, 'tackle'); }
+    if (own.feint > 0) r *= 0.5; if (own.spin > 0) r *= 0.3; if (rush) r *= 0.7;
+    if (soft && !loose && s.rnd() < 0.5) return; // 공이 발에 붙어 있으면 절반은 지켜본다 (덤비지 않고 기다림)
+    if (s.rnd() < r * (hc ? 1.35 : 1)) { gain(s, p); own.stun = 0.45; own.kickCD = 0.5; sfx(s, 'tackle'); }
+    else if (hc && (!HU[p.t] || HU[p.t]!.ctrl !== p)) p.stun = Math.max(p.stun, rush ? 0.26 : 0.14); // 발을 뻗었다 실패하면 잠깐 중심을 잃는다 (제칠 틈)
   }
   else if (q < 3.2 && !HU[p.t] && s.rnd() < rate * 0.02 && (own.kickCD > 0 || Math.hypot(own.vx, own.vy) > 6)) { // AI 슬라이딩: 공이 발에서 떨어졌을 때만, 앞에서
     const front = Math.cos(own.dir) * (p.x - own.x) + Math.sin(own.dir) * (p.y - own.y) > -0.3;
@@ -39,7 +51,7 @@ export function bestAIPass(s: Sim, p: Player): PassChoice | null {
     const L = leadPos(p, m), q = Math.hypot(L.x - p.x, L.y - p.y); if (q < 5 || q > maxQ) continue;
     const prog = wx(L.x, p.t) - wx(p.x, p.t), fwd = prog / 10; // 전진 거리를 가장 크게 본다
     let open = 99; for (const o of s.team[1 - p.t]) open = Math.min(open, Math.hypot(o.x - L.x, o.y - L.y));
-    const risk = laneRisk(s, p, L, p.t), loft = risk > 1.2 && q > 18;
+    const risk = laneRisk(s, p, L, p.t), loft = risk > 1.2 && q > 18; // 26m 넘는 패스는 띄운다
     const run = (m.vx * (p.t === 0 ? 1 : -1)) > 3 && prog > 4 && open > 4;
     const deep = wx(L.x, p.t) > 70 ? 0.6 : 0; // 상대 진영 깊숙이 넣는 패스 가산
     const wideB = st === 'wide' && Math.abs(L.y - CY) > 18 && wx(L.x, p.t) > 60 ? 0.8 : 0;
@@ -68,7 +80,7 @@ export function aiCarrier(s: Sim, p: Player, dt: number) {
     if (pressed || p.holdT > 0.9 || s.rnd() < 0.08) {
       const m = bestAIPass(s, p);
       // 압박이면 괜찮은 패스, 아니면 좋은 전진 패스만. 오래 끌면 아무 데나
-      if (m && ((pressed && m.score > -0.3) || m.score > 1.2 || (p.holdT > 2.4 && m.score > -1))) { if (m.thru) { const a = Math.atan2(m.p.y - p.y, m.p.x - p.x); queueKick(s, p, () => throughPass(s, p, a)); } else queueKick(s, p, () => passTo(s, p, m.p, m.loft)); return; }
+      if (m && ((pressed && m.score > -0.3) || m.score > 1.2 || (p.holdT > 2.4 && m.score > -1))) { if (m.thru) { const a = Math.atan2(m.p.y - p.y, m.p.x - p.x); queueKick(s, p, () => throughPass(s, p, a, 0, 30)); } else queueKick(s, p, () => passTo(s, p, m.p, m.loft)); return; }
     }
   }
   let dx = t === 0 ? 1 : -1, dy = (CY - p.y) / 40;
