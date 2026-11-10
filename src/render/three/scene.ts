@@ -10,6 +10,7 @@ import { PlayerModel, type PoseState } from './player';
 import { ballTexture, puffTexture, ringTexture } from './textures';
 import { opts } from '../../options';
 import { displayName, shirtName } from '../../data/squads';
+import { backTarget } from '../../sim/human';
 
 interface Puff { sp: THREE.Sprite; vx: number; vz: number; life: number; t: number; }
 const PF = 15, BF = 6; // 리플레이 프레임: 선수당 15값, 공 6값
@@ -197,6 +198,11 @@ export class ThreeRenderer implements IRenderer {
       return;
     }
     const { players, HU, M, ball } = sim;
+    for (const h of HU) { // 수비 중: Shift(뒤쪽 수비 전환)를 누르면 넘어갈 선수를 작은 빈 화살표로 미리 보여 준다
+      if (!h || !h.ctrl || M.phase !== 'live' || M.so) continue; const bt = ball.owner ? ball.owner.t : ball.lastTouch; if (bt === h.t) continue;
+      const g = backTarget(sim, h); if (!g) continue; const gp = this.toScreen(g.x, g.y, 2.05); if (!gp.on) continue;
+      const gy = gp.y - 8; ctx.globalAlpha = 0.75; ctx.strokeStyle = h.col; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(gp.x, gy + 7); ctx.lineTo(gp.x - 5, gy); ctx.lineTo(gp.x + 5, gy); ctx.closePath(); ctx.stroke(); ctx.globalAlpha = 1;
+    }
     for (const h of HU) {
       if (!h || !h.ctrl) continue; const c = h.ctrl, pp = this.toScreen(c.x, c.y, 2.05), px = pp.x, py = pp.y, on = pp.on && px > 8 && px < cw - 8 && py > 8 && py < ch - 8;
       if (on) {

@@ -2,8 +2,8 @@ import { clamp, d, angDiff, wx } from './util';
 import { W, CY } from './consts';
 import type { Sim, Human, Player } from './types';
 import { sfx } from './events';
-import { gain, knockOn, shortPass, longPass, throughPass, chipShot, shoot, slideTackle, slideCheck, standTackle, intercept, interceptT, queueKick, n } from './ball';
-import { steer, chase, moveTo } from './move';
+import { throwTo, throwPick, offsideLine, gain, knockOn, shortPass, longPass, throughPass, chipShot, shoot, slideTackle, slideCheck, standTackle, intercept, interceptT, queueKick, n } from './ball';
+import { steer, chase, moveTo, gapY } from './move';
 
 export function autoCursor(s: Sim, h: Human, dt: number) {
   const { ball, team, INP } = s;
@@ -76,13 +76,21 @@ export function triggerRun(s: Sim, h: Human, p: Player, aim: number) {
     const sc = c * 3 - q / 30 - (m.runT > 0 ? 1 : 0); if (sc > bs) { bs = sc; best = m; }
   }
   if (!best) return;
-  const gx = h.t === 0 ? W : 0, ty = best.y + (CY - best.y) * 0.5; // 골 쪽 대각선으로
-  best.runT = 3; best.runDir = Math.atan2(ty - best.y, gx - best.x); sfx(s, 'kick');
+  // 골 쪽 안으로 꺾되, 수비 사이 가장 넓은 틈을 겨냥해 대각선으로
+  const line = offsideLine(s, h.t), gy = gapY(s, h.t, best.y + clamp(CY - best.y, -12, 12) * 0.6, line), tx = wx(Math.min(Math.max(line, wx(best.x, h.t)) + 12, 102), h.t);
+  best.runT = 3; best.runDir = Math.atan2(gy - best.y, tx - best.x); sfx(s, 'kick');
 }
 export function humanUpdate(s: Sim, h: Human, dt: number) {
   const { ball, M, INP } = s;
   const I = INP[h.t], p = h.ctrl; if (!p) return; if (p.off) { switchPlayer(s, h); return; }
   const mx = I.mx, my = I.my, mag = Math.hypot(mx, my), sprint = I.down.sprint; let own = ball.owner === p;
+  h.swT = Math.max(0, h.swT - dt); if (!I.down.lob) h.swHold = false;
+  if (M.throwIn === p) { // 스로인: 움직일 수 없고 스틱으로 방향만. 패스·스루 = 가까운 동료, 롱패스 = 먼 동료. 6초 넘기면 알아서 던진다
+    steer(p, 0, 0, dt); p.vx = p.vy = 0; h.second = false; h.gkRush = false; h.charging = false;
+    if (mag > 0.15) { const top = p.y < CY, ux = mx / mag; let uy = my / mag; uy = top ? Math.max(uy, 0.15) : Math.min(uy, -0.15); p.dir = Math.atan2(uy, ux); }
+    const far = I.press.lob; if (I.press.pass || I.press.through || far || M.throwT > 6) { const m = throwPick(s, p, p.dir, far); if (m) throwTo(s, p, m); }
+    return;
+  }
   if (!own && ball.knock === p && d(p, ball) < 2.0 && ball.z < 0.6 && (I.press.pass || I.press.shoot || I.press.lob || I.press.through || I.press.chip || I.rel.pass || I.rel.lob)) { gain(s, p); own = ball.owner === p; } // 질주 드리블 중에도 바로 차거나 패스할 수 있다
   h.second = false; h.gkRush = false; h.pressT = Math.max(0, h.pressT - dt); h.lostT = Math.max(0, h.lostT - dt);
   if (p.slide > 0) { slideCheck(s, p); return; }
@@ -135,7 +143,8 @@ export function humanUpdate(s: Sim, h: Human, dt: number) {
     else if (I.press.pass) standTackle(s, p);
     else if (I.down.pass && I.holdT.pass > 0.25 && ball.owner && ball.owner.t !== p.t && d(p, ball.owner) < 1.8 && p.tackleCD <= 0 && (ball.owner.kickCD > 0 || Math.hypot(ball.owner.vx, ball.owner.vy) > 6)) standTackle(s, p); // 압박 중 공이 발에서 떨어지면 알아서 태클
     if (I.press.shoot) slideTackle(s, p, aim);
-    if (I.press.lob) switchPlayer(s, h);
+    if (I.press.lob) switchPlayer(s, h); // 공에 가장 가까운 선수 (연달아 누르면 그다음 가까운 선수)
+    else if (I.press.switch || (I.down.lob && I.holdT.lob > 0.32 && !h.swHold)) { h.swHold = true; switchBack(s, h); } // Shift(또는 전환 길게): 공과 우리 골 사이를 지키는 뒤쪽 수비수
     if (I.down.through && (!I.touch || I.holdT.through > 0.12)) h.second = true;
     if (I.down.gkRush) h.gkRush = true;
     // 몸싸움: 공 가진 상대와 부딪히면 버튼 없이도 어깨 싸움으로 공을 뺏을 수 있다 (피지컬·밸런스 대결)
@@ -159,4 +168,20 @@ export function nearestToBall(s: Sim, h: Human, exclude?: Player | null) {
   const key = ball.owner ? (p: Player) => d(p, ball) / p.speed : (p: Player) => interceptT(s, p);
   const list = team[h.t].filter(p => p.role !== 'GK' && p !== exclude && !p.off).sort((a, b) => key(a) - key(b)); return list[0] || null;
 }
-export function switchPlayer(s: Sim, h: Human) { const nn = nearestToBall(s, h, h.ctrl); if (nn) { h.ctrl = nn; h.lock = 1.2; } }
+/** 커서 전환 공통: key가 가장 작은 선수로. 1.2초 안에 다시 누르면 방금 거쳐 간 선수들은 건너뛴다(둘 사이만 오가지 않게). commit=false면 누가 될지만 알려 준다 */
+function pickSwitch(s: Sim, h: Human, key: (p: Player) => number, commit = true) {
+  const seen = h.swT > 0 ? h.swSeen : [], all = s.team[h.t].filter(p => p.role !== 'GK' && !p.off && p !== h.ctrl);
+  let list = all.filter(p => !seen.includes(p)), wrapped = false; if (!list.length) { list = all; wrapped = true; }
+  let best: Player | null = null, bk = 1e9; for (const p of list) { const k = key(p); if (k < bk) { bk = k; best = p; } }
+  if (best && commit) { if (h.swT <= 0 || wrapped) h.swSeen.length = 0; if (h.ctrl) h.swSeen.push(h.ctrl); h.ctrl = best; h.lock = 1.2; h.swT = 1.2; }
+  return best;
+}
+export function switchPlayer(s: Sim, h: Human) { const { ball } = s; pickSwitch(s, h, ball.owner ? p => d(p, ball) / p.speed : p => interceptT(s, p)); }
+/** 뒤쪽 수비수: 공에서 우리 골 쪽으로 (거리의 절반, 최대 18m) 내려간 지점에 가장 가까운, 공보다 골 쪽에 있는 선수 */
+const backKey = (s: Sim, h: Human) => {
+  const { ball } = s, g = wx(0, h.t), ux = g - ball.x, uy = CY - ball.y, L = Math.hypot(ux, uy) || 1, k = Math.min(L * 0.5, 18), tx = ball.x + ux / L * k, ty = ball.y + uy / L * k, bl = wx(ball.x, h.t);
+  return (p: Player) => Math.hypot(p.x - tx, p.y - ty) + (wx(p.x, h.t) < bl + 1 ? 0 : 9);
+};
+export function switchBack(s: Sim, h: Human) { pickSwitch(s, h, backKey(s, h)); }
+/** Shift를 누르면 넘어갈 선수 (화면에 작은 표시로 미리 보여 준다) */
+export function backTarget(s: Sim, h: Human) { return pickSwitch(s, h, backKey(s, h), false); }

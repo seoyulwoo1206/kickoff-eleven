@@ -2,7 +2,7 @@
 import { K1, setK1, type Key } from '../input/keyboard';
 
 const $ = (id: string) => document.getElementById(id) as HTMLElement;
-const LABELS: [Key, string][] = [['up', '위'], ['down', '아래'], ['left', '왼쪽'], ['right', '오른쪽'], ['pass', '짧은 패스 / 압박'], ['lob', '롱패스 / 전환'], ['through', '스루패스 / 세컨드'], ['shoot', '슛 / 슬라이딩'], ['chip', '칩슛'], ['run', '침투 지시 / 압박 지원'], ['gkRush', '개인기 · 감아차기 / GK 돌진'], ['sprint', '질주']];
+const LABELS: [Key, string][] = [['up', '위'], ['down', '아래'], ['left', '왼쪽'], ['right', '오른쪽'], ['pass', '짧은 패스 / 압박'], ['lob', '롱패스 / 전환'], ['through', '스루패스 / 세컨드'], ['shoot', '슛 / 슬라이딩'], ['chip', '칩슛'], ['run', '침투 지시 / 압박 지원'], ['gkRush', '개인기 · 감아차기 / GK 돌진'], ['sprint', '질주'], ['switch', '뒤쪽 수비로 전환']];
 let waiting: Key | null = null;
 const pretty = (code: string) => code.replace(/^Key|^Arrow|^Digit/, '').replace('Space', '스페이스').replace('ShiftLeft', 'L-Shift').replace('Period', '.').replace('Comma', ',');
 export function loadKeys() { try { const m = JSON.parse(localStorage.getItem('ko11keys') || 'null'); if (m && typeof m === 'object') setK1(m); } catch { /* */ } }

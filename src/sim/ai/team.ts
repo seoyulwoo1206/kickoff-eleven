@@ -62,6 +62,11 @@ export function teamAI(s: Sim, t: number, dt: number) {
       cands.forEach((p, i) => { const side = (i === 0 ? (c0.y < CY ? 1 : -1) : (c0.y < CY ? -1 : 1)); supports.set(p, { x: c0.x + fx * 9, y: clamp(c0.y + side * 9, 3, H - 3) }); });
     }
     if (knocker && !(h && h.ctrl === knocker)) chaser = knocker; // 우리 편 AI가 차 놓은 공은 그 선수가 쫓는다
+    if (M.throwIn && M.throwIn.t === t) { // 스로인: 가까운 둘이 받으러 온다 (터치라인 따라 앞 7m, 안쪽 뒤 10m) — 없으면 30m 안에 던질 곳이 없을 때가 있었다
+      const th = M.throwIn, sy = th.y < CY ? 1 : -1, near = outs.filter(p => p !== th).sort((a, b) => d(a, th) - d(b, th)).slice(0, 2); supports.clear();
+      if (near[0]) supports.set(near[0], { x: th.x + fx * 7, y: clamp(th.y + sy * 4.5, 3, H - 3) });
+      if (near[1]) supports.set(near[1], { x: th.x - fx * 3, y: clamp(th.y + sy * 10, 3, H - 3) });
+    }
     // 자동 침투: 공격수·앞선 미드필더가 번갈아 뒷공간으로 뛴다 (Q 침투와 같은 runT). 공이 하프라인 근처를 넘었을 때만
     if (M.lastAtt !== t) { M.lastAtt = t; M.autoRun[t] = Math.min(M.autoRun[t], 0.35); } // 공을 막 뺏었으면 곧바로 한 명이 뛴다
     M.autoRun[t] -= dt;
@@ -71,7 +76,18 @@ export function teamAI(s: Sim, t: number, dt: number) {
       const cs = outs.filter(p => p !== c0 && p.runT <= 0 && (p.role === 'FW' || isFB(p) || (p.role === 'MF' && (p.bx >= 48 || Math.abs(p.by - CY) > 14))) && wx(p.x, t) <= line + 0.3 && wx(p.x, t) > lbx - (isFB(p) ? 16 : 8) && d(p, c0) < 38 && wx(p.x, t) < 96);
       // 가장 넓은 틈 앞에 선 선수가 뛴다 (조금의 무작위). 풀백은 터치라인을 따라 곧장, 나머지는 수비 사이 틈으로
       let r: Player | null = null, bsc = -1e9, ry = 0;
-      for (const p of cs) { const gy = isFB(p) ? p.y : gapY(s, t, p.y, line); let w = 30; for (const o of team[1 - t]) { if (o.off || o.role === 'GK' || wx(o.x, t) < line - 7) continue; w = Math.min(w, Math.abs(o.y - gy)); } const sc = Math.min(w, 8) + (p.role === 'FW' ? 2 : 0) + s.rnd() * 4; if (sc > bsc) { bsc = sc; r = p; ry = gy; } }
+      // 곧장 뛸 틈과 좌우 11m 옆 틈(대각선)을 다 따져, 넓고·공 가진 동료에게서 패스 길이 열리고·내 앞 수비를 비켜 가는 쪽을 고른다
+      const tx0 = wx(Math.min(line + 12, 101), t), opp = team[1 - t].filter(o => !o.off && o.role !== 'GK');
+      for (const p of cs) {
+        const ys = isFB(p) ? [p.y] : [gapY(s, t, p.y, line), gapY(s, t, p.y + 11, line), gapY(s, t, p.y - 11, line)].filter((y, i, a) => a.findIndex(z => Math.abs(z - y) < 2) === i);
+        const ahead = opp.some(o => Math.abs(o.y - p.y) < 2.5 && wx(o.x, t) - wx(p.x, t) > 0 && wx(o.x, t) - wx(p.x, t) < 6); // 바로 앞을 막은 수비
+        for (const gy of ys) {
+          let w = 30, lane = 30; const dg = Math.abs(gy - p.y), ex = tx0 - c0.x, ey = gy - c0.y, el = ex * ex + ey * ey || 1;
+          for (const o of opp) { if (wx(o.x, t) >= line - 7) w = Math.min(w, Math.abs(o.y - gy)); const k = clamp(((o.x - c0.x) * ex + (o.y - c0.y) * ey) / el, 0.15, 1); lane = Math.min(lane, Math.hypot(o.x - c0.x - ex * k, o.y - c0.y - ey * k)); }
+          const sc = Math.min(w, 8) + (p.role === 'FW' ? 2 : 0) + (dg > 4 && dg < 15 ? 1.5 : 0) - (dg > 16 ? 3 : 0) - (lane < 2.5 ? 2 : 0) - (ahead && dg < 4 ? 2 : 0) + s.rnd() * 3;
+          if (sc > bsc) { bsc = sc; r = p; ry = gy; }
+        }
+      }
       if (r) { const tx = wx(Math.min(line + 14, 101), t); r.runT = 2.5; r.runDir = Math.atan2((isFB(r) ? r.y : ry) - r.y, (isFB(r) ? gx : tx) - r.x); }
       M.autoRun[t] = (lbx > 52 ? 1.5 : 2.2) + s.rnd() * 1.6;
     }

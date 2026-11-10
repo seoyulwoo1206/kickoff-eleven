@@ -3,7 +3,7 @@ import { d, wx, clamp } from '../util';
 import { DIFF } from '../../data/teams';
 import type { Sim, Player } from '../types';
 import { sfx, puff } from '../events';
-import { gain, knockOn, passTo, throughPass, chipShot, shoot, slideTackle, leadPos, laneRisk, offsideLine, queueKick, n } from '../ball';
+import { gain, knockOn, passTo, throughPass, chipShot, shoot, slideTackle, leadPos, laneRisk, offsideLine, queueKick, n, throwTo, throwPick, kick } from '../ball';
 import { steer } from '../move';
 
 export function tryTackle(s: Sim, p: Player, own: Player | null, rate: number) {
@@ -62,6 +62,11 @@ export function bestAIPass(s: Sim, p: Player): PassChoice | null {
 }
 export function aiShoot(s: Sim, p: Player) { const kp = s.team[1 - p.t][0]; shoot(s, p, 0.6 + s.rnd() * 0.3, kp.y < CY ? 1 : -1); }
 export function aiCarrier(s: Sim, p: Player, dt: number) {
+  if (s.M.throwIn === p) { // 스로인: 동료가 받으러 올 1.1초를 기다렸다 가까운 열린 동료에게 던진다
+    steer(p, 0, 0, dt); p.vx = p.vy = 0; p.holdT += dt;
+    if (p.holdT > 1.1 && s.M.phase === 'live') { const c = bestAIPass(s, p), m = c && d(c.p, p) < 24 ? c.p : throwPick(s, p, p.dir, false); if (m) throwTo(s, p, m); else if (p.holdT > 3) kick(s, p, Math.cos(p.dir) * 8, Math.sin(p.dir) * 8, 3); }
+    return;
+  }
   const { M, team } = s;
   const t = p.t, D = DIFF[M.diff], gx = t === 0 ? W : 0, dG = Math.hypot(gx - p.x, CY - p.y);
   let nearest: Player | null = null, nd = 1e9; for (const o of team[1 - t]) { if (o.off) continue; const q = d(o, p); if (q < nd) { nd = q; nearest = o; } }

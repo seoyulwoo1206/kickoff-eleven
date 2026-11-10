@@ -27,7 +27,7 @@
 </div>
 
 <div id="menu" class="overlay"><div class="card">
-  <header><div class="eyebrow">11 대 11 · 풀경기 · <span id="build">BUILD 1110-F</span></div><h1>킥오프 일레븐</h1><p class="lede">팀을 고르고 킥오프. 공 근처 선수로 커서가 자동으로 옮겨가고, 같은 키보드로 친구와 1대1도 됩니다.</p></header>
+  <header><div class="eyebrow">11 대 11 · 풀경기 · <span id="build">BUILD 1110-G</span></div><h1>킥오프 일레븐</h1><p class="lede">팀을 고르고 킥오프. 공 근처 선수로 커서가 자동으로 옮겨가고, 같은 키보드로 친구와 1대1도 됩니다.</p></header>
   <div class="opts">
     <div class="opt"><span class="label">대전 방식</span><div class="seg" id="segMode"><button id="mAI" data-v="ai" aria-pressed="true">AI 대전</button><button id="m2P" data-v="2p">2인 대전 (한 키보드)</button><button id="mNet" data-v="net">온라인 대전</button><button id="mCup" data-v="cup">월드컵</button><button id="mPK" data-v="pk">승부차기</button></div></div>
     <div class="opt" id="optLen"><span class="label">경기 시간</span><div class="seg" id="segLen"><button id="len180" data-v="180">3분</button><button id="len300" data-v="300" aria-pressed="true">5분</button><button id="len480" data-v="480">8분</button></div></div>
@@ -58,10 +58,10 @@
   <p class="tip" id="rotateTip" hidden>폰을 가로로 돌리면 경기장이 더 넓게 보여요.</p>
   <div class="row"><button class="kick" id="startBtn">킥오프</button><button class="ghost" id="keysBtn">키 설정</button><button class="ghost touchonly" id="fsBtn">전체화면</button><span class="netstat" id="startNote"></span></div>
   <div class="help">
-    <div><span class="who p1">P1 공격</span><kbd>방향키</kbd> 이동 · <kbd>S</kbd> 짧은 패스 · <kbd>A</kbd> 롱패스/크로스 · <kbd>W</kbd> 스루패스 · <kbd>D</kbd> 길게 슛 · <kbd>Z</kbd> 칩슛 · <kbd>Q</kbd> 침투 지시(스틱 방향 동료) · <kbd>X</kbd> 개인기 / 누른 채 슛 감아차기 · <kbd>E</kbd> 질주</div>
+    <div><span class="who p1">P1 공격</span><kbd>방향키</kbd> 이동 · <kbd>S</kbd> 짧은 패스 · <kbd>A</kbd> 롱패스/크로스 · <kbd>W</kbd> 스루패스 · <kbd>D</kbd> 길게 슛 · <kbd>Z</kbd> 칩슛 · <kbd>Q</kbd> 침투 지시(스틱 방향 동료) · <kbd>X</kbd> 개인기 / 누른 채 슛 감아차기 · <kbd>E</kbd> 질주 · 수비: <kbd>A</kbd> 공 가까운 선수로 전환(길게 = 뒤쪽 수비) · <kbd>Shift</kbd> 뒤쪽 수비수로 전환(빈 화살표가 다음 선수) · 스로인: 방향 잡고 <kbd>S</kbd> 가까이 / <kbd>A</kbd> 멀리</div>
     <div><span class="who p1">P1 수비</span><kbd>S</kbd> 압박(길게)/태클 · <kbd>D</kbd> 슬라이딩 · <kbd>A</kbd> 선수 전환 · <kbd>W</kbd> 세컨드 디펜더(길게) · <kbd>Q</kbd> 골키퍼 돌진 · <kbd>E</kbd> 질주</div>
     <div id="help2" hidden><span class="who p2">P2</span><kbd>IJKL</kbd> 이동 · <kbd>B</kbd> 짧은 패스/압박 · <kbd>V</kbd> 롱패스/전환 · <kbd>N</kbd> 스루/세컨드 · <kbd>M</kbd> 슛/슬라이딩 · <kbd>.</kbd> 칩슛 · <kbd>U</kbd> 침투/압박 지원 · <kbd>,</kbd> 개인기/GK 돌진 · <kbd>Space</kbd> 질주</div>
-    <div><span class="who">폰</span>왼쪽 화면 아무 데나 누르고 밀면 조이스틱(살짝 밀면 걷기) · 패스 짧게 = 짧은 패스, 길게 = 롱패스 · 슛 길게 = 파워 · 수비 땐 버튼이 압박/슬라이딩/전환으로 바뀜</div>
+    <div><span class="who">폰</span>왼쪽 화면 아무 데나 누르고 밀면 조이스틱(살짝 밀면 걷기) · 패스 짧게 = 짧은 패스, 길게 = 롱패스 · 슛 길게 = 파워 · 수비 땐 버튼이 압박/슬라이딩/전환으로 바뀜(롱패스 길게 = 뒤쪽 수비) · 스로인은 패스 = 가까이, 롱패스 = 멀리</div>
     <div><span class="who">공통</span><kbd>P</kbd><kbd>Esc</kbd> 일시정지 · <kbd>C</kbd> 카메라(중계/선수 뒤/탑뷰) · <kbd>R</kbd>·마우스 휠 시야(가깝게/보통/넓게/전체) · 게임패드 지원 · 슛 게이지 80% 넘으면 세지만 빗나가기 쉬움 · 뒤에서 슬라이딩하면 파울</div>
     <div id="helpNet" hidden><span class="who">온라인</span>둘 다 P1 키(또는 터치)로 조작 · 호스트 기준으로 진행되므로 핑이 낮을수록 반응이 빠릅니다 · 한쪽이 일시정지하면 둘 다 멈춥니다</div>
   </div>

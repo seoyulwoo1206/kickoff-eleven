@@ -24,14 +24,14 @@ export interface Player {
 }
 export interface Ball {
   x: number; y: number; z: number; vx: number; vy: number; vz: number;
-  owner: Player | null; lastTouch: number; passTarget: Player | null; kicker: Player | null;
+  owner: Player | null; lastTouch: number; passTarget: Player | null; kicker: Player | null; thru: boolean; /* thru: 스루패스로 찬 공 (구르는 동안 더 먼저 닿는 동료가 있으면 받는 선수를 바꾼다) */
   shot: number; isShot: boolean; spin: number; knock: Player | null;
   /** 마그누스 휨 (진행 방향에 수직인 가속, 부호 = 방향) */
   curl: number;
 }
 export interface Human {
   t: number; ctrl: Player | null; lock: number; charge: number; charging: boolean;
-  second: boolean; gkRush: boolean; pressT: number; lostT: number; /* lostT: 방금 공을 뺏긴 뒤 남은 시간 (그동안은 공을 돌아본다) */ col: string; tag: string; cursor: 'manual' | 'auto'; had: boolean; // pressT: 압박 지원(Q) 남은 시간
+  second: boolean; gkRush: boolean; pressT: number; lostT: number; swSeen: Player[]; swT: number; swHold: boolean; /* 커서 전환: 방금 거쳐 간 선수들(1.2초 안에 다시 누르면 그다음 선수) */ /* lostT: 방금 공을 뺏긴 뒤 남은 시간 (그동안은 공을 돌아본다) */ col: string; tag: string; cursor: 'manual' | 'auto'; had: boolean; // pressT: 압박 지원(Q) 남은 시간
 }
 export interface Stats { shots: number[]; onT: number[]; poss: number[]; fouls: number[]; offs: number[]; yel: number[]; red: number[]; passA: number[]; passC: number[]; }
 export interface MatchInfo {
@@ -42,6 +42,7 @@ export interface MatchInfo {
   /** AI 반응 지연: 상대가 공을 찬 뒤 이 시간 동안은 루즈볼을 쫓지 않는다 (난이도별) */
   react: [number, number];
   /** Phase 5: 전술, 벤치·교체 수, 중단 횟수(추가시간 계산), 추가시간(분, 전/후반), 어드밴티지 */
+  throwIn: Player | null; throwT: number; /* 스로인을 던질 선수(공을 손에 들고 서 있다)와 든 시간 */
   lastAtt: number; autoRun: [number, number]; // 다음 자동 침투까지 남은 시간 (팀별)
   tac: [Tactics, Tactics]; bench: [PlayerDef[], PlayerDef[]]; subs: [number, number]; stops: number; added: number[];
   /** 토너먼트: 비기면 연장(전·후반 3·4) → 승부차기. so는 승부차기 상태 */

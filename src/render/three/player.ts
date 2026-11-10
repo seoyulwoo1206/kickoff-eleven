@@ -78,7 +78,7 @@ export class PlayerModel {
   }
   setBlob(on: boolean) { this.blob.visible = on; }
   /** 상태로 포즈를 만든다. tGlobal은 연출용 시간 */
-  update(p: PoseState, ball: { x: number; y: number; owner?: Player | null }, tGlobal: number) {
+  update(p: PoseState, ball: { x: number; y: number; z?: number; owner?: Player | null }, tGlobal: number) {
     const r = this.root;
     r.position.set(p.x, 0, p.y); r.rotation.set(0, -p.dir, 0);
     const sp = Math.hypot(p.vx, p.vy), moving = sp > 0.6, stride = moving ? clamp(sp / 8, 0.45, 1.25) : 0;
@@ -116,6 +116,13 @@ export class PlayerModel {
       legPose(0, th0, kn0, 0.1); legPose(1, th1, kn1, 0.1);
       torso.rotation.z = -(lean + (own ? 0.12 : 0));
       armPose(0, -Math.sin(ph) * A * 0.9, 0.25 * sideOf(0), 1.0 + 0.3 * stride); armPose(1, Math.sin(ph) * A * 0.9, 0.25 * sideOf(1), 1.0 + 0.3 * stride);
+      // 스로인: 공을 머리 위로 든 자세(공 주인인데 공이 1.6m 위), 던진 직후엔 두 팔을 앞으로 뿌린다(터치라인 밖에서 찬 직후)
+      const hold = own && (ball.z ?? 0) > 1.6, thrown = !hold && kickA >= 0 && (p.y < -0.2 || p.y > 68.2);
+      if (hold || thrown) {
+        const k = hold ? 0 : Math.min(1, kickA / 0.35), sw2 = 3.35 - k * 2.1 + (hold ? Math.sin(tGlobal * 3) * 0.04 : 0);
+        armPose(0, sw2, 0.14 * sideOf(0), 0.35 - k * 0.2); armPose(1, sw2, 0.14 * sideOf(1), 0.35 - k * 0.2);
+        torso.rotation.z = 0.18 - k * 0.55; legPose(0, 0.22 + k * 0.1, 0.25, 0.1); legPose(1, -0.3 + k * 0.15, 0.35, 0.1); body.rotation.z = 0;
+      }
       if (p.role === 'GK' && !moving && !own) { legPose(0, 0.25, 0.6); legPose(1, 0.25, 0.6); armPose(0, 0.8, 0.9 * sideOf(0), 1.4); armPose(1, 0.8, 0.9 * sideOf(1), 1.4); torso.rotation.z = -0.35; hips.position.y = HIP_Y - 0.12; }
       hips.position.y += moving ? Math.abs(Math.cos(ph)) * 0.045 * stride : Math.sin(tGlobal * 5.2 + p.i * 1.3) * 0.016; // 서 있을 때도 발을 구르듯 살짝 들썩인다
       if (p.stun > 0) body.rotation.x = Math.sin(p.stun * 22) * 0.12;
