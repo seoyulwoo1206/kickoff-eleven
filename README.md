@@ -54,6 +54,8 @@ npm run dev
 
 ## 배포 (GitHub Pages)
 
+**플레이 주소: https://seoyulwoo1206.github.io/kickoff-eleven/** (저장소: https://github.com/seoyulwoo1206/kickoff-eleven)
+
 `main` 브랜치에 올리면 `.github/workflows/deploy.yml`이 빌드해서 GitHub Pages에 올립니다. 주소는 `https://<계정>.github.io/<저장소 이름>/`.
 
 1. GitHub에 빈 저장소를 만든다 (무료 계정은 공개 저장소여야 Pages가 된다).

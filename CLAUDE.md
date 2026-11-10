@@ -32,6 +32,7 @@
 - `tools/intercept.ts [--n 40]` 가로채기 시험(선로 옆 0.5~3.5m, 공 14/20/26m/s, AI와 사람 런지). 트래핑·가로채기 숫자를 바꾸면 돌릴 것
 - `tools/simulate.ts` 헤드리스: `npx tsx tools/simulate.ts 40 300 KOR BRA --seed 1` → 골·슛·점유·파울·오프사이드·루즈볼 + 결정론 검사. 숫자 튜닝은 반드시 이걸로 재고 바꿀 것
 - `public/` PWA: `manifest.webmanifest`·`icon.svg`·`sw.js`(캐시 이름 `ko11-v…`는 배포 워크플로가 커밋 해시로 바꾼다). `main.ts`가 PROD에서만 등록
+- 배포 주소 https://seoyulwoo1206.github.io/kickoff-eleven/ , 저장소 `origin` = github.com/seoyulwoo1206/kickoff-eleven (공개). `git push`가 곧 배포이므로 push 전에 사용자 확인
 - 배포: `.github/workflows/deploy.yml` — `main`에 push하면 `npm ci` → `npm run build` → GitHub Pages(`dist`). 저장소 Settings → Pages → Source 가 GitHub Actions여야 한다. 경로는 전부 상대(`base: './'`)라 하위 경로에서도 동작. 절차는 README '배포'
 - `index.html`은 마크업만(`#build`가 빌드 표시, 폰에서 옛 파일인지 확인용). CSS는 `src/style.css`
 
