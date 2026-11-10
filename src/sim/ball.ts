@@ -154,26 +154,33 @@ export function longPass(s: Sim, p: Player, ang: number, power = 0.5) {
 }
 /** 스루패스: 조준 방향(±12° 보정)으로 공을 차고, 그 공 선로에 가장 먼저 뛰어들 수 있는 동료를 받는 선수로 정한다 */
 export function throughPass(s: Sim, p: Player, ang: number, power = 0) {
-  const t = p.t; let best: { sc: number; m: Player; a: number; v: number } | null = null;
-  const speeds = power > 0.5 ? [30, 26, 22, 18] : [26, 22, 18, 15];
+  const t = p.t, opps = s.team[1 - t].filter(o => !o.off), line = offsideLine(s, t);
+  let best: { sc: number; m: Player; a: number; v: number } | null = null;
+  const speeds = power > 0.5 ? [30, 26, 22, 18, 15] : [26, 22, 18, 15, 12];
   for (const off of [0, -0.21, 0.21]) {
     const a = ang + off, ax = Math.cos(a), ay = Math.sin(a);
     for (const m of s.team[t]) {
       if (m === p || m.role === 'GK' || m.off) continue;
       const rx = m.x - p.x, ry = m.y - p.y, rq = Math.hypot(rx, ry); if (rq < 2 || rq > 45) continue;
       if ((rx * ax + ry * ay) / rq < 0.6) continue; // 선로 기준 ±53° 밖의 동료는 제외
-      for (const v0 of speeds) {
-        let v = v0, dist = 0, meet: { x: number; y: number; s: number; tt: number } | null = null;
-        for (let tt = 0.1; tt <= 2.6; tt += 0.1) {
+      for (const v0 of speeds) { // 모든 속도를 따져 가장 좋은 공을 고른다 (빠르기만 한 공은 받는 선수를 지나친다)
+        let v = v0, dist = 0, cut = false, meet: { x: number; y: number; tt: number; v: number } | null = null;
+        for (let tt = 0.1; tt <= 2.8; tt += 0.1) {
           v = Math.max(0, v - (FA + FB * v) * 0.1); dist += v * 0.1;
           const bx = p.x + ax * dist, by = p.y + ay * dist; if (bx < 0.5 || bx > W - 0.5 || by < 0.5 || by > H - 0.5) break;
-          if (Math.hypot(m.x + m.vx * tt * 0.5 - bx, m.y + m.vy * tt * 0.5 - by) <= m.speed * 1.2 * tt + 0.8) { meet = { x: bx, y: by, s: dist, tt }; break; }
+          const k = Math.min(tt, 0.3); // 0.3초까지는 지금 달리던 대로, 그 뒤는 반응해서 질주
+          // 상대가 공보다 먼저 이 지점에 닿는가 (반응 .35초, 발 1.0m)
+          if (!cut && dist > 1.5) for (const o of opps) if (Math.hypot(o.x + o.vx * k - bx, o.y + o.vy * k - by) <= o.speed * 1.0 * Math.max(0, tt - 0.35) + 1.0) { cut = true; break; }
+          // 동료가 공보다 조금 먼저 닿는 첫 지점 (반응 .15초 + 전속 1.15배, 발 .9m)
+          if (Math.hypot(m.x + m.vx * k - bx, m.y + m.vy * k - by) <= m.speed * 1.15 * Math.max(0, tt - 0.15) + 0.9) { meet = { x: bx, y: by, tt, v }; break; }
+          if (v < 2) break;
         }
         if (!meet) continue;
-        let open = 99; for (const o of s.team[1 - t]) open = Math.min(open, Math.hypot(o.x + o.vx * meet.tt * 0.5 - meet.x, o.y + o.vy * meet.tt * 0.5 - meet.y));
-        const sc = (wx(meet.x, t) - wx(p.x, t)) / 10 + Math.min(open, 8) / 3 - meet.tt * 0.6 - laneRisk(s, p, meet, t) * 1.2 + v0 * 0.04 - (off ? 0.5 : 0) + Math.max(0, m.vx * ax + m.vy * ay) / 4 - (wx(m.x, t) > offsideLine(s, t) + 1.0 ? 3 : 0) + ((rx * Math.cos(ang) + ry * Math.sin(ang)) / rq) * 2.5 + (m.runT > 0 ? 1.5 : 0) - (nearBlock(s, p, meet, t) ? 3 : 0); // 조준 방향에 있는 동료·침투 중인 동료 우대
+        let open = 99; for (const o of opps) open = Math.min(open, Math.hypot(o.x + o.vx * Math.min(meet.tt, 0.5) - meet.x, o.y + o.vy * Math.min(meet.tt, 0.5) - meet.y));
+        const prog = wx(meet.x, t) - wx(p.x, t), lead = wx(meet.x, t) - wx(m.x, t); // 전진 거리, 받는 선수 앞으로 내준 거리
+        const sc = prog / 6 + clamp(lead, -3, 8) / 4 + Math.min(open, 8) / 3 - meet.tt * 0.4 - (cut ? 2.5 : 0) - Math.max(0, meet.v - 22) / 4 - (off ? 0.5 : 0)
+          + Math.max(0, m.vx * ax + m.vy * ay) / 4 - (wx(m.x, t) > line + 1.0 ? 3 : 0) + Math.min((rx * Math.cos(ang) + ry * Math.sin(ang)) / rq, 0.96) / 0.96 * 7 + (m.runT > 0 ? 1.5 : 0) - (nearBlock(s, p, meet, t) ? 3 : 0); // 조준한 동료가 최우선(±16° 안은 동점). 스루는 앞 공간으로: 전진·리드 우대, 조준 방향·침투 중인 동료 우대, 선로를 끊길 공·받을 때 너무 빠른 공 감점
         if (!best || sc > best.sc) best = { sc, m, a, v: v0 };
-        break;
       }
     }
   }
