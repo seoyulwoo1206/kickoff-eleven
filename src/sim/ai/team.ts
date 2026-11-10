@@ -3,7 +3,7 @@ import { clamp, d, wx } from '../util';
 import { DIFF } from '../../data/teams';
 import type { Sim, Player } from '../types';
 import { slideCheck, intercept, interceptT, offsideLine } from '../ball';
-import { chase, moveTo, targetFor } from '../move';
+import { chase, moveTo, targetFor, gapY } from '../move';
 import { tryTackle, aiCarrier } from './carrier';
 import { gkAI } from './gk';
 
@@ -41,17 +41,29 @@ export function teamAI(s: Sim, t: number, dt: number) {
     const free = outs.filter(p => p !== chaser && p !== cover && p.role !== 'FW');
     for (const o of threats) { let best: Player | null = null, bd = tac.press === 2 ? 18 : 14; for (const p of free) { if (marks.has(p)) continue; const q = d(p, o); if (q < bd) { bd = q; best = p; } } if (best) marks.set(best, o); }
   } else if (att && carrier && carrier.role !== 'GK') {
-    const fx = t === 0 ? 1 : -1, c0 = carrier, cands = outs.filter(p => p !== c0 && p.role !== 'DF').sort((a, b) => d(a, c0) - d(b, c0)).slice(0, 2);
-    cands.forEach((p, i) => { const side = (i === 0 ? (c0.y < CY ? 1 : -1) : (c0.y < CY ? -1 : 1)); supports.set(p, { x: c0.x + fx * 9, y: clamp(c0.y + side * 9, 3, H - 3) }); });
+    const fx = t === 0 ? 1 : -1, c0 = carrier;
+    if (h) { // 사람 팀: 가까운 미드필더 둘이 안쪽 앞(원투 받을 자리)과 뒤(되돌려 받을 자리)에 선다. 공격수는 자기 역할대로, 박스 플레이 땐 각자 박스 자리로
+      const bs = Math.sign(c0.y - CY) || 1, box = wx(c0.x, t) > 76 && Math.abs(c0.y - CY) > 9;
+      if (!box) { const ms = outs.filter(p => p !== c0 && p.role === 'MF' && p.runT <= 0 && Math.abs(p.by - CY) <= 14).sort((a, b) => d(a, c0) - d(b, c0)); // 가운데 미드필더만 (윙어는 폭을 지킨다)
+        if (ms[0]) supports.set(ms[0], { x: c0.x + fx * 6, y: clamp(c0.y - bs * 8, 4, H - 4) });
+        if (ms[1]) supports.set(ms[1], { x: c0.x - fx * 7, y: clamp(c0.y - bs * 5, 4, H - 4) }); }
+    } else {
+      const cands = outs.filter(p => p !== c0 && p.role !== 'DF').sort((a, b) => d(a, c0) - d(b, c0)).slice(0, 2);
+      cands.forEach((p, i) => { const side = (i === 0 ? (c0.y < CY ? 1 : -1) : (c0.y < CY ? -1 : 1)); supports.set(p, { x: c0.x + fx * 9, y: clamp(c0.y + side * 9, 3, H - 3) }); });
+    }
     if (knocker && !(h && h.ctrl === knocker)) chaser = knocker; // 우리 편 AI가 차 놓은 공은 그 선수가 쫓는다
     // 자동 침투: 공격수·앞선 미드필더가 번갈아 뒷공간으로 뛴다 (Q 침투와 같은 runT). 공이 하프라인 근처를 넘었을 때만
     if (M.lastAtt !== t) { M.lastAtt = t; M.autoRun[t] = Math.min(M.autoRun[t], 0.35); } // 공을 막 뺏었으면 곧바로 한 명이 뛴다
     M.autoRun[t] -= dt;
-    if (h && M.autoRun[t] <= 0 && wx(c0.x, t) > 38) { // 사람 팀만: AI끼리는 침투하는 동료에게 주는 패스가 끊겨 패스 성공률이 73→58%로 떨어졌다
+    if (h && M.autoRun[t] <= 0 && wx(c0.x, t) > 38 && !(wx(c0.x, t) > 76 && Math.abs(c0.y - CY) > 9)) { // 사람 팀만: AI끼리는 침투하는 동료에게 주는 패스가 끊겨 패스 성공률이 73→58%로 떨어졌다
       const line = offsideLine(s, t), gx = t === 0 ? W : 0;
-      const cs = outs.filter(p => p !== c0 && p.runT <= 0 && (p.role === 'FW' || (p.role === 'MF' && (p.bx >= 48 || Math.abs(p.by - CY) > 14))) && wx(p.x, t) <= line + 0.3 && wx(p.x, t) > wx(c0.x, t) - 8 && d(p, c0) < 38 && wx(p.x, t) < 96);
-      if (cs.length) { const r = cs[Math.floor(s.rnd() * cs.length)], ty = r.y + (CY - r.y) * (0.25 + s.rnd() * 0.45); r.runT = 2.6; r.runDir = Math.atan2(ty - r.y, gx - r.x); }
-      M.autoRun[t] = 2.0 + s.rnd() * 1.8;
+      const lbx = wx(c0.x, t), isFB = (p: Player) => p.role === 'DF' && Math.abs(p.by - CY) > 14 && (p.by - CY) * (c0.y - CY) > 0 && lbx > 50; // 공 쪽 풀백
+      const cs = outs.filter(p => p !== c0 && p.runT <= 0 && (p.role === 'FW' || isFB(p) || (p.role === 'MF' && (p.bx >= 48 || Math.abs(p.by - CY) > 14))) && wx(p.x, t) <= line + 0.3 && wx(p.x, t) > lbx - (isFB(p) ? 16 : 8) && d(p, c0) < 38 && wx(p.x, t) < 96);
+      // 가장 넓은 틈 앞에 선 선수가 뛴다 (조금의 무작위). 풀백은 터치라인을 따라 곧장, 나머지는 수비 사이 틈으로
+      let r: Player | null = null, bsc = -1e9, ry = 0;
+      for (const p of cs) { const gy = isFB(p) ? p.y : gapY(s, t, p.y, line); let w = 30; for (const o of team[1 - t]) { if (o.off || o.role === 'GK' || wx(o.x, t) < line - 7) continue; w = Math.min(w, Math.abs(o.y - gy)); } const sc = Math.min(w, 8) + (p.role === 'FW' ? 2 : 0) + s.rnd() * 4; if (sc > bsc) { bsc = sc; r = p; ry = gy; } }
+      if (r) { const tx = wx(Math.min(line + 14, 101), t); r.runT = 2.5; r.runDir = Math.atan2((isFB(r) ? r.y : ry) - r.y, (isFB(r) ? gx : tx) - r.x); }
+      M.autoRun[t] = (lbx > 52 ? 1.5 : 2.2) + s.rnd() * 1.6;
     }
   }
   // 패스 길 열기: 공 가진 동료와 내 목표 사이 선로에 상대가 서 있으면(1.6m) 그 반대쪽으로 3.5m 비켜 선다

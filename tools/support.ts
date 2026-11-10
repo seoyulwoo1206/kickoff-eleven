@@ -13,13 +13,13 @@ const argv = process.argv.slice(2), flag = (n: string, def: string) => { const i
 const N = +flag('--n', '60'), SEEDS = +flag('--seeds', '3'), MAG = argv.includes('--jog') ? 0.8 : 0.35; // 기본: 공을 지키며 천천히 전진(동료를 기다림), --jog: 조깅으로 계속 전진
 const A = TEAMS.find(t => t.code === flag('--team', 'KOR'))!, B = TEAMS.find(t => t.code === flag('--opp', 'BRA'))!;
 const TS = [0, 1, 2, 3];
-const acc = TS.map(() => ({ n: 0, ahead: 0, open: 0, none: 0, runners: 0, onLine: 0, dfGap: 0, mfGap: 0, fwGap: 0, nearOpt: 0, nearN: 0 }));
+const acc = TS.map(() => ({ n: 0, ahead: 0, open: 0, none: 0, runners: 0, onLine: 0, dfUp: 0, fwNear: 0, fwSep: 0, dfGap: 0, mfGap: 0, fwGap: 0, nearOpt: 0, nearN: 0 }));
 let trials = 0, lostEarly = 0, progress = 0;
 
 function sample(s: Sim, p: Player, k: number) {
   const S = acc[k], lbx = p.x; S.n++;
   const xs = s.team[1].filter(o => !o.off).map(o => o.x).sort((x, y) => y - x), line = Math.max(xs[1] || 0, lbx, 52.5);
-  let ahead = 0, open = 0, runners = 0, onLine = 0, dfx = 0, ndf = 0, mfx = 0, nmf = 0, fwx = 0, nfw = 0, near = 1e9;
+  const fwy: number[] = []; let dfUp = 0, fwNear = 0; let ahead = 0, open = 0, runners = 0, onLine = 0, dfx = 0, ndf = 0, mfx = 0, nmf = 0, fwx = 0, nfw = 0, near = 1e9;
   for (const m of s.team[0]) {
     if (m === p || m.role === 'GK' || m.off) continue;
     const q = d(m, p); let op = 99; for (const o of s.team[1]) op = Math.min(op, d(o, m));
@@ -27,9 +27,10 @@ function sample(s: Sim, p: Player, k: number) {
     if (m.x > lbx + 4 && q < 40) { ahead++; if (isOpen) { open++; near = Math.min(near, q); } }
     if (m.runT > 0 || (m.x > line - 5 && m.vx > 3.5 && m.x > lbx + 4)) runners++;
     if (m.role !== 'DF' && m.x > line - 3 && m.x <= line + 0.5 && m.x > lbx - 2 && q < 40) onLine++;
+    if (m.role === 'DF' && m.x > lbx - 4) dfUp++; if (m.role === 'FW') { fwy.push(m.y); if (q < 12) fwNear++; }
     if (m.role === 'DF') { dfx += m.x; ndf++; } else if (m.role === 'MF') { mfx += m.x; nmf++; } else { fwx += m.x; nfw++; }
   }
-  S.ahead += ahead; S.open += open; S.none += open === 0 ? 1 : 0; S.runners += runners; S.onLine += onLine;
+  S.ahead += ahead; S.open += open; S.none += open === 0 ? 1 : 0; S.runners += runners; S.onLine += onLine; S.dfUp += dfUp; S.fwNear += fwNear; S.fwSep += fwy.length > 1 ? Math.abs(fwy[0] - fwy[1]) : 0;
   S.dfGap += lbx - dfx / Math.max(1, ndf); S.mfGap += lbx - mfx / Math.max(1, nmf); S.fwGap += fwx / Math.max(1, nfw) - lbx; if (near < 1e9) { S.nearOpt += near; S.nearN++; }
 }
 for (let sd = 0; sd < SEEDS; sd++) {
@@ -53,4 +54,4 @@ for (let sd = 0; sd < SEEDS; sd++) {
 }
 console.log(`${A.code} vs ${B.code}: 공 잡은 순간 ${trials}번 (2초 안에 뺏김 ${lostEarly}, 3초 버틴 경우 평균 전진 ${(progress / Math.max(1, acc[3].n)).toFixed(1)}m)`);
 TS.forEach((tt, k) => { const S = acc[k]; if (!S.n) return; const f = (v: number) => (v / S.n).toFixed(1);
-  console.log(`${tt}초 뒤 (n=${S.n}): 앞쪽 동료 ${f(S.ahead)}명 · 받을 수 있는 ${f(S.open)}명 (가장 가까운 ${(S.nearOpt / Math.max(1, S.nearN)).toFixed(0)}m) · 줄 곳 없음 ${(S.none / S.n * 100).toFixed(0)}% · 침투 중 ${f(S.runners)}명 · 최종 라인에 선 동료 ${f(S.onLine)}명 · 수비 라인 공 뒤 ${f(S.dfGap)}m · 미드필더 공 뒤 ${f(S.mfGap)}m · 공격수 공 앞 ${f(S.fwGap)}m`); });
+  console.log(`${tt}초 뒤 (n=${S.n}): 앞쪽 동료 ${f(S.ahead)}명 · 받을 수 있는 ${f(S.open)}명 (가장 가까운 ${(S.nearOpt / Math.max(1, S.nearN)).toFixed(0)}m) · 줄 곳 없음 ${(S.none / S.n * 100).toFixed(0)}% · 침투 중 ${f(S.runners)}명 · 최종 라인에 선 동료 ${f(S.onLine)}명 · 공 근처까지 올라온 수비수 ${f(S.dfUp)}명 · 공 12m 안 공격수 ${f(S.fwNear)}명 · 공격수 좌우 간격 ${f(S.fwSep)}m · 수비 라인 공 뒤 ${f(S.dfGap)}m · 미드필더 공 뒤 ${f(S.mfGap)}m · 공격수 공 앞 ${f(S.fwGap)}m`); });

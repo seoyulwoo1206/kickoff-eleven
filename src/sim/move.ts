@@ -28,23 +28,47 @@ export function moveTo(p: Player, tx: number, ty: number, f: number, dt: number)
   const dx = tx - p.x, dy = ty - p.y, q = Math.hypot(dx, dy); if (q < 0.25) { steer(p, 0, 0, dt); return; }
   const sp = Math.min(p.speed * f * (p.stun > 0 ? 0.4 : 1), q * 2.6); steer(p, dx / q * sp, dy / q * sp, dt);
 }
+/** 수비 사이 빈 틈: 최종 라인 근처(7m 안) 상대들의 y 사이에서 y0에 가까우면서 가장 넓은 틈의 가운데 */
+export function gapY(s: Sim, t: number, y0: number, line: number) {
+  const ys = s.team[1 - t].filter(o => !o.off && o.role !== 'GK' && wx(o.x, t) > line - 7).map(o => o.y).sort((a, b) => a - b);
+  if (!ys.length) return clamp(y0, 4, H - 4);
+  const edges = [Math.max(3, ys[0] - 10), ...ys, Math.min(H - 3, ys[ys.length - 1] + 10)]; let best = clamp(y0, 4, H - 4), bs = -1e9;
+  for (let i = 0; i < edges.length - 1; i++) { const mid = (edges[i] + edges[i + 1]) / 2, w = edges[i + 1] - edges[i]; if (Math.abs(mid - y0) > 15) continue; const sc = Math.min(w, 14) - Math.abs(mid - y0) * 0.35; if (sc > bs) { bs = sc; best = mid; } }
+  return best;
+}
 /** 대형 위치: 공 위치에 따라 블록이 움직이고, 공격 땐 FW는 공보다 앞, MF는 공 근처까지 전진. 오프사이드 라인 뒤에 선다 */
 export function targetFor(s: Sim, p: Player, att: boolean, def: boolean) {
   const { ball, M } = s;
   const t = p.t, lb = wx(ball.x, t), tac = M.tac[t];
   let x = p.bx + (lb - 52.5) * 0.62 + (att ? 10 : def ? -3 : 0) + (att && p.role === 'FW' ? 6 : 0) + tac.line * (p.role === 'DF' ? 6 : p.role === 'MF' ? 4 : 2); // 라인 높이
   if (att && !s.HU[t]) { if (p.role === 'FW') x = Math.max(x, lb + 9); else if (p.role === 'MF') x = Math.max(x, lb - 4); } // AI 팀은 기존 대형 (리그 균형 유지)
-  else if (att) { // 사람 팀: 내가 공을 잡으면 동료들이 공을 따라 올라온다
-    const line = offsideLine(s, t), wide = Math.abs(p.by - CY) > 14;
-    if (p.role === 'FW') x = lb > 30 ? Math.max(x, Math.min(line - 0.8, lb + 16)) : Math.max(x, lb + 9); // 공격수는 최종 수비 라인 쪽으로 (공에서 16m까지만 — 더 멀면 패스가 끊긴다)
-    else if (p.role === 'MF') x = Math.max(x, p.bx >= 48 || wide ? lb + 5 : lb - 6); // 공격형·측면 미드필더는 공보다 앞, 수비형은 공 바로 뒤
-    else if (p.role === 'DF') x = Math.max(x, lb - (wide ? 15 : 23) + tac.line * 3); // 수비 라인도 공을 따라 올라온다 (센터백은 공 뒤 23m, 풀백 15m)
-    if (lb >= line - 1.5 && p.role !== 'DF') x = Math.max(x, lb - 1); // 공이 최종 라인을 넘었으면 옆에서 같이 뛴다 (컷백·크로스 받을 자리)
+  let hy: number | null = null, overlap = false; // 사람 팀 전용: y를 직접 정한 경우 / 풀백 오버래핑 중
+  if (att && s.HU[t]) { // 사람 팀: 내가 공을 잡으면 동료들이 공을 따라 올라오고, 역할을 나눠 움직인다
+    const line = offsideLine(s, t), wide = Math.abs(p.by - CY) > 14, bs = Math.sign(ball.y - CY) || 1, mine = ball.owner === p;
+    const boxPlay = lb > 76 && Math.abs(ball.y - CY) > 9; // 공이 상대 진영 측면 깊숙이: 크로스·컷백을 받을 자리로
+    if (p.role === 'FW') {
+      const fws = s.team[t].filter(q => q.role === 'FW' && !q.off), idx = fws.indexOf(p), ph = Math.floor(M.tick / 270); // 4.5초마다 역할 교대
+      const short = fws.length > 1 ? (idx + ph) % fws.length === 0 : ph % 3 === 0; // 한 명은 내려와 받아 주고, 나머지는 수비 뒤를 노린다
+      if (boxPlay) { const near = fws.length < 2 || (idx + ph) % 2 === 0; x = near ? 98 : 97; hy = CY + (near ? bs * 3.2 : -bs * 4.2); } // 니어 포스트 / 파 포스트
+      else if (lb <= 30) x = Math.max(x, lb + 9);
+      else if (short) { x = Math.max(lb + 7, Math.min(line - 0.8, lb + 9)); hy = clamp(ball.y + (Math.sign(p.by - ball.y) || 1) * 5, 6, H - 6); } // 내려와서 발밑으로 받을 자리 (공 옆 5m)
+      else { x = Math.max(x, Math.min(line - 0.8, lb + 20)); hy = gapY(s, t, p.by + (ball.y - CY) * 0.2 - bs * 4, line) + Math.sin(M.time * 1.3 + p.i) * 2.2; } // 최종 라인에서 수비 사이 빈 틈으로
+    } else if (p.role === 'MF') {
+      const adv = p.bx >= 48 || wide;
+      if (boxPlay && adv) { const far = (p.by - CY) * bs < 0; x = far ? 95 : 93; hy = far ? CY - bs * 8 : CY + bs * 1.5; } // 반대쪽 윙어는 파 포스트 뒤, 가운데는 컷백 자리
+      else if (boxPlay) { if (p.i % 2 === 0) { x = 92; hy = CY + bs * 1.5; } else { x = 84; hy = CY - bs * 3; } } // 수비형 둘 중 하나는 컷백 자리, 하나는 박스 앞 세컨드 볼
+      else x = Math.max(x, adv ? lb + 5 : lb - 6); // 공격형·측면 미드필더는 공보다 앞, 수비형은 공 바로 뒤
+    } else if (p.role === 'DF') {
+      const same = (p.by - CY) * (ball.y - CY) > 0;
+      if (wide && same && lb > 45 && lb < 86 && !mine && Math.abs(ball.y - p.by) < 20) { overlap = true; x = Math.min(lb + 7, 94); hy = CY + Math.sign(p.by - CY) * (H / 2 - 3.5); } // 풀백 오버래핑: 공 가진 동료 바깥으로 돌아 앞에 선다
+      else x = Math.max(x, lb - (wide ? 19 : 23) + tac.line * 3); // 반대쪽 풀백·센터백은 뒤를 지킨다 (센터백 공 뒤 23m, 풀백 19m)
+    }
+    if (!boxPlay && lb >= line - 1.5 && p.role !== 'DF') x = Math.max(x, lb - 1); // 공이 최종 라인을 넘었으면 옆에서 같이 뛴다
   }
-  let y = p.by + (ball.y - CY) * (p.role === 'DF' ? 0.3 : 0.45);
+  let y = hy ?? p.by + (ball.y - CY) * (p.role === 'DF' ? 0.3 : 0.45);
   const wideSide = Math.abs(p.by - CY) > 14, sameSide = (p.by - CY) * (ball.y - CY) > 0;
-  if (att && wideSide) {
-    if ((p.pos === 'LB' || p.pos === 'RB') && sameSide && lb > 50) x += 12; // 풀백 오버래핑 (공이 자기 쪽일 때)
+  if (att && wideSide && hy === null) {
+    if ((p.pos === 'LB' || p.pos === 'RB') && sameSide && lb > 50 && !s.HU[t]) x += 12; // 풀백 오버래핑 (AI 팀: 공이 자기 쪽일 때 조금 올라옴)
     if ((p.pos === 'LW' || p.pos === 'RW' || p.pos === 'LM' || p.pos === 'RM') && lb > 55) { x += 6; y += (CY - p.by) * 0.25; } // 윙어 침투: 안쪽으로 파고든다
     if (tac.style === 'wide') y += (p.by - CY) * 0.15; // 측면 전술: 더 넓게
   }
@@ -53,7 +77,7 @@ export function targetFor(s: Sim, p: Player, att: boolean, def: boolean) {
   x += Math.sin(M.time * 0.6 + p.i * 1.7) * 1.1; y += Math.cos(M.time * 0.5 + p.i * 2.3) * 1.1;
   if (att || (!ball.owner && ball.lastTouch === t)) { const line = offsideLine(s, t); if (x > line - 0.8) x = line - 0.8; }
   const lim = ({ DF: [7, 68], MF: [14, 86], FW: [22, 99], GK: [0, 20] } as Record<string, [number, number]>)[p.role];
-  return { x: wx(clamp(x, lim[0], lim[1]), t), y: clamp(y, 2, H - 2) };
+  return { x: wx(clamp(x, lim[0], overlap ? 96 : hy !== null && p.role === 'MF' ? 96 : lim[1]), t), y: clamp(y, 2, H - 2) };
 }
 /** 위치 적분 + 선수끼리 겹침 밀어내기 */
 export function integrate(s: Sim, dt: number) {
