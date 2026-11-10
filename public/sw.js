@@ -1,5 +1,5 @@
 /* 오프라인 실행용 서비스 워커: 빌드된 파일을 설치 때 캐시하고, 이후엔 캐시 우선. 새 빌드는 캐시 이름이 바뀌어 교체된다 */
-const CACHE = 'ko11-' + (self.registration && self.registration.scope ? 'v' : 'v') + '20261029';
+const CACHE = 'ko11-v20261110'; // 배포 워크플로(.github/workflows/deploy.yml)가 이 이름을 커밋 해시로 바꾼다
 self.addEventListener('install', e => {
   e.waitUntil(caches.open(CACHE).then(c => c.addAll(['./', './index.html', './manifest.webmanifest', './icon.svg'])).then(() => self.skipWaiting()));
 });

@@ -30,7 +30,8 @@
 - `tools/keys.ts` 입력 시험(달리기·질주 중 임의 시점에 pass/through/shoot/lob/chip → 0.8초 안에 킥이 나간 비율, 전부 60/60이어야 함). `flow --thru`는 스루패스 상세(공 속도·끊긴 지점·끊은 선수·거리별 성공)
 - `tools/intercept.ts [--n 40]` 가로채기 시험(선로 옆 0.5~3.5m, 공 14/20/26m/s, AI와 사람 런지). 트래핑·가로채기 숫자를 바꾸면 돌릴 것
 - `tools/simulate.ts` 헤드리스: `npx tsx tools/simulate.ts 40 300 KOR BRA --seed 1` → 골·슛·점유·파울·오프사이드·루즈볼 + 결정론 검사. 숫자 튜닝은 반드시 이걸로 재고 바꿀 것
-- `public/` PWA: `manifest.webmanifest`·`icon.svg`·`sw.js`(캐시 이름 `ko11-v날짜`, 새 빌드 배포 때 날짜를 올릴 것). `main.ts`가 PROD에서만 등록
+- `public/` PWA: `manifest.webmanifest`·`icon.svg`·`sw.js`(캐시 이름 `ko11-v…`는 배포 워크플로가 커밋 해시로 바꾼다). `main.ts`가 PROD에서만 등록
+- 배포: `.github/workflows/deploy.yml` — `main`에 push하면 `npm ci` → `npm run build` → GitHub Pages(`dist`). 저장소 Settings → Pages → Source 가 GitHub Actions여야 한다. 경로는 전부 상대(`base: './'`)라 하위 경로에서도 동작. 절차는 README '배포'
 - `index.html`은 마크업만(`#build`가 빌드 표시, 폰에서 옛 파일인지 확인용). CSS는 `src/style.css`
 
 ## 게임 규칙·모델 (함수 이름은 위 파일에 있음)
