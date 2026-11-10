@@ -1,4 +1,4 @@
-import { H, CY } from '../consts';
+import { W, H, CY } from '../consts';
 import { clamp, d, wx } from '../util';
 import { DIFF } from '../../data/teams';
 import type { Sim, Player } from '../types';
@@ -26,7 +26,8 @@ export function teamAI(s: Sim, t: number, dt: number) {
       if (h && h.ctrl && interceptT(s, h.ctrl) <= bt - 0.35) chaser = null; // 사람이 확실히 빠를 때만 양보
     }
   } else if (def) {
-    const so = outs.slice().sort((a, b) => d(a, ball) - d(b, ball));
+    let outlet: Player | null = null; for (const p of outs) if (p.role === 'FW' && (!outlet || p.bx > outlet.bx)) outlet = p; // 역습 출구: 가장 앞선 공격수
+    const so = outs.filter(p => !h || p !== outlet || d(p, ball) < 5 || wx(ball.x, t) > 62).sort((a, b) => d(a, ball) - d(b, ball)); // 출구 공격수는 공이 코앞이거나 상대 진영 깊숙할 때만 압박에 가담
     chaser = so[0]; cover = so[1];
     if (!own) { // 노크온 공은 가장 먼저 닿는 선수가 쫓는다 (뒤에서 따라가는 선수가 아니라 앞에서 끊을 수 있는 선수)
       let bt = 1e9, bp: Player | null = null; for (const p of outs) { const tt = interceptT(s, p); if (tt < bt) { bt = tt; bp = p; } }
@@ -43,7 +44,26 @@ export function teamAI(s: Sim, t: number, dt: number) {
     const fx = t === 0 ? 1 : -1, c0 = carrier, cands = outs.filter(p => p !== c0 && p.role !== 'DF').sort((a, b) => d(a, c0) - d(b, c0)).slice(0, 2);
     cands.forEach((p, i) => { const side = (i === 0 ? (c0.y < CY ? 1 : -1) : (c0.y < CY ? -1 : 1)); supports.set(p, { x: c0.x + fx * 9, y: clamp(c0.y + side * 9, 3, H - 3) }); });
     if (knocker && !(h && h.ctrl === knocker)) chaser = knocker; // 우리 편 AI가 차 놓은 공은 그 선수가 쫓는다
+    // 자동 침투: 공격수·앞선 미드필더가 번갈아 뒷공간으로 뛴다 (Q 침투와 같은 runT). 공이 하프라인 근처를 넘었을 때만
+    if (M.lastAtt !== t) { M.lastAtt = t; M.autoRun[t] = Math.min(M.autoRun[t], 0.35); } // 공을 막 뺏었으면 곧바로 한 명이 뛴다
+    M.autoRun[t] -= dt;
+    if (h && M.autoRun[t] <= 0 && wx(c0.x, t) > 38) { // 사람 팀만: AI끼리는 침투하는 동료에게 주는 패스가 끊겨 패스 성공률이 73→58%로 떨어졌다
+      const line = offsideLine(s, t), gx = t === 0 ? W : 0;
+      const cs = outs.filter(p => p !== c0 && p.runT <= 0 && (p.role === 'FW' || (p.role === 'MF' && (p.bx >= 48 || Math.abs(p.by - CY) > 14))) && wx(p.x, t) <= line + 0.3 && wx(p.x, t) > wx(c0.x, t) - 8 && d(p, c0) < 38 && wx(p.x, t) < 96);
+      if (cs.length) { const r = cs[Math.floor(s.rnd() * cs.length)], ty = r.y + (CY - r.y) * (0.25 + s.rnd() * 0.45); r.runT = 2.6; r.runDir = Math.atan2(ty - r.y, gx - r.x); }
+      M.autoRun[t] = 2.0 + s.rnd() * 1.8;
+    }
   }
+  // 패스 길 열기: 공 가진 동료와 내 목표 사이 선로에 상대가 서 있으면(1.6m) 그 반대쪽으로 3.5m 비켜 선다
+  const openLane = (x: number, y: number) => {
+    if (!h || !carrier || carrier.t !== t) return { x, y };
+    const ax = x - carrier.x, ay = y - carrier.y, L2 = ax * ax + ay * ay; if (L2 < 16) return { x, y };
+    let worst = 0, sideSum = 0;
+    for (const o of team[1 - t]) { if (o.off) continue; const u = ((o.x - carrier.x) * ax + (o.y - carrier.y) * ay) / L2; if (u < 0.1 || u > 0.95) continue; const cr = ((o.x - carrier.x) * ay - (o.y - carrier.y) * ax) / Math.sqrt(L2); if (Math.abs(cr) < 1.6 && 1.6 - Math.abs(cr) > worst) { worst = 1.6 - Math.abs(cr); sideSum = cr >= 0 ? 1 : -1; } }
+    if (!worst) return { x, y };
+    const L = Math.sqrt(L2), nx = ay / L, ny = -ax / L; // 선로의 수직 방향 (cr > 0 쪽)
+    return { x: clamp(x - nx * sideSum * 3.5, 1, W - 1), y: clamp(y - ny * sideSum * 3.5, 2, H - 2) };
+  };
   const pressing = !!(h && h.pressT > 0); // Q 압박 지원: 추격자는 더 빠르고 세게, 커버도 같이 붙는다
   const pressMul = (tac.press === 0 ? 0.88 : tac.press === 2 ? 1.12 : 1) * (pressing ? 1.15 : 1), tk = (h ? 0.45 : D.tackle) * (tac.press === 2 ? 1.15 : tac.press === 0 ? 0.85 : 1) * (pressing ? 1.3 : 1), press = (h ? 1.18 : D.press) * pressMul;
   // 압박 트리거: 공 가진 상대가 자기 골을 보고 있거나 터치가 커졌을 때 더 세게 달라붙는다
@@ -82,7 +102,9 @@ export function teamAI(s: Sim, t: number, dt: number) {
       if (ball.passTarget === mk) tryTackle(s, p, carrier, tk * 0.5); continue;
     }
     const sp = supports.get(p);
-    if (sp) { const line = offsideLine(s, t), lx = Math.min(wx(sp.x, t), line - 0.8); moveTo(p, wx(lx, t), sp.y, 1.05, dt); continue; }
-    const tg = targetFor(s, p, att, def), q = Math.hypot(tg.x - p.x, tg.y - p.y); moveTo(p, tg.x, tg.y, q > 7 ? 1.05 : 0.78, dt);
+    if (sp) { const line = offsideLine(s, t), lx = Math.min(wx(sp.x, t), line - 0.8), o = openLane(wx(lx, t), sp.y); moveTo(p, o.x, o.y, h && Math.hypot(o.x - p.x, o.y - p.y) > 6 ? 1.2 : 1.05, dt); continue; }
+    let tg = targetFor(s, p, att, def); if (att && carrier && p.role !== 'DF') tg = openLane(tg.x, tg.y);
+    const q = Math.hypot(tg.x - p.x, tg.y - p.y), ahead = wx(tg.x, t) - wx(p.x, t);
+    moveTo(p, tg.x, tg.y, h && att && ahead > 5 ? (p.role === 'DF' ? 1.1 : 1.2) : q > 7 ? 1.05 : 0.78, dt); // 공격 때 앞으로 멀리 가야 하면 질주로 따라붙는다
   }
 }

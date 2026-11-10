@@ -13,20 +13,22 @@ import type { Player } from '../src/sim/types';
 const argv = process.argv.slice(2);
 const flag = (n: string, def: string) => { const i = argv.indexOf(n); return i >= 0 ? argv[i + 1] : def; };
 applySquadStrength();
-const NODEF = argv.includes('--nodef'), DBG = argv.includes('--dbg'); const N = +flag('--n', '4'), LEN = +flag('--len', '300'), SEED = +flag('--seed', '1'), DIFF = flag('--diff', 'normal') as DiffKey;
+const SUP_AFTER = +flag('--after', '2'); const NODEF = argv.includes('--nodef'), DBG = argv.includes('--dbg'); const N = +flag('--n', '4'), LEN = +flag('--len', '300'), SEED = +flag('--seed', '1'), DIFF = flag('--diff', 'normal') as DiffKey;
 const pick = (c: string) => TEAMS.find(t => t.code === c) ?? TEAMS[0];
 const A = pick(flag('--team', 'KOR')), B = pick(flag('--opp', 'BRA'));
 
 interface PassRec { passer: Player; kind: 'short' | 'thru'; intended: Player | null; target: Player | null; pressT: number; kickT: number; gotT: number; result: string; bobble: boolean; back: boolean; stick: number; risk: number; no: number; ang: number; x?: any; }
+const sup = [0, 1, 2].map(() => ({ n: 0, ahead: 0, openAhead: 0, shortOpt: 0, moving: 0, runners: 0, dfGap: 0, mfGap: 0, fwGap: 0, noOpt: 0 }));
 const recv: number[] = []; const hist = new Array(11).fill(0); // 공을 받은 순간 가장 가까운 상대 거리
 const passes: PassRec[] = []; let shots = 0, shotPress = 0; const agg = { goals: [0, 0], poss: [0, 0], shotsFor: [0, 0], onT: [0, 0], aiPassA: 0, aiPassC: 0, lostHold: 0, holdSum: 0, holdN: 0, cursorSwitch: 0, tackledWhileHolding: 0, nearTicks: 0 };
 
 for (let g = 0; g < N; g++) {
   const s = createMatch({ teams: [A, B], len: LEN, diff: DIFF, tempo: 1, firstKick: g & 1, humans: [{ tag: 'P1', col: '#fff', cursor: 'manual' }, null], net: false, seed: SEED + g, squads: [squadOf(A), squadOf(B)] });
-  const I = s.INP[0], h = s.HU[0]!; let t = 0, holdSince = -1, shootT = -1, cur: PassRec | null = null, lastCtrl: Player | null = null, nextKind: 'short' | 'thru' = 'short', lastPassT = -9;
+  const I = s.INP[0], h = s.HU[0]!; let teamSince = 1e9; let t = 0, holdSince = -1, shootT = -1, cur: PassRec | null = null, lastCtrl: Player | null = null, nextKind: 'short' | 'thru' = 'short', lastPassT = -9;
   const simT = () => t;
   while (s.M.phase !== 'full') {
     const p = h.ctrl, ball = s.ball, own = ball.owner;
+    { const ours = (own && own.t === 0) || (!own && ball.lastTouch === 0); if (!ours) teamSince = 1e9; else if (teamSince > t) teamSince = t; } // 우리 팀 소유가 이어진 시작 시각
     if (p && lastCtrl && p !== lastCtrl) agg.cursorSwitch++; lastCtrl = p;
     // 진행 중인 패스 기록 추적
     if (cur) {
@@ -39,6 +41,23 @@ for (let g = 0; g < N; g++) {
       if (own === p) {
         const gx = W, dxg = gx - p.x, dyg = CY - p.y, dG = Math.hypot(dxg, dyg); let no = 1e9; for (const o of s.team[1]) no = Math.min(no, d(o, p));
         if (holdSince < 0) { holdSince = t; recv.push(no); }
+        if (Math.round(t * 60) % 15 === 0 && t - teamSince >= SUP_AFTER) { // 지원 상황 표본: 우리 팀이 공을 잡은 지 SUP_AFTER초가 지난 뒤 동료들이 어디서 무엇을 하는가
+          const lbx = p.x, zone = lbx < 35 ? 0 : lbx < 70 ? 1 : 2, S = sup[zone]; S.n++;
+          const xs = s.team[1].filter(o => !o.off).map(o => o.x).sort((x, y) => y - x), line = Math.max(xs[1] || 0, lbx, 52.5);
+          let ahead = 0, openAhead = 0, shortOpt = 0, moving = 0, runners = 0, nOut = 0, dfx = 0, ndf = 0, mfx = 0, nmf = 0, fwx = 0, nfw = 0;
+          for (const m of s.team[0]) {
+            if (m === p || m.role === 'GK' || m.off) continue; nOut++;
+            const q = d(m, p); let op = 99; for (const o of s.team[1]) op = Math.min(op, d(o, m));
+            const open = op > 3 && laneRisk(s, p, m, 0) < 0.3 && m.x <= line + 0.5;
+            if (m.x > lbx + 4 && q < 40) { ahead++; if (open) openAhead++; }
+            if (q > 6 && q < 16 && open) shortOpt++;
+            if (Math.hypot(m.vx, m.vy) > 2.5) moving++;
+            if (m.role === 'FW' && m.x > line - 4 && m.vx > 3) runners++;
+            if (m.role === 'DF') { dfx += m.x; ndf++; } else if (m.role === 'MF') { mfx += m.x; nmf++; } else { fwx += m.x; nfw++; }
+          }
+          S.ahead += ahead; S.openAhead += openAhead; S.shortOpt += shortOpt; S.moving += moving / Math.max(1, nOut); S.runners += runners;
+          S.dfGap += lbx - dfx / Math.max(1, ndf); S.mfGap += lbx - mfx / Math.max(1, nmf); S.fwGap += fwx / Math.max(1, nfw) - lbx; S.noOpt += openAhead === 0 ? 1 : 0;
+        }
         // 기본 스틱: 골 방향, 중앙으로 살짝
         let sx = dxg / dG, sy = dyg / dG * 0.6; const m = Math.hypot(sx, sy); sx /= m; sy /= m;
         I.tx = sx; I.ty = sy; if (no > 5 && dG > 28 && !I.down.sprint) keyDown(I, 'sprint'); if ((no <= 5 || dG <= 28) && I.down.sprint) keyUp(I, 'sprint');
@@ -81,7 +100,11 @@ for (const k of ['short', 'thru'] as const) {
   const mis = kicked.filter(x => x.intended && x.target !== x.intended), misAng = mis.reduce((a, x) => a + x.ang, 0) / (mis.length || 1) * 180 / Math.PI, misRisk = mis.filter(x => x.risk > 0.3).length, misOk = mis.filter(x => x.result === 'ok').length, matchOk = kicked.filter(x => x.intended && x.target === x.intended && x.result === 'ok').length;
   console.log(`${k === 'short' ? '숏패스' : '스루패스'} n=${L.length}: 수신 ${pct(ok.length, L.length)} · 조준한 동료에게 ${pct(match, intended)} (n=${intended}, 그때 수신 ${pct(matchOk, match)}) · 빗나간 ${mis.length}건: 평균 ${misAng.toFixed(0)}° 다른 동료, 조준 선로 막힘 ${misRisk}, 수신 ${pct(misOk, mis.length)} · 누르고 차기까지 ${(delay * 1000).toFixed(0)}ms · 도착까지 ${arrive.toFixed(2)}s · ${Object.entries(res).map(([a, b]) => `${a} ${b}`).join(', ')}`);
 }
-console.log('사람 소유 x 분포(10m 단위, 초):', hist.map(v => (v / 60).toFixed(0)).join(' ')); if (argv.includes('--thru')) {
+console.log('사람 소유 x 분포(10m 단위, 초):', hist.map(v => (v / 60).toFixed(0)).join(' ')); if (argv.includes('--support')) {
+  const zn = ['자기 진영(~35m)', '중원(35~70m)', '상대 진영(70m~)'];
+  sup.forEach((S, i) => { if (!S.n) return; const f = (v: number) => (v / S.n).toFixed(1); console.log(`[지원] ${zn[i]} 표본 ${S.n}: 앞쪽 동료 ${f(S.ahead)}명(그중 받을 수 있는 ${f(S.openAhead)}) · 근거리 선택지 ${f(S.shortOpt)} · 앞에 줄 곳 없음 ${(S.noOpt / S.n * 100).toFixed(0)}% · 움직이는 동료 ${(S.moving / S.n * 100).toFixed(0)}% · 라인 뒤 침투 ${f(S.runners)} · 수비 라인은 공 뒤 ${f(S.dfGap)}m · 미드필더 공 뒤 ${f(S.mfGap)}m · 공격수 공 앞 ${f(S.fwGap)}m`); });
+}
+if (argv.includes('--thru')) {
   const T = passes.filter(x => x.kind === 'thru' && x.x), okT = T.filter(x => x.result === 'ok'), opp = T.filter(x => x.result === 'opp');
   const avg = (L: PassRec[], f: (x: PassRec) => number) => (L.reduce((a, x) => a + f(x), 0) / (L.length || 1)).toFixed(1);
   console.log(`[스루 상세] 성공 ${okT.length}: 공 속도 ${avg(okT, x => x.x.v0)}m/s · 받는 선수까지 ${avg(okT, x => x.x.dist)}m · 마커 거리 ${avg(okT, x => x.x.md)}m · 받은 곳 전진 ${avg(okT, x => x.x.gx - x.passer.x)}m · 도착 ${avg(okT, x => x.gotT - x.kickT)}s`);

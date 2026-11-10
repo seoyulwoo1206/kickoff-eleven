@@ -42,6 +42,7 @@ export interface MatchInfo {
   /** AI 반응 지연: 상대가 공을 찬 뒤 이 시간 동안은 루즈볼을 쫓지 않는다 (난이도별) */
   react: [number, number];
   /** Phase 5: 전술, 벤치·교체 수, 중단 횟수(추가시간 계산), 추가시간(분, 전/후반), 어드밴티지 */
+  lastAtt: number; autoRun: [number, number]; // 다음 자동 침투까지 남은 시간 (팀별)
   tac: [Tactics, Tactics]; bench: [PlayerDef[], PlayerDef[]]; subs: [number, number]; stops: number; added: number[];
   /** 토너먼트: 비기면 연장(전·후반 3·4) → 승부차기. so는 승부차기 상태 */
   knockout: boolean; so: Shootout | null;

@@ -178,7 +178,7 @@ export function throughPass(s: Sim, p: Player, ang: number, power = 0) {
         if (!meet) continue;
         let open = 99; for (const o of opps) open = Math.min(open, Math.hypot(o.x + o.vx * Math.min(meet.tt, 0.5) - meet.x, o.y + o.vy * Math.min(meet.tt, 0.5) - meet.y));
         const prog = wx(meet.x, t) - wx(p.x, t), lead = wx(meet.x, t) - wx(m.x, t); // 전진 거리, 받는 선수 앞으로 내준 거리
-        const sc = prog / 6 + clamp(lead, -3, 8) / 4 + Math.min(open, 8) / 3 - meet.tt * 0.4 - (cut ? 2.5 : 0) - Math.max(0, meet.v - 22) / 4 - (off ? 0.5 : 0)
+        const sc = Math.min(prog, 22) / 6 + clamp(lead, -3, 8) / 4 + Math.min(open, 8) / 3 - meet.tt * 0.4 - (cut ? 3 : 0) - Math.max(0, meet.v - 22) / 4 - (off ? 0.5 : 0)
           + Math.max(0, m.vx * ax + m.vy * ay) / 4 - (wx(m.x, t) > line + 1.0 ? 3 : 0) + Math.min((rx * Math.cos(ang) + ry * Math.sin(ang)) / rq, 0.96) / 0.96 * 7 + (m.runT > 0 ? 1.5 : 0) - (nearBlock(s, p, meet, t) ? 3 : 0); // 조준한 동료가 최우선(±16° 안은 동점). 스루는 앞 공간으로: 전진·리드 우대, 조준 방향·침투 중인 동료 우대, 선로를 끊길 공·받을 때 너무 빠른 공 감점
         if (!best || sc > best.sc) best = { sc, m, a, v: v0 };
       }

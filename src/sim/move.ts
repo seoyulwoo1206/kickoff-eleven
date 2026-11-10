@@ -33,7 +33,14 @@ export function targetFor(s: Sim, p: Player, att: boolean, def: boolean) {
   const { ball, M } = s;
   const t = p.t, lb = wx(ball.x, t), tac = M.tac[t];
   let x = p.bx + (lb - 52.5) * 0.62 + (att ? 10 : def ? -3 : 0) + (att && p.role === 'FW' ? 6 : 0) + tac.line * (p.role === 'DF' ? 6 : p.role === 'MF' ? 4 : 2); // 라인 높이
-  if (att) { if (p.role === 'FW') x = Math.max(x, lb + 9); else if (p.role === 'MF') x = Math.max(x, lb - 4); }
+  if (att && !s.HU[t]) { if (p.role === 'FW') x = Math.max(x, lb + 9); else if (p.role === 'MF') x = Math.max(x, lb - 4); } // AI 팀은 기존 대형 (리그 균형 유지)
+  else if (att) { // 사람 팀: 내가 공을 잡으면 동료들이 공을 따라 올라온다
+    const line = offsideLine(s, t), wide = Math.abs(p.by - CY) > 14;
+    if (p.role === 'FW') x = lb > 30 ? Math.max(x, Math.min(line - 0.8, lb + 16)) : Math.max(x, lb + 9); // 공격수는 최종 수비 라인 쪽으로 (공에서 16m까지만 — 더 멀면 패스가 끊긴다)
+    else if (p.role === 'MF') x = Math.max(x, p.bx >= 48 || wide ? lb + 5 : lb - 6); // 공격형·측면 미드필더는 공보다 앞, 수비형은 공 바로 뒤
+    else if (p.role === 'DF') x = Math.max(x, lb - (wide ? 15 : 23) + tac.line * 3); // 수비 라인도 공을 따라 올라온다 (센터백은 공 뒤 23m, 풀백 15m)
+    if (lb >= line - 1.5 && p.role !== 'DF') x = Math.max(x, lb - 1); // 공이 최종 라인을 넘었으면 옆에서 같이 뛴다 (컷백·크로스 받을 자리)
+  }
   let y = p.by + (ball.y - CY) * (p.role === 'DF' ? 0.3 : 0.45);
   const wideSide = Math.abs(p.by - CY) > 14, sameSide = (p.by - CY) * (ball.y - CY) > 0;
   if (att && wideSide) {
