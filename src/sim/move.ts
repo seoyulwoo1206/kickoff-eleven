@@ -28,6 +28,8 @@ export function moveTo(p: Player, tx: number, ty: number, f: number, dt: number)
   const dx = tx - p.x, dy = ty - p.y, q = Math.hypot(dx, dy); if (q < 0.25) { steer(p, 0, 0, dt); return; }
   const sp = Math.min(p.speed * f * (p.stun > 0 ? 0.4 : 1), q * 2.6); steer(p, dx / q * sp, dy / q * sp, dt);
 }
+/** 수비 라인 높이(자기 골에서 m): 공이 자기 골에서 lb m 떨어져 있을 때. 60m→34, 45m→25, 35m→19, 25m→12.5, 15m→6 */
+export const defLine = (lb: number) => clamp(lb * 0.62 - 3, 6, 46);
 /** 수비 사이 빈 틈: 최종 라인 근처(7m 안) 상대들의 y 사이에서 y0에 가까우면서 가장 넓은 틈의 가운데 */
 export function gapY(s: Sim, t: number, y0: number, line: number) {
   const ys = s.team[1 - t].filter(o => !o.off && o.role !== 'GK' && wx(o.x, t) > line - 7).map(o => o.y).sort((a, b) => a - b);
@@ -74,7 +76,9 @@ export function targetFor(s: Sim, p: Player, att: boolean, def: boolean) {
   }
   if (att && p.role === 'FW' && tac.style === 'counter') x += 4;
   if (!att && tac.style === 'possession' && p.role === 'MF') x -= 2;
-  x += Math.sin(M.time * 0.6 + p.i * 1.7) * 1.1; y += Math.cos(M.time * 0.5 + p.i * 2.3) * 1.1;
+  if (!att && p.role === 'DF') { const hold = defLine(lb); x = Math.min(Math.max(x, hold + tac.line * 3), Math.max(lb - 3, 6)); } // 수비 라인은 공 거리에 맞춰 올라온다 (공보다는 항상 골 쪽)
+  // 제자리에 서 있지 않고 조금씩 움직인다 (걷는 속도의 느린 흔들림 둘을 겹침)
+  x += Math.sin(M.time * 1.15 + p.i * 1.7) * 1.3 + Math.sin(M.time * 0.41 + p.i * 0.9) * 0.9; y += Math.cos(M.time * 0.97 + p.i * 2.3) * 1.5 + Math.cos(M.time * 0.33 + p.i * 1.3) * 1.0;
   if (att || (!ball.owner && ball.lastTouch === t)) { const line = offsideLine(s, t); if (x > line - 0.8) x = line - 0.8; }
   const lim = ({ DF: [7, 68], MF: [14, 86], FW: [22, 99], GK: [0, 20] } as Record<string, [number, number]>)[p.role];
   return { x: wx(clamp(x, lim[0], overlap ? 96 : hy !== null && p.role === 'MF' ? 96 : lim[1]), t), y: clamp(y, 2, H - 2) };

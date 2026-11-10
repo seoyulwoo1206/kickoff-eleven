@@ -117,7 +117,7 @@ export class PlayerModel {
       torso.rotation.z = -(lean + (own ? 0.12 : 0));
       armPose(0, -Math.sin(ph) * A * 0.9, 0.25 * sideOf(0), 1.0 + 0.3 * stride); armPose(1, Math.sin(ph) * A * 0.9, 0.25 * sideOf(1), 1.0 + 0.3 * stride);
       if (p.role === 'GK' && !moving && !own) { legPose(0, 0.25, 0.6); legPose(1, 0.25, 0.6); armPose(0, 0.8, 0.9 * sideOf(0), 1.4); armPose(1, 0.8, 0.9 * sideOf(1), 1.4); torso.rotation.z = -0.35; hips.position.y = HIP_Y - 0.12; }
-      hips.position.y += moving ? Math.abs(Math.cos(ph)) * 0.045 * stride : Math.sin(tGlobal * 2 + p.i) * 0.006;
+      hips.position.y += moving ? Math.abs(Math.cos(ph)) * 0.045 * stride : Math.sin(tGlobal * 5.2 + p.i * 1.3) * 0.016; // 서 있을 때도 발을 구르듯 살짝 들썩인다
       if (p.stun > 0) body.rotation.x = Math.sin(p.stun * 22) * 0.12;
       // 머리: 공 쪽을 본다
       const dx = ball.x - p.x, dy = ball.y - p.y, ang = Math.atan2(dy, dx) - p.dir; // 로컬 기준 각

@@ -3,7 +3,7 @@ import { clamp, d, wx } from '../util';
 import { DIFF } from '../../data/teams';
 import type { Sim, Player } from '../types';
 import { slideCheck, intercept, interceptT, offsideLine } from '../ball';
-import { chase, moveTo, targetFor, gapY } from '../move';
+import { chase, moveTo, targetFor, gapY, defLine } from '../move';
 import { tryTackle, aiCarrier } from './carrier';
 import { gkAI } from './gk';
 
@@ -106,7 +106,10 @@ export function teamAI(s: Sim, t: number, dt: number) {
     const mk = marks.get(p);
     if (mk) {
       const g = wx(0, t), ux = g - mk.x, uy = CY - mk.y, L = Math.hypot(ux, uy) || 1, tg = targetFor(s, p, att, def);
-      const md = tac.press === 2 ? 1.6 : tac.press === 0 ? 2.8 : 2.2, mx = mk.x + ux / L * md, my = mk.y + uy / L * md; moveTo(p, mx * 0.75 + tg.x * 0.25, my * 0.75 + tg.y * 0.25, 1.05, dt);
+      const md = tac.press === 2 ? 1.6 : tac.press === 0 ? 2.8 : 2.2, mx = mk.x + ux / L * md, my = mk.y + uy / L * md;
+      let px = mx * 0.75 + tg.x * 0.25 + Math.sin(M.time * 1.3 + p.i * 2.1) * 0.6; const py = my * 0.75 + tg.y * 0.25 + Math.cos(M.time * 1.1 + p.i * 1.4) * 0.6;
+      if (p.role === 'DF' && own) { const hold = defLine(wx(ball.x, t)) + tac.line * 3 - 1.5; if (wx(px, t) < hold) px = wx(Math.min(hold, Math.max(wx(ball.x, t) - 3, 6)), t); } // 마크를 따라가도 수비 라인 밑으로는 내려가지 않는다 (공이 발에 있는 동안. 패스가 뜨면 따라 내려감)
+      moveTo(p, px, py, 1.05, dt);
       if (ball.passTarget === mk && !ball.owner) { // 마크 상대에게 오는 패스: 받기 전에 닿을 수 있으면 선로로 나가 끊는다
         const bs = Math.hypot(ball.vx, ball.vy) || 1, tm = d(ball, mk) / bs, ti = interceptT(s, p);
         if (ti < tm + 0.05 && ti < 1.5) { const q = intercept(s, p); chase(p, q.x, q.y, 1.25, dt); continue; }
