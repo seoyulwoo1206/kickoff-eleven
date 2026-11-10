@@ -17,7 +17,8 @@ import { Renderer } from './render/canvas2d';
 import { ThreeRenderer } from './render/three/scene';
 import type { IRenderer, CamMode } from './render/types';
 import { opts, loadOpts, saveOpts } from './options';
-import { audio, ensureAudio, crowdStart, crowdStop, crowdSwell, sfx } from './audio';
+import { audio, ensureAudio, crowdStart, crowdStop, crowdSwell, sfx, anthem, anthemStop } from './audio';
+import { showIntro, hideIntro } from './ui/intro';
 import { NET, LOCAL, initPeer, netSend, netClose, netHost, netJoin, netPing } from './net/peer';
 import { makeSnap, netInterp, applyNetInput, encodeInput, type NetMsg, type StartCfg, type Snap, type SnapBuf } from './net/protocol';
 import { updateHud, resetHud, showBanner, hideBanner } from './ui/hud';
@@ -55,6 +56,11 @@ audio.on = opts.sound; applySquadStrength();
 let cup: Cup | null = loadCup();
 let cupMatch = false; // 지금 경기가 토너먼트 경기인가
 let introT = 0;
+const INTRO_LEN = 9.2; // 입장 연출(라인업 소개 + 음악) 길이. 아무 키·클릭으로 건너뛴다
+function endIntro() { introT = 0; hideIntro(); anthemStop(); R.setCamMode?.(camMode); }
+function skipIntro() { if (introT > 0 && introT < INTRO_LEN - 0.5) { endIntro(); lastTs = 0; } }
+window.addEventListener('keydown', e => { if (introT > 0 && introT < INTRO_LEN - 0.5 && state === 'play') { skipIntro(); if (e.code !== 'Escape' && e.code !== 'KeyP') { e.stopImmediatePropagation(); e.preventDefault(); } } }, true);
+document.getElementById('intro')!.addEventListener('pointerdown', () => skipIntro());
 function startMatch(cfg?: StartCfg) {
   // 온라인: 호스트가 설정(cfg)을 만들어 게스트에게 보내고, 양쪽이 같은 cfg로 경기를 구성한다
   if (opts.mode === 'net') {
@@ -76,14 +82,14 @@ function startMatch(cfg?: StartCfg) {
     tactics: net ? [null, null] : [menuTac[0], menuTac[1]], lineups: net ? [null, null] : [menuLineup[0], menuLineup[1]],
     knockout: cupMatch && !!cup && cup.stage !== 'group', shootoutOnly: opts.mode === 'pk',
   }, INP);
-  introT = (net || opts.mode === 'pk') ? 0 : 3.2; if (introT > 0) R.setCamMode?.('intro');
+  introT = (net || opts.mode === 'pk') ? 0 : INTRO_LEN; if (introT > 0) R.setCamMode?.('intro');
   renderPauseTactics();
   if (NET.role === 'guest') { snapBuf.buf = []; snapBuf.off = null; }
   R.reset(); acc = 0; simLast = 0; state = 'play';
   $('menu').hidden = true; $('result').hidden = true; $('pause').hidden = true; $('hud').hidden = false; $('pauseBtn').hidden = false; $('touch').hidden = !isTouch;
   $('hPing').hidden = !net; showPing();
   resetHud(); drain(sim); updateHud(sim, LOCAL()); crowdStart();
-  if (introT > 0) showBanner(`${a.code} vs ${b.code}`, `${a.name} · ${b.name}`, 3000, false); // 입장 배너 (킥오프 배너 뒤에)
+  if (introT > 0) { showIntro(sim, opts.names, cupMatch && cup ? '월드컵' : '친선 경기'); anthem(); } else { hideIntro(); anthemStop(0.1); } // 입장: 선발 라인업 + 음악
   saveOpts();
 }
 /** 시뮬이 내보낸 연출 이벤트를 처리하고, 호스트면 게스트에게도 보낸다 */
@@ -300,7 +306,7 @@ function frame(ts: number) {
   requestAnimationFrame(frame); const now = ts / 1000; const rawDt = lastTs ? now - lastTs : STEP, dt = Math.min(0.1, rawDt); lastTs = now; perf = now;
   pollGamepads({ inp: INP[0], isPlaying: () => state === 'play', togglePause: () => { if (state === 'play') pauseGame(); else if (state === 'paused') resumeGame(); } });
   if (sim && sim.M.slow > 0 && !NET.role) sim.M.slow = Math.max(0, sim.M.slow - dt);
-  if (introT > 0) { introT -= dt; if (introT <= 0) { R.setCamMode?.(camMode); lastTs = now; } }
+  if (introT > 0) { if (state === 'play') introT -= dt; if (introT <= 0) { endIntro(); lastTs = now; } }
   if (state === 'play' && sim) {
     if (NET.role === 'guest') netInterpNow();
     else if (NET.role !== 'host' && introT <= 0) runSteps(dt);

@@ -6,7 +6,7 @@ import { grassTexture, grassDetail, netTexture, adTexture, ADS, skyTexture } fro
 import type { Quality } from '../types';
 
 export interface Net { mesh: THREE.Mesh; base: Float32Array; side: number; shake: number; }
-export interface Stadium { group: THREE.Group; nets: Net[]; crowd: THREE.InstancedMesh[]; crowdBase: Float32Array[]; }
+export interface Stadium { group: THREE.Group; nets: Net[]; crowd: THREE.InstancedMesh[]; crowdBase: Float32Array[]; near: THREE.Object3D[]; } // near: 카메라 쪽(큰 y) 관중석 — 중계 카메라에선 숨긴다
 
 const rnd = Math.random;
 const LINE = 0.12;
@@ -108,7 +108,7 @@ function buildGoals(): { group: THREE.Group; nets: Net[] } {
 }
 /** 관중석: 계단 프로필을 길이 방향으로 돌출. 한 면씩 네 방향 */
 function buildStands(q: Quality) {
-  const g = new THREE.Group(), crowd: THREE.InstancedMesh[] = [], crowdBase: Float32Array[] = [];
+  const g = new THREE.Group(), crowd: THREE.InstancedMesh[] = [], crowdBase: Float32Array[] = [], near: THREE.Object3D[] = [];
   const ROWS = 14, STEP_D = 1.5, STEP_H = 0.85, GAP = 13; // 터치라인에서 관중석까지
   const standMat = new THREE.MeshStandardMaterial({ color: 0x262c36, roughness: 0.9 });
   const seatMat = new THREE.MeshStandardMaterial({ color: 0x1c2733, roughness: 0.9 });
@@ -152,9 +152,10 @@ function buildStands(q: Quality) {
     }
     inst.count = k; inst.instanceMatrix.needsUpdate = true; if (inst.instanceColor) inst.instanceColor.needsUpdate = true;
     holder.add(inst); crowd.push(inst); crowdBase.push(base);
+    if (sd.cz > H) near.push(holder); // 카메라 쪽 관중석
     g.add(holder);
   }
-  return { group: g, crowd, crowdBase };
+  return { group: g, crowd, crowdBase, near };
 }
 function buildFloodlights() {
   const g = new THREE.Group(), mat = new THREE.MeshStandardMaterial({ color: 0x6b7280, roughness: 0.7, metalness: 0.4 });
@@ -176,7 +177,7 @@ export function buildStadium(q: Quality): Stadium {
   group.add(buildGround(), buildTrack(), buildPitch(), buildLines(), buildBoards(), buildFloodlights(), buildSky());
   const goals = buildGoals(); group.add(goals.group);
   const stands = buildStands(q); group.add(stands.group);
-  return { group, nets: goals.nets, crowd: stands.crowd, crowdBase: stands.crowdBase };
+  return { group, nets: goals.nets, crowd: stands.crowd, crowdBase: stands.crowdBase, near: stands.near };
 }
 /** 그물 흔들림: 골 직후 뒤 그물이 출렁인다 */
 export function updateNets(nets: Net[], dt: number) {

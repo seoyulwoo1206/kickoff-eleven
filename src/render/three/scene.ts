@@ -157,6 +157,7 @@ export class ThreeRenderer implements IRenderer {
     this.fps += (1 / Math.max(1e-3, dtR) - this.fps) * 0.05;
     if (sim) this.syncModels(sim); else if (this.modelSim) { for (const m of this.models.values()) this.scene.remove(m.root); this.models.clear(); this.modelSim = null; }
     this.updateCamera(sim, dtR, perf);
+    { const hide = !this.replay && (this.mode === 'tv' || this.mode === 'top'); for (const o of this.stadium.near) o.visible = !hide; } // 중계 카메라는 가까운 쪽 관중석 자리까지 내려가므로 그 관중석을 그리지 않는다
     if (!paused) { this.updatePuffs(dtR); updateNets(this.stadium.nets, dtR); this.updateCrowd(sim, dtR); }
     if (sim) {
       const { HU, M } = sim;
