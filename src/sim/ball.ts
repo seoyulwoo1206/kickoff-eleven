@@ -185,6 +185,7 @@ export function throughPass(s: Sim, p: Player, ang: number, power = 0, maxR = po
   const t = p.t, opps = s.team[1 - t].filter(o => !o.off), line = offsideLine(s, t);
   let best: { sc: number; m: Player; a: number; v: number } | null = null;
   const speeds = power > 0.5 ? [27, 24, 21, 18, 15] : [24, 21, 18, 15, 12];
+  const VOK = !s.HU[t] ? 22 : power > 0.5 ? 17 : 13; // 받는 순간 이 속도를 넘는 만큼 감점: 필요한 만큼만 세게 찬다 (전엔 10m 앞 동료에게도 늘 24m/s — 놓치면 30m 넘게 굴러갔다). AI 팀은 22 그대로: 13으로 하면 리그 골 1.30→0.83
   for (const off of [0, -0.21, 0.21]) {
     const a = ang + off, ax = Math.cos(a), ay = Math.sin(a);
     for (const m of s.team[t]) {
@@ -208,7 +209,7 @@ export function throughPass(s: Sim, p: Player, ang: number, power = 0, maxR = po
         let outSoon = 0; { let v2 = meet.v, d2 = 0; for (let k = 0; k < 7 && v2 > 1; k++) { v2 = Math.max(0, v2 - (FA + FB * v2) * 0.1); d2 += v2 * 0.1; const ox = meet.x + ax * d2, oy = meet.y + ay * d2; if (oy < 0 || oy > H) { outSoon = 2; break; } if (ox < 0 || ox > W) { outSoon = k < 4 ? 1 : 0; break; } } } // 터치라인(스로인)은 0.7초, 골라인은 0.4초 안
         let open = 99; for (const o of opps) open = Math.min(open, Math.hypot(o.x + o.vx * Math.min(meet.tt, 0.5) - meet.x, o.y + o.vy * Math.min(meet.tt, 0.5) - meet.y));
         const prog = wx(meet.x, t) - wx(p.x, t), lead = wx(meet.x, t) - wx(m.x, t); // 전진 거리, 받는 선수 앞으로 내준 거리
-        const sc = Math.min(prog, 22) / 6 + clamp(lead, -3, 8) / 4 + Math.min(open, 8) / 3 - meet.tt * 0.4 - (cut ? 3 : 0) - Math.max(0, meet.v - 22) / 4 - (off ? 0.5 : 0)
+        const sc = Math.min(prog, 22) / 6 + clamp(lead, -3, 8) / 4 + Math.min(open, 8) / 3 - meet.tt * 0.4 - (cut ? 3 : 0) - Math.max(0, meet.v - VOK) / 3.5 - (off ? 0.5 : 0)
           + Math.max(0, m.vx * ax + m.vy * ay) / 4 - (wx(m.x, t) > line + 1.0 ? 3 : 0) + Math.min((rx * Math.cos(ang) + ry * Math.sin(ang)) / rq, 0.96) / 0.96 * 7 + (m.runT > 0 ? 1.5 : 0) - (nearBlock(s, p, meet, t) ? 3 : 0) - outSoon; // outSoon: 한 발 늦으면 선 밖으로 나갈 공 (터치라인 2, 골라인 1) // 조준한 동료가 최우선(±16° 안은 동점). 스루는 앞 공간으로: 전진·리드 우대, 조준 방향·침투 중인 동료 우대, 선로를 끊길 공·받을 때 너무 빠른 공 감점
         if (!best || sc > best.sc) best = { sc, m, a, v: v0 };
       }
