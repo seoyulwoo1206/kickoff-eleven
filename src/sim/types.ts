@@ -24,7 +24,7 @@ export interface Player {
 }
 export interface Ball {
   x: number; y: number; z: number; vx: number; vy: number; vz: number;
-  owner: Player | null; lastTouch: number; passTarget: Player | null; kicker: Player | null; thru: boolean; /* thru: 스루패스로 찬 공 (구르는 동안 더 먼저 닿는 동료가 있으면 받는 선수를 바꾼다) */
+  owner: Player | null; lastTouch: number; passTarget: Player | null; kicker: Player | null; thru: boolean; shotT: number; /* shotT: 슛이 골문까지 날아가는 시간 어림 (키퍼가 볼 시간) */ /* thru: 스루패스로 찬 공 (구르는 동안 더 먼저 닿는 동료가 있으면 받는 선수를 바꾼다) */
   shot: number; isShot: boolean; spin: number; knock: Player | null;
   /** 마그누스 휨 (진행 방향에 수직인 가속, 부호 = 방향) */
   curl: number;

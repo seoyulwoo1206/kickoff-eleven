@@ -283,11 +283,16 @@ export function shoot(s: Sim, p: Player, power: number, aimY: number, finesseIn 
   if (!HU[t]) err *= DIFF[M.diff].err;
   ty = clamp(ty + err, CY - GH - 1.5, CY + GH + 1.5);
   const sp = (16 + 17 * power) * (0.92 + n(A.pow) * 0.1) * (finesse ? 0.85 : 1) * (volley ? 1.08 : 1), dx = gx - ball.x, dy = ty - ball.y, q = Math.hypot(dx, dy);
-  let vz = 1 + power * 4 * (0.3 + s.rnd() * 0.6); if (power > 0.85) vz *= 1.25; if (volley) vz += 1.5; // 최고 높이 1m 안팎
+  // 높이: 골라인을 지날 때의 목표 높이 zt를 정하고 거기 맞는 vz를 역산한다. 세게 찰수록 높고 들쭉날쭉(풀파워는 크로스바를 넘기도), 결정력이 좋으면 덜 흔들린다.
+  // 예전 식 vz=1+power×4×(.3~.9)는 중력 22에서 최고 높이가 8~75cm라 전부 깔아 차는 슛이었다
+  let zt = 0.3 + power * 1.1 + (s.rnd() * 2 - 1) * (0.45 + power * 0.55) * (1.45 - A.fin / 100 * 0.6); if (power > 0.85) zt += (power - 0.85) * 1.4; if (finesse) zt = 0.9 + s.rnd() * 0.9; if (volley) zt += 0.3;
+  zt = Math.max(0.05, zt);
+  let T = q / sp; T = q / (sp * (1 - (0.05 + 0.0038 * sp) * T * 0.5)); // 공기저항으로 조금 늦게 도착
+  const vz = (zt + G * T * T / 2) / T / (1 - (0.05 + 0.0038 * sp) * T * 0.3);
   // 감아차기: 조준점 바깥쪽으로 향했다가 안으로 휘어 들어온다
   const curlDir = finesse ? Math.sign(ty - CY) || 1 : 0, curl = finesse ? curlDir * (t === 0 ? 1 : -1) * (3.5 + n(A.fin) * 1.5) : 0;
   const a0 = Math.atan2(dy, dx) + (finesse ? -curlDir * (t === 0 ? 1 : -1) * 0.14 : 0);
-  p.dir = a0; kick(s, p, Math.cos(a0) * sp, Math.sin(a0) * sp, vz, curl); ball.isShot = true;
+  p.dir = a0; kick(s, p, Math.cos(a0) * sp, Math.sin(a0) * sp, vz, curl); ball.isShot = true; ball.shotT = dist / sp;
   kp.reactT = (HU[1 - t] ? 0.3 - n(kp.attrs.rea) * 0.08 : (0.32 - n(kp.attrs.rea) * 0.08) / DIFF[M.diff].gk) * (dist < 12 ? 0.8 : 1); // 키퍼 반응 지연
   M.stats.shots[t]++;
   if (dist < 30) crowdSwell(s, 0.1, 1.2);

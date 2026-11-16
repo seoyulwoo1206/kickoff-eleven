@@ -33,9 +33,11 @@ export function gkAI(s: Sim, k: Player, dt: number) {
       if (dk < dop - 1) { tx = lb; ty = ball.y; f = 1.3; }
     }
     if (ball.kicker && ball.kicker.t !== t && ball.shot !== k.lastSave && vlx < -4 && lb <= lk + 0.5 && lb > lk - 1.8 && Math.abs(ball.y - k.y) < 2.9 && ball.z < 2.7) { // 선방 판정
-      k.lastSave = ball.shot; const dy = Math.abs(ball.y - k.y), sp = Math.hypot(ball.vx, ball.vy), hi = ball.z > 1.6;
+      k.lastSave = ball.shot; const dy0 = Math.abs(ball.y - k.y), sp = Math.hypot(ball.vx, ball.vy), hi = ball.z > 1.6;
+      const dy = Math.hypot(dy0, Math.max(0, ball.z - 1.5)); // 손이 닿아야 하는 거리: 가슴(1.5m) 위로 뜬 만큼도 거리다 (구석 위는 어렵고, 정면 높은 공은 쉽다)
       if (ball.isShot && ball.kicker) M.stats.onT[ball.kicker.t]++; // 골문 안으로 온 슛 = 유효 슈팅
-      let pr = (dy < 0.5 && !hi ? 0.88 : skill * (1 - Math.max(0, dy - 0.5) / 3.2) * Math.max(0.8, 1 - Math.max(0, sp - 20) / 30)) * (hi ? 0.85 : 1);
+      let pr = dy < 0.5 ? 0.88 : skill * (1 - Math.max(0, dy - 0.5) / 3.2) * Math.max(0.8, 1 - Math.max(0, sp - 20) / 30);
+      if (ball.isShot) pr += (0.95 - pr) * clamp((ball.shotT - 0.35) / 0.5, 0, 1) * 0.8; // 날아오는 시간이 길수록(0.35초 넘는 만큼) 볼 시간이 있다 (뜬 공은 땅에서 안 느려지므로 이게 없으면 25m 풀파워가 42% 들어갔다)
       k.dive = 0.5; k.diveDir = Math.sign(ball.y - k.y) || 1;
       if (M.spType === 'penalty' && M.protect > 0) { // 페널티: 한쪽을 찍고 몸을 던진다 (사람 팀 키퍼는 스틱 방향)
         const I = h ? s.INP[t] : null; const guess = I && Math.abs(I.my) > 0.3 ? Math.sign(I.my) : I ? 0 : (s.rnd() < 0.5 ? 1 : -1);
