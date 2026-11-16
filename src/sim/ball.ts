@@ -26,7 +26,7 @@ export function kick(s: Sim, p: Player, vx: number, vy: number, vz = 0, curl = 0
   const { ball, M, team } = s; const thrown = M.throwIn === p; if (thrown) M.throwIn = null;
   ball.owner = null; ball.knock = null; ball.thru = false; ball.x = clamp(p.x + Math.cos(p.dir) * 0.8, 0.3, W - 0.3); ball.y = clamp(p.y + Math.sin(p.dir) * 0.8, 0.3, H - 0.3); ball.z = 0.01;
   ball.vx = vx; ball.vy = vy; ball.vz = vz; ball.curl = curl; p.kickCD = 0.3; p.kickWind = 0; ball.lastTouch = p.t; ball.kicker = p; ball.shot++; ball.isShot = false; sfx(s, 'kick');
-  if (!s.HU[1 - p.t]) M.react[1 - p.t] = DIFF[M.diff].react * 0.8; // 상대 AI는 패스를 읽는 데 잠깐 걸린다
+  M.react[1 - p.t] = DIFF[M.diff].react * (s.HU[1 - p.t] ? 0.6 : 0.8); // 상대 AI는 패스를 읽는 데 잠깐 걸린다 (사람 팀의 AI 동료도 — 0이면 AI의 패스가 37% 끊겨 사람 팀 상대로 슈팅이 경기당 0.3개였다. 커서 선수는 사람이 직접 읽는다)
   // 찬 순간의 오프사이드 위치 기록 (스로인은 제외)
   if (!thrown && (M.phase === 'live' || M.spType !== 'throw')) { const line = offsideLine(s, p.t); for (const m of team[p.t]) m.offs = m !== p && wx(m.x, p.t) > line + 0.3; }
   else for (const m of team[p.t]) m.offs = false;

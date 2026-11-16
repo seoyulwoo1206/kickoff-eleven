@@ -30,7 +30,8 @@ export function tryTackle(s: Sim, p: Player, own: Player | null, rate: number) {
   }
   if (q < 1.45) { // 겹침 밀어내기가 1.1m를 유지하므로 발을 뻗는 거리는 그보다 넓게
     const rush = soft && (p.vx * (own.x - p.x) + p.vy * (own.y - p.y)) / (q || 1) > 5.8; // 수비수 자신이 5.8m/s 넘게 달려들 때 (드리블러가 서 있는 수비에게 달려가는 건 해당 없음) // 달려들며 뻗는 발: 덜 정확하고, 헛디디면 그대로 지나친다
-    p.tackleCD = 0.45; let r = rate * (front ? 1.3 : hc ? 0.4 : 1) * (p.beatT > 0 ? 0.5 : 1) * (0.85 + n(p.attrs.stk) * 0.4) * (1 - n(own.attrs.bal) * 0.2) * expo * (loose ? 1.4 : 0.7); // 앞을 막고 선 수비가, 공이 발에서 떨어졌을 때 더 잘 뺏는다
+    p.tackleCD = 0.45; const side = Math.cos(own.dir) * (p.x - own.x) + Math.sin(own.dir) * (p.y - own.y) > -0.55 * q; // 옆(뒤 123° 밖)
+    let r = rate * (front ? 1.3 : !hc ? 1 : wx(own.x, own.t) > 88 ? 0.9 : side ? 0.7 : 0.4) * (p.beatT > 0 ? 0.5 : 1) * (0.85 + n(p.attrs.stk) * 0.4) * (1 - n(own.attrs.bal) * 0.2) * expo * (loose ? 1.4 : 0.7); // 앞을 막고 선 수비가, 공이 발에서 떨어졌을 때 더 잘 뺏는다
     const h = HU[own.t]; if (h && h.ctrl === own && INP[h.t].down.sprint) r *= 0.85;
     if (own.feint > 0) r *= 0.5; if (own.spin > 0) r *= 0.3; if (rush) r *= 0.7;
     if (soft && !loose && s.rnd() < 0.5) return; // 공이 발에 붙어 있으면 절반은 지켜본다 (덤비지 않고 기다림)
@@ -80,7 +81,7 @@ export function aiCarrier(s: Sim, p: Player, dt: number) {
     if (nd < 2.2 && p.skill >= 3 && p.feint <= 0 && s.rnd() < 0.03 * p.skill) { p.feint = 0.35; p.burst = 0.45; }
     const kp = team[1 - t][0], kpOut = Math.abs(kp.x - gx) > 7;
     const ang = Math.abs(Math.atan2(p.y - CY, Math.abs(gx - p.x))); // 골문을 보는 각 (0 = 정면)
-    if (dG < 30 && ang < 1.05) { const pr = (dG < 11 ? 0.97 : dG < 18 ? 0.8 : dG < 24 ? 0.35 : 0.12) * (0.8 + n(p.attrs.fin) * 0.4) * (1 - ang * 0.35); if (s.rnd() < pr) { if (kpOut && dG > 10 && s.rnd() < 0.6) queueKick(s, p, () => chipShot(s, p)); else { const fin = dG > 14 && dG < 24 && p.attrs.fin > 78 && s.rnd() < 0.5; const pw = 0.6 + s.rnd() * 0.3, ay = kp.y < CY ? 1 : -1; queueKick(s, p, () => shoot(s, p, pw, ay, fin)); } return; } }
+    if (dG < 30 && ang < 1.05) { const pr = (dG < 11 ? 0.97 : dG < 17 ? 0.75 : dG < 21 ? 0.22 : dG < 26 ? (nd > 4 ? 0.1 : 0.03) : 0.006) * (0.8 + n(p.attrs.fin) * 0.4) * (1 - ang * 0.35); /* 21m 밖에선 거의 안 쏜다 (전엔 슛의 절반이 22~26m 밖·성공 7%라 공격을 버렸다) */ if (s.rnd() < pr) { if (kpOut && dG > 10 && s.rnd() < 0.6) queueKick(s, p, () => chipShot(s, p)); else { const fin = dG > 14 && dG < 24 && p.attrs.fin > 78 && s.rnd() < 0.5; const pw = 0.6 + s.rnd() * 0.3, ay = kp.y < CY ? 1 : -1; queueKick(s, p, () => shoot(s, p, pw, ay, fin)); } return; } }
     const pressed = nd < 2.0;
     if (pressed || p.holdT > 0.9 || s.rnd() < 0.08) {
       const m = bestAIPass(s, p);

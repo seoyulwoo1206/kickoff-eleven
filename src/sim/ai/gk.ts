@@ -47,8 +47,11 @@ export function gkAI(s: Sim, k: Player, dt: number) {
       }
     }
   } else if (own.t !== t) {
-    if (lb < 16 && Math.abs(ball.y - CY) < 12 && d(k, own) < 9) { tx = Math.min(lb - 1.2, 7); ty = ball.y; f = 1.1; } // 1대1: 각도 좁히기
-    if (d(k, own) < 1.1 && k.tackleCD <= 0 && M.protect <= 0) { k.tackleCD = 0.4; if (s.rnd() < 0.5 * skill) { gain(s, k); own.kickCD = 0.5; } }
+    if (lb < 16 && Math.abs(ball.y - CY) < 12 && d(k, own) < 9) { tx = Math.min(lb - 1.2, 7); ty = ball.y; f = 1.1; if (d(k, own) < 3.2) { tx = lb; f = 1.3; } } // 1대1: 각도 좁히기, 코앞이면 공으로 몸을 던진다 // 1대1: 각도 좁히기
+    if (d(k, ball) < 1.75 && lb < 17 && k.tackleCD <= 0 && M.protect <= 0 && own.shield <= 0 && own.spin <= 0) { // 발밑 공 덮치기: 공이 발에서 떨어졌을 때(터치 직후·달릴 때) 더 잘 잡는다
+      k.tackleCD = 0.45; const loose = own.kickCD > 0 || Math.hypot(own.vx, own.vy) > 6; k.dive = 0.5; k.diveDir = Math.sign(ball.y - k.y) || 1;
+      if (s.rnd() < (loose ? 0.5 : 0.34) + skill * 0.45 - (own.feint > 0 ? 0.25 : 0)) { gain(s, k); own.kickCD = 0.5; own.stun = Math.max(own.stun, 0.3); sfx(s, 'tackle'); }
+    }
   }
   moveTo(k, wx(tx, t), ty, f, dt);
 }

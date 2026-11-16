@@ -13,6 +13,15 @@ import { gkAI } from './gk';
     옆·뒤에서 쫓는 수비수와 AI 드리블러 상대는 그대로 전속 */
 /** 드리블러가 어디로 갈지 수비가 읽는 양: 사람이 조작하는 선수는 눈에 비친(0.28초 늦은) 속도로 — 방향 전환에 한 박자 늦는다. AI 드리블러는 실제 속도 */
 function seen(s: Sim, c: Player) { const h = s.HU[c.t]; return h && h.ctrl === c ? { x: c.lagVx * 0.3, y: c.lagVy * 0.3 } : { x: c.vx * 0.25, y: c.vy * 0.25 }; }
+/** 드리블러 옆·뒤에 붙어 있으면(골 쪽 앞이 아니면) 드리블러와 우리 골 사이 1.3m 앞 지점으로 — 앞을 막아야 몸으로 세우고(integrate) 몸싸움·앞 태클이 된다.
+    옆에서 1.1m 간격으로 따라만 가면 드리블러가 골문까지 걸어 들어갔다(스틱만 앞으로 16분에 7골) */
+function blockPt(p: Player, c: Player, t: number) {
+  const gx = wx(0, t), ux = gx - c.x, uy = CY - c.y, L = Math.hypot(ux, uy) || 1, ax = ux / L, ay = uy / L;
+  const fwd = (p.x - c.x) * ax + (p.y - c.y) * ay, lat = Math.abs((p.x - c.x) * -ay + (p.y - c.y) * ax);
+  if (fwd > 0.6 && lat < 1.0) return null; // 이미 앞을 막고 있다 → 공으로
+  if (Math.hypot(p.x - c.x, p.y - c.y) > 6) return null; // 아직 멀면 곧장 다가간다
+  return { x: c.x + ax * 1.3, y: c.y + ay * 1.3 };
+}
 function jockey(s: Sim, p: Player, c: Player, v: number) {
   if (p.beatT > 0) return 0.9;
   const h = s.HU[c.t]; if (!h || h.ctrl !== c || d(p, c) > 3 || wx(c.x, c.t) > 78) return v;
@@ -103,7 +112,7 @@ export function teamAI(s: Sim, t: number, dt: number) {
     return { x: clamp(x - nx * sideSum * 3.5, 1, W - 1), y: clamp(y - ny * sideSum * 3.5, 2, H - 2) };
   };
   const pressing = !!(h && h.pressT > 0); // Q 압박 지원: 추격자는 더 빠르고 세게, 커버도 같이 붙는다
-  const pressMul = (tac.press === 0 ? 0.88 : tac.press === 2 ? 1.12 : 1) * (pressing ? 1.15 : 1), tk = (h ? 0.45 : D.tackle) * (tac.press === 2 ? 1.15 : tac.press === 0 ? 0.85 : 1) * (pressing ? 1.3 : 1), press = (h ? 1.18 : D.press) * pressMul;
+  const pressMul = (tac.press === 0 ? 0.88 : tac.press === 2 ? 1.12 : 1) * (pressing ? 1.15 : 1), tk = (h ? 0.4 : D.tackle) * (tac.press === 2 ? 1.15 : tac.press === 0 ? 0.85 : 1) * (pressing ? 1.3 : 1), press = (h ? 1.18 : D.press) * pressMul;
   // 압박 트리거: 공 가진 상대가 자기 골을 보고 있거나 터치가 커졌을 때 더 세게 달라붙는다
   const trig = carrier && carrier.t !== t && (carrier.kickCD > 0 || Math.cos(carrier.dir) * (t === 0 ? -1 : 1) > 0.3) ? 1.12 : 1;
   for (const p of team[t]) {
@@ -120,6 +129,7 @@ export function teamAI(s: Sim, t: number, dt: number) {
     if (p === chaser) {
       if (own || (knocker && knocker.t === t)) { if (!own) { const q = intercept(s, p); chase(p, q.x, q.y, 1.25, dt); continue; }
         const sv = seen(s, own); let tx = own.x + sv.x, ty = own.y + sv.y;
+        { const hc = HU[own.t]; if (hc && hc.ctrl === own) { const bk = blockPt(p, own, t); if (bk) { tx = bk.x + sv.x; ty = bk.y + sv.y; } } } // 사람이 조작하는 드리블러에게만 (AI끼리까지 걸면 리그 골 0.93→0.75)
         if (M.protect > 0) { const g = wx(0, t), ux = g - ball.x, uy = CY - ball.y, L = Math.hypot(ux, uy) || 1; tx = ball.x + ux / L * 5.5; ty = ball.y + uy / L * 5.5; }
         chase(p, tx, ty, jockey(s, p, own, press * trig), dt); tryTackle(s, p, own, tk * trig); // 3m 안에선 덤비지 않고 따라붙는 속도로
       } else { const q = intercept(s, p); chase(p, q.x, q.y, 1.25, dt); if (knocker && knocker.t !== t) tryTackle(s, p, knocker, tk * trig); } // 노크온 중인 상대는 공이 발에서 떨어져 있으니 발을 뻗어 끊는다
