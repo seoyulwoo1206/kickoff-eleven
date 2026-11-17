@@ -20,17 +20,20 @@ for (let g = 0; g < N; g++) {
     if (rel > 0 && --rel === 0) keyUp(I, relKey);
     if (p && s.M.phase === 'live') {
       if (o === p) {
+        if (I.down.shoot && rel === 0) keyUp(I, 'shoot');
         hold++; const gx = W - p.x, gy = CY - p.y, dG = Math.hypot(gx, gy); I.tx = gx / dG; I.ty = gy / dG * 0.5;
         if (!I.down.sprint) keyDown(I, 'sprint');
         let nd = 99; for (const q of s.team[1]) nd = Math.min(nd, Math.hypot(q.x - p.x, q.y - p.y));
+        const sp = s.M.setTaker === p && s.M.setAim; if (sp) { I.tx = 0; I.ty = 0; }
         if (rel === 0 && p.kickWind <= 0 && !p.pending) {
-          if (dG < 20 && Math.abs(gy) < 13) { relKey = 'shoot'; keyDown(I, relKey); rel = 10; }
+          if (sp) { if (s.M.setT > 0.6) { relKey = 'pass'; keyDown(I, relKey); rel = 3; } } // 세트피스: 조준 방향 동료에게 짧게
+          else if (dG < 20 && Math.abs(gy) < 13) { relKey = 'shoot'; keyDown(I, relKey); rel = 10; }
           else if (hold > 12 && (nd < 4 || hold > 80)) { // 가장 앞선 열린 동료 쪽으로 스루
             const ms = s.team[0].filter(m => m !== p && m.role !== 'GK' && !m.off && m.x > p.x + 4 && Math.hypot(m.x - p.x, m.y - p.y) < 36).sort((x, y) => y.x - x.x);
             if (ms[0]) { const m = ms[0], q = Math.hypot(m.x - p.x, m.y - p.y); I.tx = (m.x - p.x) / q; I.ty = (m.y - p.y) / q; relKey = 'through'; keyDown(I, relKey); rel = 3; hold = 0; }
           }
         }
-      } else { hold = 0; if (I.down.sprint) keyUp(I, 'sprint'); const tg = o && o.t === 1 ? o : bl, q = Math.hypot(tg.x - p.x, tg.y - p.y) || 1; I.tx = (tg.x - p.x) / q; I.ty = (tg.y - p.y) / q; if (o && o.t === 1) { if (!I.down.pass && rel === 0) keyDown(I, 'pass'); } else if (I.down.pass && rel === 0) keyUp(I, 'pass'); }
+      } else { hold = 0; if (I.down.sprint) keyUp(I, 'sprint'); const tg = o && o.t === 1 ? o : bl, q = Math.hypot(tg.x - p.x, tg.y - p.y) || 1; I.tx = (tg.x - p.x) / q; I.ty = (tg.y - p.y) / q; if (o && o.t === 1) { if (!I.down.shoot && rel === 0) keyDown(I, 'shoot'); } else if (I.down.shoot && rel === 0) keyUp(I, 'shoot'); }
     }
     step(s, STEP); t += STEP; s.ev.length = 0;
     const ow = bl.owner;

@@ -21,7 +21,7 @@ const pct = (a: number, b: number) => b ? `${(a / b * 100).toFixed(0)}%` : '-';
 
 /* ---------- 1) 1대1 드리블 ---------- */
 if (!ONLY || ONLY === '1') {
-  const MODES = ['직진', '직진 + 질주', '방향 전환(45°)', '방향 전환 + 질주', '헛다리 후 전환', '멈췄다 가기'] as const;
+  const MODES = ['직진', '직진 + 질주', '방향 전환(45°)', '방향 전환 + 질주', '헛다리 후 전환', '멈췄다 가기', '치달(옆 45°)', '치달(직진)'] as const;
   console.log('== 1대1 드리블: 공을 가진 채 수비수보다 2m 넘게 앞선 상태를 0.5초 유지하면 돌파 (6초 안)'); for (const i of [9, 6]) { const q = mk(false, 1).team[0][i]; console.log(`  (${q.name} ${q.pos} 속도 ${q.attrs.spd} 민첩 ${q.attrs.agi} 볼컨 ${q.attrs.ctl} 개인기 ${q.skill})`); }
   for (const who of [[9, '공격수'], [6, '미드필더']] as const) for (const mode of MODES) {
     let ok = 0, lost = 0, tsum = 0, bites = 0; const why: Record<string, number> = {};
@@ -36,11 +36,12 @@ if (!ONLY || ONLY === '1') {
         park(); const q = d(p, o), gdx = W - p.x, gdy = (CY - p.y) * 0.3, gl = Math.hypot(gdx, gdy) || 1; let sx = gdx / gl, sy = gdy / gl, sprint = false, mag = 1;
         if (mode === '직진 + 질주') sprint = true;
         if (mode !== '직진' && mode !== '직진 + 질주') {
-          if (phase === 0 && q < (mode === '헛다리 후 전환' ? 3.6 : 4.2)) { phase = 1; t1 = t; if (mode === '헛다리 후 전환') { keyDown(I, 'gkRush'); } }
+          const chi = mode === '치달(옆 45°)' || mode === '치달(직진)';
+          if (phase === 0 && q < (mode === '헛다리 후 전환' ? 3.6 : chi ? 4.6 : 4.2)) { phase = 1; t1 = t; if (mode === '헛다리 후 전환') { keyDown(I, 'gkRush'); } if (chi) keyDown(I, 'switch'); }
           if (phase === 1) {
-            if (mode === '헛다리 후 전환' && t - t1 > 0.05) keyUp(I, 'gkRush');
+            if (mode === '헛다리 후 전환' && t - t1 > 0.05) keyUp(I, 'gkRush'); if (chi && t - t1 > 0.05) keyUp(I, 'switch');
             if (mode === '멈췄다 가기') { if (t - t1 < 0.35) { mag = 0; } else { const a = 0.75 * side; sx = Math.cos(a); sy = Math.sin(a); sprint = true; if (t - t1 > 1.3) phase = 2; } }
-            else { const a = (mode === '헛다리 후 전환' ? 0.95 : 0.8) * side; sx = Math.cos(a); sy = Math.sin(a); sprint = mode !== '방향 전환(45°)'; if (t - t1 > 0.9) phase = 2; }
+            else { const a = (mode === '헛다리 후 전환' ? 0.95 : mode === '치달(직진)' ? 0 : 0.8) * side; sx = Math.cos(a); sy = Math.sin(a); sprint = mode !== '방향 전환(45°)'; if (t - t1 > 0.9) phase = 2; }
           } else if (phase === 2) sprint = mode !== '방향 전환(45°)';
         }
         I.tx = sx * mag; I.ty = sy * mag; if (sprint && !I.down.sprint) keyDown(I, 'sprint'); if (!sprint && I.down.sprint) keyUp(I, 'sprint');

@@ -3,7 +3,7 @@ import { clamp, d, wx } from '../util';
 import { DIFF } from '../../data/teams';
 import type { Sim, Player } from '../types';
 import { slideCheck, intercept, interceptT, offsideLine } from '../ball';
-import { chase, moveTo, targetFor, gapY, defLine } from '../move';
+import { steer, chase, moveTo, targetFor, gapY, defLine } from '../move';
 import { tryTackle, aiCarrier } from './carrier';
 import { gkAI } from './gk';
 
@@ -36,6 +36,14 @@ export function teamAI(s: Sim, t: number, dt: number) {
   const att = !!carrier && carrier.t === t, def = !!carrier && carrier.t !== t;
   const tac = M.tac[t], outs = team[t].filter(p => p.role !== 'GK' && p !== (h && h.ctrl) && !p.off);
   const humanOn = !!(h && h.ctrl && carrier && carrier.t !== t && d(h.ctrl, carrier) < 3); // 사람 커서 선수가 이미 붙어 있으면 수비수는 마크를 지킨다 (셋이 몰리면 뒷공간이 빈다)
+  // 상대가 아직 차지 않은 세트피스: 아무도 공으로 가지 않고(추격·커버 없음) 9.15m(스로인 2.5m) 밖에서 마크·대형만, 벽은 그대로 선다. 전엔 가장 가까운 선수가 5.5m 앞까지 와서 서고 둘째가 그 뒤에 붙었다
+  const dd = !!(M.dead && M.dead.t !== t), keepOff = (x: number, y: number) => {
+    if (!dd) return { x, y };
+    if (M.spType === 'penalty' && wx(x, 1 - t) > W - 17 && Math.abs(y - CY) < 20.5) x = wx(W - 18, 1 - t);
+    const dx = x - M.setX, dy = y - M.setY, q = Math.hypot(dx, dy), R = M.deadR + 0.5; if (q >= R) return { x, y };
+    const g = wx(0, t), ux = q > 0.01 ? dx / q : Math.sign(g - M.setX) || 1, uy = q > 0.01 ? dy / q : 0;
+    return { x: clamp(M.setX + ux * R, 1, W - 1), y: clamp(M.setY + uy * R, 1, H - 1) };
+  };
   let chaser: Player | null = null, cover: Player | null = null; const marks = new Map<Player, Player>(), supports = new Map<Player, { x: number; y: number }>();
   if (!carrier) {
     if (ball.passTarget && ball.passTarget.t === t) chaser = ball.passTarget;
@@ -55,6 +63,7 @@ export function teamAI(s: Sim, t: number, dt: number) {
     }
     if (carrier && !humanOn && wx(carrier.x, t) < 38) { const df = so.find(p => p !== chaser && p.role === 'DF' && d(p, carrier) < 14); if (df) cover = df; } // 수비 지역에선 가장 가까운 수비수가 마크를 버리고 드리블러 앞을 막는다
     if (h && h.second && so[2]) cover = so[2]; // 세컨드 디펜더: 둘째도 같이 압박
+    if (dd) { chaser = null; cover = null; }
     // 마크: 공 없는 상대를 위협 순(우리 골에 가까운 순)으로, 가까운 수비·미드필더가 골 쪽에서 막는다
     const g = wx(0, t), threats = team[1 - t].filter(o => o !== carrier && o.role !== 'GK' && !o.off).sort((a, b) => Math.abs(a.x - g) - Math.abs(b.x - g)).slice(0, 6);
     const free = outs.filter(p => p !== chaser && p !== cover && p.role !== 'FW');
@@ -71,6 +80,11 @@ export function teamAI(s: Sim, t: number, dt: number) {
       cands.forEach((p, i) => { const side = (i === 0 ? (c0.y < CY ? 1 : -1) : (c0.y < CY ? -1 : 1)); supports.set(p, { x: c0.x + fx * 9, y: clamp(c0.y + side * 9, 3, H - 3) }); });
     }
     if (knocker && !(h && h.ctrl === knocker)) chaser = knocker; // 우리 편 AI가 차 놓은 공은 그 선수가 쫓는다
+    if (M.setTaker && M.setTaker.t === t && M.setAim && M.dead === M.setTaker) { // 세트피스 조준: 조준점에 가장 가까운 동료 하나가 그 자리로 들어가 받는다 (3m 넘게 더 가까운 동료가 생기면 바뀜). 골문을 조준(직접 슛)하면 없음
+      const goalAim = wx(M.aimX, t) > W - 6 && Math.abs(M.aimY - CY) < 5.7; let best: Player | null = null, bd = 20;
+      if (!goalAim) for (const p of outs) { if (p === M.setTaker) continue; const q = Math.hypot(p.x - M.aimX, p.y - M.aimY) - (p === M.aimMan ? 3 : 0); if (q < bd) { bd = q; best = p; } }
+      M.aimMan = best;
+    }
     if (M.throwIn && M.throwIn.t === t) { // 스로인: 가까운 둘이 받으러 온다 (터치라인 따라 앞 7m, 안쪽 뒤 10m) — 없으면 30m 안에 던질 곳이 없을 때가 있었다
       const th = M.throwIn, sy = th.y < CY ? 1 : -1, near = outs.filter(p => p !== th).sort((a, b) => d(a, th) - d(b, th)).slice(0, 2); supports.clear();
       if (near[0]) supports.set(near[0], { x: th.x + fx * 7, y: clamp(th.y + sy * 4.5, 3, H - 3) });
@@ -121,6 +135,7 @@ export function teamAI(s: Sim, t: number, dt: number) {
     if (p.slide > 0) { slideCheck(s, p); continue; }
     if (p.role === 'GK') { gkAI(s, p, dt); continue; }
     if (own === p) { aiCarrier(s, p, dt); continue; }
+    if (dd && M.wall.includes(p)) { steer(p, 0, 0, dt); p.dir = Math.atan2(M.setY - p.y, M.setX - p.x); continue; } // 벽은 찰 때까지 서 있는다
     if (p.runT > 0 && (att || (!own && ball.lastTouch === t))) { // 침투 지시: 지시 방향으로 질주하되 오프사이드 라인 안에서
       const line = offsideLine(s, t); let tx = p.x + Math.cos(p.runDir) * 12, ty = clamp(p.y + Math.sin(p.runDir) * 12, 2, H - 2);
       if (wx(tx, t) > line - 0.4) tx = wx(line - 0.4, t);
@@ -145,16 +160,17 @@ export function teamAI(s: Sim, t: number, dt: number) {
       const md = tac.press === 2 ? 1.6 : tac.press === 0 ? 2.8 : 2.2, mx = mk.x + ux / L * md, my = mk.y + uy / L * md;
       let px = mx * 0.75 + tg.x * 0.25 + Math.sin(M.time * 1.3 + p.i * 2.1) * 0.6; const py = my * 0.75 + tg.y * 0.25 + Math.cos(M.time * 1.1 + p.i * 1.4) * 0.6;
       if (p.role === 'DF' && own) { const hold = defLine(wx(ball.x, t)) + tac.line * 3 - 1.5; if (wx(px, t) < hold) px = wx(Math.min(hold, Math.max(wx(ball.x, t) - 3, 6)), t); } // 마크를 따라가도 수비 라인 밑으로는 내려가지 않는다 (공이 발에 있는 동안. 패스가 뜨면 따라 내려감)
-      moveTo(p, px, py, 1.05, dt);
+      { const k = keepOff(px, py); moveTo(p, k.x, k.y, 1.05, dt); }
       if (ball.passTarget === mk && !ball.owner) { // 마크 상대에게 오는 패스: 받기 전에 닿을 수 있으면 선로로 나가 끊는다
         const bs = Math.hypot(ball.vx, ball.vy) || 1, tm = d(ball, mk) / bs, ti = interceptT(s, p);
         if (ti < tm + 0.05 && ti < 1.5) { const q = intercept(s, p); chase(p, q.x, q.y, 1.25, dt); continue; }
       }
       if (ball.passTarget === mk) tryTackle(s, p, carrier, tk * 0.5); continue;
     }
+    if (p === M.aimMan && M.setTaker && M.setTaker.t === t) { const line = offsideLine(s, t); moveTo(p, wx(Math.min(wx(M.aimX, t), line - 0.6), t), M.aimY, 1.2, dt); continue; }
     const sp = supports.get(p);
     if (sp) { const line = offsideLine(s, t), lx = Math.min(wx(sp.x, t), line - 0.8), o = openLane(wx(lx, t), sp.y); moveTo(p, o.x, o.y, h && Math.hypot(o.x - p.x, o.y - p.y) > 6 ? 1.2 : 1.05, dt); continue; }
-    let tg = targetFor(s, p, att, def); if (att && carrier && p.role !== 'DF') tg = openLane(tg.x, tg.y);
+    let tg = targetFor(s, p, att, def); if (att && carrier && p.role !== 'DF') tg = openLane(tg.x, tg.y); tg = keepOff(tg.x, tg.y);
     const q = Math.hypot(tg.x - p.x, tg.y - p.y), ahead = wx(tg.x, t) - wx(p.x, t);
     moveTo(p, tg.x, tg.y, h && att && ahead > 5 ? (p.role === 'DF' ? 1.1 : 1.2) : q > 7 ? 1.05 : 0.78, dt); // 공격 때 앞으로 멀리 가야 하면 질주로 따라붙는다
   }

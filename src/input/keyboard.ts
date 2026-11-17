@@ -1,8 +1,8 @@
 import { keyDown, keyUp, ACTS, type Act, type Dir, type Inp } from './actions';
 
 export type Key = Act | Dir;
-/* P1: 방향키 + S/A/W/D/Z/Q/X/E (FC 온라인 배치, Q 침투/압박 지원, X 개인기/GK 돌진). P2: IJKL + B/V/N/M/./U/,/Space */
-const K1_DEFAULT: Record<string, Key> = { ArrowLeft: 'left', ArrowRight: 'right', ArrowUp: 'up', ArrowDown: 'down', KeyS: 'pass', KeyA: 'lob', KeyW: 'through', KeyD: 'shoot', KeyZ: 'chip', KeyQ: 'run', KeyX: 'gkRush', KeyE: 'sprint', ShiftLeft: 'switch' };
+/* P1: 방향키 + S/A/W/D/Z/Q/X/E/Shift/C (FC 온라인 배치 — 뜻은 actions.ts 맨 위). P2: IJKL + B/V/N/M/./U/,/Space/H/O */
+const K1_DEFAULT: Record<string, Key> = { ArrowLeft: 'left', ArrowRight: 'right', ArrowUp: 'up', ArrowDown: 'down', KeyS: 'pass', KeyA: 'lob', KeyW: 'through', KeyD: 'shoot', KeyZ: 'chip', KeyQ: 'run', KeyX: 'gkRush', KeyE: 'sprint', ShiftLeft: 'switch', KeyC: 'jockey' };
 export let K1: Record<string, Key> = { ...K1_DEFAULT };
 /** 키 설정 변경 (null이면 기본으로). 저장된 설정에 없는 새 액션은 기본 키를 붙인다 (그 키를 쓰던 액션은 자기 기본 키로 옮김) */
 export function setK1(m: Record<string, Key> | null) {
@@ -19,7 +19,7 @@ export function setK1(m: Record<string, Key> | null) {
     }
   }
 }
-export const K2: Record<string, Key> = { KeyJ: 'left', KeyL: 'right', KeyI: 'up', KeyK: 'down', KeyB: 'pass', KeyV: 'lob', KeyN: 'through', KeyM: 'shoot', Period: 'chip', KeyU: 'run', Comma: 'gkRush', Space: 'sprint', ShiftRight: 'sprint', KeyH: 'switch' };
+export const K2: Record<string, Key> = { KeyJ: 'left', KeyL: 'right', KeyI: 'up', KeyK: 'down', KeyB: 'pass', KeyV: 'lob', KeyN: 'through', KeyM: 'shoot', Period: 'chip', KeyU: 'run', Comma: 'gkRush', Space: 'sprint', ShiftRight: 'sprint', KeyH: 'switch', KeyO: 'jockey' };
 
 export interface KeyboardHooks {
   inp: [Inp, Inp];
@@ -29,7 +29,7 @@ export interface KeyboardHooks {
   hasLocalP2: () => boolean;
   /** P/Esc */
   togglePause: () => void;
-  /** C: 카메라 전환 */
+  /** F: 카메라 전환 (C는 FC 온라인처럼 수비 자세 키) */
   cycleCamera: () => void;
   cycleView: () => void;
   toggleXt?: () => void;
@@ -43,7 +43,7 @@ export function installKeyboard(h: KeyboardHooks) {
   window.addEventListener('keydown', e => {
     if (e.target && (e.target as HTMLElement).tagName === 'INPUT') return;
     if (e.code === 'Escape' || e.code === 'KeyP') { h.togglePause(); e.preventDefault(); return; }
-    if (e.code === 'KeyC' && !e.repeat) { h.cycleCamera(); return; }
+    if (e.code === 'KeyF' && !e.repeat && !route('KeyF')) { h.cycleCamera(); return; }
     if (e.code === 'KeyR' && !e.repeat && !route('KeyR')) { h.cycleView(); return; }
     if (e.code === 'KeyG' && !e.repeat && !route('KeyG')) { h.toggleXt?.(); return; }
     if (!h.isPlaying()) return; const r = route(e.code); if (!r) return; e.preventDefault(); keyDown(h.inp[r[0]], r[1], e.repeat);

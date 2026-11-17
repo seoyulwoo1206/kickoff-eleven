@@ -22,8 +22,24 @@ export function knockOn(s: Sim, p: Player) {
   ball.owner = null; ball.x = clamp(p.x + Math.cos(a) * 0.8, 0.3, W - 0.3); ball.y = clamp(p.y + Math.sin(a) * 0.8, 0.3, H - 0.3); ball.z = 0; ball.vz = 0;
   ball.vx = Math.cos(a) * v; ball.vy = Math.sin(a) * v; ball.lastTouch = p.t; ball.kicker = p; ball.passTarget = null; ball.knock = p; ball.isShot = false; ball.curl = 0; p.kickCD = close ? 0.12 : 0.18; ball.spin += 0.5;
 }
+/** 치달(치고 달리기): 공을 10m쯤 굴러가게 길게 차 놓고 전속으로 쫓는다 (공과 3~4m까지 벌어졌다가 1초쯤 뒤 다시 잡는다). 빈 공간에선 드리블보다 빠르지만(공 없이 뛰는 속도 + 가속), 다시 닿을 때까지 공은 주인이 없다 */
+export function bigKnock(s: Sim, p: Player, ang: number) {
+  const { ball, M } = s, sp = Math.hypot(p.vx, p.vy), c = n(p.attrs.ctl);
+  const a = ang + (s.rnd() - 0.5) * (0.16 - c * 0.1), q = 8.5 + sp * 0.35 - c * 0.8, v = Math.max(groundSpeed(q, 5.5), sp + 6 - c); // 달리던 속도보다 초속 5~6m 빠르게 (그래야 공이 앞으로 벌어진다)
+  if (!s.HU[1 - p.t]) M.react[1 - p.t] = Math.max(M.react[1 - p.t], DIFF[M.diff].react * 0.5);
+  // 역동작: 5m 안에서 다가오던 AI 수비수 옆(25°~125°)으로 쳐 내면 그 수비수는 한 박자 늦는다(beatT — 차 놓은 공을 못 건드리고 0.9배로 쫓는다). 정면으로 찬 공은 그대로 수비 발에 간다
+  for (const o of s.team[1 - p.t]) {
+    if (o.off || o.role === 'GK' || o.stun > 0 || o.beatT > 0) continue; const h2 = s.HU[o.t]; if (h2 && h2.ctrl === o) continue;
+    const dx = o.x - p.x, dy = o.y - p.y, od = Math.hypot(dx, dy); if (od > 5 || od < 0.1) continue;
+    const off = Math.abs(angDiff(a, Math.atan2(dy, dx))); if (off < 0.45 || off > 2.2) continue;
+    const closing = -(o.vx * dx + o.vy * dy) / od, diff = s.HU[o.t] ? 1 : clamp(DIFF[M.diff].react / 0.28, 0.6, 1.4);
+    if (s.rnd() < clamp(0.3 + closing * 0.07 + n(p.attrs.acc) * 0.2 + n(p.attrs.spd) * 0.15 - n(o.attrs.rea) * 0.2 - n(o.attrs.agi) * 0.1, 0.1, 0.85) * diff) { o.beatT = 1.2; o.stun = Math.max(o.stun, 0.25); }
+  }
+  ball.owner = null; ball.x = clamp(p.x + Math.cos(a) * 0.8, 0.3, W - 0.3); ball.y = clamp(p.y + Math.sin(a) * 0.8, 0.3, H - 0.3); ball.z = 0; ball.vz = 0;
+  ball.vx = Math.cos(a) * v; ball.vy = Math.sin(a) * v; ball.lastTouch = p.t; ball.kicker = p; ball.passTarget = null; ball.knock = p; ball.thru = false; ball.isShot = false; ball.curl = 0; p.kickCD = 0.55; p.burst = Math.max(p.burst, 1.5); ball.spin += 1; sfx(s, 'kick'); // kickCD: 그동안은 다시 못 건드린다 (0.22면 0.8m 앞의 공을 바로 다시 잡아, 공은 발에 붙은 채 가속만 계속 받았다)
+}
 export function kick(s: Sim, p: Player, vx: number, vy: number, vz = 0, curl = 0) {
-  const { ball, M, team } = s; const thrown = M.throwIn === p; if (thrown) M.throwIn = null; if (M.setTaker === p) M.setTaker = null;
+  const { ball, M, team } = s; const thrown = M.throwIn === p; if (thrown) M.throwIn = null; if (M.setTaker === p) M.setTaker = null; ball.setp = M.dead === p && !thrown; if (M.dead === p) { M.dead = null; M.wall = []; }
   ball.owner = null; ball.knock = null; ball.thru = false; ball.x = clamp(p.x + Math.cos(p.dir) * 0.8, 0.3, W - 0.3); ball.y = clamp(p.y + Math.sin(p.dir) * 0.8, 0.3, H - 0.3); ball.z = 0.01;
   ball.vx = vx; ball.vy = vy; ball.vz = vz; ball.curl = curl; p.kickCD = 0.3; p.kickWind = 0; ball.lastTouch = p.t; ball.kicker = p; ball.shot++; ball.isShot = false; sfx(s, 'kick');
   M.react[1 - p.t] = DIFF[M.diff].react * (s.HU[1 - p.t] ? 0.6 : 0.8); // 상대 AI는 패스를 읽는 데 잠깐 걸린다 (사람 팀의 AI 동료도 — 0이면 AI의 패스가 37% 끊겨 사람 팀 상대로 슈팅이 경기당 0.3개였다. 커서 선수는 사람이 직접 읽는다)
@@ -262,6 +278,67 @@ export function throwPick(s: Sim, p: Player, ang: number, far: boolean) {
   if (!best && !near) for (const m of s.team[p.t]) { if (m === p || m.role === 'GK' || m.off) continue; const q = d(m, p); if (q < nd) { nd = q; near = m; } } // 26m 안에 아무도 없으면 가장 가까운 동료 쪽으로라도 던진다
   return best ?? near;
 }
+/* ---------- 세트피스: 조준점으로 차기 + 궤적 미리보기 ---------- */
+type Vel = { vx: number; vy: number; vz: number };
+/** 띄운 공: (fx,fy)에서 (tx,ty)에 높이 zt로 T초쯤 뒤 닿는 초기 속도. 휘는 공(curl)은 휘는 만큼 처음 방향·세기를 수치로 맞춘다 */
+function planLoft(fx: number, fy: number, tx: number, ty: number, T: number, zt: number, curl: number): Vel {
+  const dx = tx - fx, dy = ty - fy, q = Math.hypot(dx, dy) || 1, ta = Math.atan2(dy, dx), vz = (zt + G * T * T / 2) / T / (1 - 0.06 * T); let a = ta, v = q / T;
+  for (let i = 0; i < 5; i++) {
+    const b = { vx: Math.cos(a) * v, vy: Math.sin(a) * v, vz, z: 0.01, curl }; let x = 0, y = 0;
+    for (let k = 0; k < 300; k++) { b.vz -= G * STEP; b.z += b.vz * STEP; airStep(b, STEP); x += b.vx * STEP; y += b.vy * STEP; if (b.vz < 0 && b.z <= zt) break; }
+    v *= q / Math.max(1, Math.hypot(x, y)); a += angDiff(Math.atan2(y, x), ta);
+  }
+  return { vx: Math.cos(a) * v, vy: Math.sin(a) * v, vz };
+}
+/** 슛: 수평 속도 sp로 차서 (tx,ty)를 높이 zt로 지나는 초기 속도 (슛 중력 SG) */
+function planShot(fx: number, fy: number, tx: number, ty: number, zt: number, sp: number, curl: number): Vel {
+  const dx = tx - fx, dy = ty - fy, q = Math.hypot(dx, dy) || 1, ta = Math.atan2(dy, dx), g = G * SG, ca = Math.cos(ta), sa = Math.sin(ta); let a = ta, vz = (zt + g * (q / sp) * (q / sp) / 2) / (q / sp);
+  for (let i = 0; i < 6; i++) {
+    const b = { vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, vz, z: 0.01, curl }; let x = 0, y = 0, tt = 0;
+    for (let k = 0; k < 360; k++) { b.vz -= g * STEP; b.z += b.vz * STEP; airStep(b, STEP); x += b.vx * STEP; y += b.vy * STEP; tt += STEP; if (x * ca + y * sa >= q) break; }
+    vz += (zt - b.z) / tt; a += angDiff(Math.atan2(y, x), ta);
+  }
+  return { vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, vz };
+}
+/** 조준점이 골문을 가리키는가 (골라인 6m 안·포스트 2m 안, 공이 골에서 40m 안) — 그러면 슛 키는 직접 슛 */
+export function setShotAim(s: Sim) { const { M } = s, k = M.setTaker; if (!k || !M.setAim) return false; return wx(M.aimX, k.t) > W - 6 && Math.abs(M.aimY - CY) < GH + 2 && Math.hypot(wx(W, k.t) - M.setX, CY - M.setY) < 40; }
+/** 세트피스 킥의 초기 속도 (미리보기와 실제 킥이 같은 식을 쓴다). loft 띄우기·drive 낮고 빠르게·shot 직접 슛. pw 0~1 = 누른 세기, e* = 실제 킥의 오차 */
+function setPlan(s: Sim, p: Player, kind: 'loft' | 'drive' | 'shot', pw: number, ex = 0, ey = 0, ez = 0) {
+  const { M } = s, t = p.t, fx = M.setX, fy = M.setY, dirx = t === 0 ? 1 : -1;
+  if (kind === 'shot') { // 감아차기: 포스트 바깥에서 출발해 골문 안쪽으로 휜다. 누른 세기 = 속도와 골라인에서의 높이(1.0~2.6m — 탭은 벽에 걸리고 끝까지 누르면 크로스바를 넘는다)
+    const gx = t === 0 ? W + 0.3 : -0.3, ty = clamp(M.aimY + ey, CY - GH - 1.5, CY + GH + 1.5), zt = Math.max(0.1, 1.0 + pw * 1.6 + ez), sp = (23.5 + 7.5 * pw) * (0.92 + n(p.attrs.pow) * 0.1);
+    const curl = Math.sign(CY - ty) * dirx * (3.5 + n(p.attrs.fin) * 1.5) * clamp(Math.abs(ty - CY) / 1.5, 0, 1);
+    return { v: planShot(fx, fy, gx, ty, zt, sp, curl), curl, shot: true };
+  }
+  const tx = M.aimX + ex, ty = M.aimY + ey, q = Math.hypot(tx - fx, ty - fy) || 1, box = wx(tx, t) > 80 && Math.abs(ty - CY) < 21, wide = Math.abs(fy - CY) > 13 && wx(fx, t) > 60;
+  let T = box ? clamp(0.42 + q / 40, 0.75, 1.3) : loftTime(q, 0); T = Math.max(T * (kind === 'drive' ? 0.74 : 1 - 0.18 * pw), q / 30);
+  const zt = box ? (kind === 'drive' ? 1.6 : 1.95) : 0.7, gx = wx(W, t);
+  const curl = wide ? Math.sign((tx - fx) * (CY - fy) - (ty - fy) * (gx - fx)) * (3 + n(p.attrs.cro) * 1.2) : 0; // 측면에서 올리는 공은 골문 쪽으로 감긴다
+  return { v: planLoft(fx, fy, tx, ty, T, zt, curl), curl, shot: false };
+}
+export function setKick(s: Sim, p: Player, kind: 'loft' | 'drive' | 'shot', pw: number) {
+  const { M, ball, team, HU } = s, t = p.t, A = p.attrs, tx = M.aimX, ty = M.aimY, fx = M.setX, fy = M.setY;
+  if (kind === 'shot') {
+    const dist = Math.hypot(wx(W, t) - fx, CY - fy), ey = (s.rnd() * 2 - 1) * (0.25 + dist * 0.03) * (1.22 - A.fin / 100) * (1 + pw * 0.6), ez = (s.rnd() * 2 - 1) * (0.15 + pw * 0.4) * (1.45 - A.fin / 100 * 0.6);
+    const pl = setPlan(s, p, 'shot', pw, 0, ey, ez), sp = Math.hypot(pl.v.vx, pl.v.vy), kp = team[1 - t][0];
+    p.dir = Math.atan2(pl.v.vy, pl.v.vx); kick(s, p, pl.v.vx, pl.v.vy, pl.v.vz, pl.curl); ball.isShot = true; xtEv(s, 'shot', t, p.num, p.x, p.y); ball.shotT = dist / sp;
+    kp.reactT = HU[1 - t] ? 0.3 - n(kp.attrs.rea) * 0.08 : (0.32 - n(kp.attrs.rea) * 0.08) / DIFF[M.diff].gk; M.stats.shots[t]++; crowdSwell(s, 0.1, 1.2); return;
+  }
+  const e = passErr(s, p, true) * 0.7, pl = setPlan(s, p, kind, pw, -(ty - fy) * e, (tx - fx) * e);
+  p.dir = Math.atan2(pl.v.vy, pl.v.vx); kick(s, p, pl.v.vx, pl.v.vy, pl.v.vz, pl.curl); M.stats.passA[t]++;
+  let m: Player | null = M.aimMan && !M.aimMan.off && Math.hypot(M.aimMan.x - tx, M.aimMan.y - ty) < 10 ? M.aimMan : null, bt = 1e9; if (!m) for (const o of team[t]) { if (o === p || o.off || o.role === 'GK') continue; const q = Math.hypot(o.x - tx, o.y - ty); if (q > 16) continue; const tt = q / o.speed; if (tt < bt) { bt = tt; m = o; } } // 조준점으로 들어와 있던 동료(없으면 떨어질 자리에 가장 먼저 닿을 동료)가 받는다
+  if (m) { ball.passTarget = m; const h = HU[t]; if (h) { h.ctrl = m; h.lock = 0.5; } }
+}
+/** 화면에 그릴 궤적: 지금 누르고 있는 키(슛을 모으는 중·롱패스를 누르는 중)와 세기 그대로, 아무것도 안 눌렀으면 조준점이 골문일 때 슛·아니면 띄우기 */
+export function setPreview(s: Sim): { pts: { x: number; y: number; z: number }[]; shot: boolean; kind: 'loft' | 'drive' | 'shot' } | null {
+  const { M, HU, INP } = s, p = M.setTaker; if (!p || !M.setAim || s.ball.owner !== p || p.kickWind > 0) return null;
+  const h = HU[p.t], I = INP[p.t]; if (!h) return null;
+  const goalAim = setShotAim(s), kind = h.charging ? (goalAim ? 'shot' : 'drive') : I.down.lob ? 'loft' : goalAim ? 'shot' : 'loft';
+  const pw = h.charging ? h.charge : I.down.lob ? clamp((I.holdT.lob - 0.1) / 0.5, 0, 1) : 0;
+  const pl = setPlan(s, p, kind, pw), g = G * (pl.shot ? SG : 1), b = { ...pl.v, z: 0.01, curl: pl.curl }, pts = [{ x: M.setX, y: M.setY, z: 0 }]; let x = M.setX, y = M.setY;
+  for (let k = 1; k <= 260; k++) { b.vz -= g * STEP; b.z += b.vz * STEP; airStep(b, STEP); x += b.vx * STEP; y += b.vy * STEP; const end = b.z <= 0 || x < -0.3 || x > W + 0.3 || y < -1 || y > H + 1; if (k % 3 === 0 || end) pts.push({ x, y, z: Math.max(0, b.z) }); if (end) break; }
+  return { pts, shot: pl.shot, kind };
+}
 export function chipShot(s: Sim, p: Player) {
   const { ball, M, team } = s;
   const t = p.t, gx = t === 0 ? W : 0, k = team[1 - t][0];
@@ -445,6 +522,13 @@ export function ballControl(s: Sim) {
   if (ball.z > 0.9 && best.role !== 'GK') { // 헤딩 / 가슴 트래핑
     { const dx = ball.x - best.x, dy = ball.y - best.y, q = Math.hypot(dx, dy); if (q > 0.45) { const k = (q - 0.45) / q; best.x += dx * k; best.y += dy * k; } } // 몸을 공에 갖다 댄다 (떨어진 채 공만 방향이 바뀌어 보이지 않게)
     const t = best.t, gx = t === 0 ? W : 0; const dG = Math.hypot(gx - best.x, CY - best.y), mine = ball.passTarget === best;
+    if (mine && ball.z > 1.5 && sp > 8) { // 공중볼 경합: 받는 선수 1.3m 안에 붙은 상대 필드 선수는 같이 뛰어올라 머리로 걷어 낼 수 있다 (헤딩·점프 대결). 없으면 받는 선수가 자리만 잡으면 코너킥 열에 아홉이 헤딩슛이 됐다
+      let o: Player | null = null, od = 1.3; for (const q of s.team[1 - t]) { if (q.off || q.role === 'GK' || q.stun > 0 || q.slide > 0) continue; const dd = d(q, best); if (dd < od) { od = dd; o = q; } }
+      if (o && s.rnd() < clamp(0.42 + (n(o.attrs.hea) + n(o.attrs.jmp) - n(best.attrs.hea) - n(best.attrs.jmp)) * 0.2 + (1.3 - od) * 0.12, 0.12, 0.8) * (ball.setp ? 1 : 0.25)) { // 세트피스는 수비가 자리를 잡고 기다린다. 흐르는 경기의 크로스는 그 0.25배 (0.4배면 크로스 받는 선수 첫 터치 92/96/85 → 85/86/78%)
+        const og = wx(0, o.t), a = Math.atan2(o.y - CY + (s.rnd() - 0.5) * 16, o.x - og) + (s.rnd() - 0.5) * 0.9, v = 9 + s.rnd() * 6; // 우리 골에서 멀어지는 쪽으로
+        ball.vx = Math.cos(a) * v; ball.vy = Math.sin(a) * v; ball.vz = 4 + s.rnd() * 4; ball.isShot = false; ball.passTarget = null; ball.curl = 0; ball.thru = false; ball.lastTouch = o.t; ball.kicker = o; ball.shot++; o.kickCD = 0.35; best.kickCD = 0.3; o.dir = a; sfx(s, 'kick'); return;
+      }
+    }
     if (dG < 13.5 && sp > 8 && (!mine || ball.z > 1.5)) { /* 골문 13.5m 안에서만 헤딩슛 (18m 밖 헤딩은 느리게 떠서 키퍼가 다 잡았다 — 그 밖에선 떨궈 잡는다) */ const kp = s.team[1 - t][0], dx = gx - ball.x, dy = CY + (kp.y < CY ? 2.2 : -2.2) + (s.rnd() - 0.5) * (5.5 - n(best.attrs.hea) * 3) - ball.y, q = Math.hypot(dx, dy); const hv = 17 + n(best.attrs.hea) * 6; /* 키퍼 반대쪽 구석을 노린다 */ { const T = q / hv, zt = 0.2 + s.rnd() * 1.5; ball.vz = (zt - ball.z + G * SG * T * T / 2) / T; } /* 골라인에서 0.2~1.7m 높이로 (예전엔 vz −1로 바로 땅에 떨어져 굴러갔다) */
       ball.vx = dx / q * hv; ball.vy = dy / q * hv; best.dir = Math.atan2(dy, dx); ball.lastTouch = t; ball.kicker = best; ball.shot++; ball.isShot = true; xtEv(s, 'shot', best.t, best.num, best.x, best.y); ball.shotT = Math.min(0.45, q / hv); best.kickCD = 0.3; M.stats.shots[t]++; sfx(s, 'kick'); }
     else { const z0 = ball.z; ball.vx *= 0.2; ball.vy *= 0.2; ball.vz = 0; ball.z = 0; gain(s, best); if (ball.owner === best) ball.z = z0; } // 머리·가슴으로 떨군다: 공은 받은 높이에서 발밑으로 내려온다 (updateBall, 0.3초쯤). 그 사이 차면 발리

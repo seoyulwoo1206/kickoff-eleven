@@ -27,7 +27,7 @@ function trial(mode: 'ai' | 'human', off: number, v: number, defIdx: number) {
   kick(s, p, v, (rnd() - 0.5) * 0.4, 0); s.ball.passTarget = m; s.M.react[1] = 0; // AI는 반응 지연 없이 (순수 판정)
   let t = 0, who: Player | null = null;
   while (t < 2.5) {
-    if (h) { const I = s.INP[1]; const dx = s.ball.x - o.x, dy = s.ball.y - o.y, q = Math.hypot(dx, dy) || 1; I.tx = dx / q; I.ty = dy / q; if (q < 2.5 && !I.down.pass) keyDown(I, 'pass'); }
+    if (h) { const I = s.INP[1]; const dx = s.ball.x - o.x, dy = s.ball.y - o.y, q = Math.hypot(dx, dy) || 1; I.tx = dx / q; I.ty = dy / q; if (q < 2.5 && !I.down.shoot) keyDown(I, 'shoot'); }
     step(s, STEP); s.ev.length = 0; t += STEP;
     if (s.ball.owner) { who = s.ball.owner; break; }
     if (s.ball.x > 70 || s.M.phase !== 'live') break;

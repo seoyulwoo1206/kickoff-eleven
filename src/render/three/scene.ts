@@ -11,6 +11,7 @@ import { ballTexture, puffTexture, ringTexture } from './textures';
 import { opts } from '../../options';
 import { displayName, shirtName } from '../../data/squads';
 import { backTarget } from '../../sim/human';
+import { setPreview } from '../../sim/ball';
 import { XT, drawMap } from '../../xt/view';
 
 interface Puff { sp: THREE.Sprite; vx: number; vz: number; life: number; t: number; }
@@ -128,6 +129,11 @@ export class ThreeRenderer implements IRenderer {
     const vh = VW / aspect * 1.5;
     // 카메라는 비스듬히 내려다보므로 화면 아래쪽(가까운 터치라인)은 조준점에서 가까운 거리까지만 보인다 → 아래 여유를 따로 계산
     const hf = this.camera.fov * Math.PI / 360, hc = Math.sin(ELEV) * L + 2, dh = Math.cos(ELEV) * L, near = Math.max(4, dh - hc / Math.tan(ELEV + hf));
+    if (sim && ball && sim.M.setTaker && sim.M.setAim && ball.owner === sim.M.setTaker) { // 세트피스 조준: 조준점이 화면 안에 들어오게 조준점 쪽으로 옮긴다 (공이 화면 밖으로 나가지는 않게)
+      const ax = sim.M.aimX, ay = sim.M.aimY, hw = VW / 2 - 6, up = vh / 2 - 8, dn = near - 4;
+      if (ay > ty + dn) ty = ay - dn; if (ay < ty - up) ty = ay + up; if (ball.y < ty - up) ty = ball.y + up; if (ball.y > ty + dn) ty = ball.y - dn;
+      if (ax > tx + hw) tx = ax - hw; if (ax < tx - hw) tx = ax + hw; if (ball.x > tx + hw) tx = ball.x - hw; if (ball.x < tx - hw) tx = ball.x + hw;
+    }
     tx = clamp(tx, VW / 2 - 9, W - VW / 2 + 9); ty = clamp(ty, vh / 2 - 12, H - near + 1.5);
     const k = 1 - Math.pow(0.004, dtR); cam.x += (tx - cam.x) * k; cam.y += (ty - cam.y) * k;
     let px: number, py: number, pz: number, lx = cam.x, ly = 0, lz = cam.y;
@@ -216,6 +222,19 @@ export class ThreeRenderer implements IRenderer {
         { const fp = this.toScreen(c.x, c.y, 0), bw = 30, bh = 3, bx = fp.x - bw / 2, by = fp.y + 4; ctx.fillStyle = 'rgba(9,17,27,.7)'; ctx.fillRect(bx - 1, by - 1, bw + 2, bh + 2); ctx.fillStyle = c.sta > 0.4 ? '#8fe3a3' : '#ff8a5c'; ctx.fillRect(bx, by, bw * c.sta, bh); } // 체력
         if (h.charging) { const fp = this.toScreen(c.x, c.y, 0), bw = 44, bh = 6, bx = fp.x - bw / 2, by = fp.y + 10; ctx.fillStyle = 'rgba(9,17,27,.85)'; ctx.fillRect(bx - 1, by - 1, bw + 2, bh + 2); ctx.fillStyle = h.charge > 0.8 ? '#ff5a4e' : h.col; ctx.fillRect(bx, by, bw * h.charge, bh); ctx.fillStyle = '#fff'; ctx.fillRect(bx + bw * 0.8, by - 2, 1.5, bh + 4); }
       } else { const cx2 = clamp(px, 24, cw - 24), cy2 = clamp(py, 24 + ins.t, ch - 24 - ins.b), a = Math.atan2(py - cy2, px - cx2); ctx.save(); ctx.translate(cx2, cy2); ctx.rotate(a); ctx.fillStyle = h.col; ctx.beginPath(); ctx.moveTo(12, 0); ctx.lineTo(-6, -8); ctx.lineTo(-6, 8); ctx.fill(); ctx.restore(); }
+    }
+    // 세트피스 조준: 지금 차면 날아갈 궤적(점)과 땅 그림자 선, 떨어질 자리(원)·골문을 지나는 자리(십자)
+    { const pv = setPreview(sim), hh = pv && M.setTaker ? HU[M.setTaker.t] : null;
+      if (pv && hh) {
+        const n = pv.pts.length, e = pv.pts[n - 1]; ctx.lineCap = 'round';
+        ctx.strokeStyle = 'rgba(9,17,27,.5)'; ctx.lineWidth = 2; ctx.setLineDash([5, 5]); ctx.beginPath(); pv.pts.forEach((q, i) => { const a = this.toScreen(q.x, q.y, 0.02); if (i) ctx.lineTo(a.x, a.y); else ctx.moveTo(a.x, a.y); }); ctx.stroke(); ctx.setLineDash([]);
+        for (let i = 1; i < n; i++) { const q = pv.pts[i], a = this.toScreen(q.x, q.y, q.z); if (!a.on) continue; ctx.globalAlpha = 0.95 - 0.35 * i / n; ctx.fillStyle = i % 2 ? '#ffffff' : hh.col; ctx.beginPath(); ctx.arc(a.x, a.y, 2.8, 0, 7); ctx.fill(); }
+        ctx.globalAlpha = 1; ctx.strokeStyle = hh.col; ctx.lineWidth = 2.5; ctx.beginPath(); let lx = 0, ly = 0;
+        if (pv.shot) { const a = this.toScreen(e.x, e.y, e.z); lx = a.x; ly = a.y - 14; ctx.arc(a.x, a.y, 8, 0, 7); ctx.moveTo(a.x - 13, a.y); ctx.lineTo(a.x + 13, a.y); ctx.moveTo(a.x, a.y - 13); ctx.lineTo(a.x, a.y + 13); }
+        else { for (let k = 0; k <= 20; k++) { const an = k / 20 * Math.PI * 2, a = this.toScreen(M.aimX + Math.cos(an) * 1.5, M.aimY + Math.sin(an) * 1.5, 0.02); if (k) ctx.lineTo(a.x, a.y); else ctx.moveTo(a.x, a.y); } const c = this.toScreen(M.aimX, M.aimY, 0.02); lx = c.x; ly = c.y - 16; }
+        ctx.stroke();
+        ctx.font = '800 12px "Saira Condensed","Arial Narrow",sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'bottom'; ctx.lineWidth = 3; ctx.strokeStyle = 'rgba(9,17,27,.8)'; const tx = pv.kind === 'shot' ? '직접 슛' : pv.kind === 'drive' ? '낮고 빠르게' : '띄우기'; ctx.strokeText(tx, lx, ly); ctx.fillStyle = '#fff'; ctx.fillText(tx, lx, ly);
+      }
     }
     // 침투 지시 화살표: 뛰는 동료 발 밑에서 지시 방향으로
     for (const p of players) {

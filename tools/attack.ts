@@ -24,7 +24,7 @@ for (let g = 0; g < N; g++) {
     const z = inBox ? 'box' : maxX > 70 ? 'third' : 'mid'; const k = shot ? '슛' : why; endIn[z][k] = (endIn[z][k] || 0) + 1; team = -1;
   };
   while (s.M.phase !== 'full') {
-    if (HUM) { const I = s.INP[0], p = s.HU[0]!.ctrl, bo = s.ball.owner; if (p && bo && bo.t === 1) { const q = Math.hypot(bo.x - p.x, bo.y - p.y) || 1; I.tx = (bo.x - p.x) / q; I.ty = (bo.y - p.y) / q; if (!I.down.pass) keyDown(I, 'pass'); } else { if (I.down.pass) keyUp(I, 'pass'); if (p && bo === p) { I.tx = 1; I.ty = 0; if (s.M.tick % 40 === 0) { keyDown(I, 'pass'); } else if (I.down.pass) keyUp(I, 'pass'); } else { I.tx = 0; I.ty = 0; } } }
+    if (HUM) { const I = s.INP[0], p = s.HU[0]!.ctrl, bo = s.ball.owner; if (p && bo && bo.t === 1) { const q = Math.hypot(bo.x - p.x, bo.y - p.y) || 1; I.tx = (bo.x - p.x) / q; I.ty = (bo.y - p.y) / q; if (!I.down.shoot) keyDown(I, 'shoot'); } else { if (I.down.shoot) keyUp(I, 'shoot'); if (p && bo === p) { I.tx = 1; I.ty = 0; if (s.M.tick % 40 === 0) { keyDown(I, 'pass'); } else if (I.down.pass) keyUp(I, 'pass'); } else { I.tx = 0; I.ty = 0; } } }
     step(s, STEP); s.ev.length = 0; const b2 = s.ball, o = b2.owner;
     { const sc = HUM ? s.M.score[1] : s.M.score[0] + s.M.score[1]; if (sc > sc0) { sc0 = sc; goals++; shots.goal++; } }
     if (s.M.phase !== 'live') { if (team >= 0) close('아웃·파울'); prevOwnerT = -1; continue; }

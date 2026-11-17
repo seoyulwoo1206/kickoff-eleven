@@ -39,6 +39,12 @@ for (let g = 0; g < N; g++) {
       else if (cur.kickT < 0 && t - cur.pressT > 0.6) { cur.result = 'noKick'; passes.push(cur); cur = null; }
     }
     if (p && s.M.phase === 'live') {
+      if (own === p && s.M.setTaker === p && s.M.setAim) { // 세트피스: 조준점은 그대로 두고 코너킥은 롱패스, 골문 조준이면 슛, 나머지(골킥·먼 프리킥)는 조준 방향 동료에게 짧게
+        const k = s.M.aimX > W - 6 ? 'shoot' : s.M.spType === 'corner' ? 'lob' : 'pass'; I.tx = 0; I.ty = 0;
+        if (I.down[k]) { if (I.holdT[k] > (k === 'shoot' ? 0.55 : k === 'lob' ? 0.2 : 0.05)) keyUp(I, k); } else if (s.M.setT > 0.6 && p.kickWind <= 0) keyDown(I, k);
+        step(s, STEP); s.ev.length = 0; t += STEP; continue;
+      }
+      if (I.down.lob) keyUp(I, 'lob');
       if (own === p) {
         const gx = W, dxg = gx - p.x, dyg = CY - p.y, dG = Math.hypot(dxg, dyg); let no = 1e9; for (const o of s.team[1]) no = Math.min(no, d(o, p));
         if (holdSince < 0) { holdSince = t; recv.push(no); }
@@ -61,6 +67,7 @@ for (let g = 0; g < N; g++) {
         }
         // 기본 스틱: 골 방향, 중앙으로 살짝
         let sx = dxg / dG, sy = dyg / dG * 0.6; const m = Math.hypot(sx, sy); sx /= m; sy /= m;
+        if (I.down.shoot && shootT < 0) keyUp(I, 'shoot'); // 수비 때 누르던 압박 키
         I.tx = sx; I.ty = sy; if (no > 5 && dG > 28 && !I.down.sprint) keyDown(I, 'sprint'); if ((no <= 5 || dG <= 28) && I.down.sprint) keyUp(I, 'sprint');
         if (dG < 20) agg.nearTicks++; hist[Math.min(10, Math.floor(p.x / 10))]++;
         if (shootT >= 0) { if (t - shootT > 0.35) { keyUp(I, 'shoot'); shootT = -1; } }
@@ -81,9 +88,9 @@ for (let g = 0; g < N; g++) {
         if (holdSince >= 0 && !mineKnock) { holdSince = -1; }
         if (mineKnock) { const dG = Math.hypot(W - p.x, CY - p.y); if (dG < 22 && d(p, ball) < 1.4 && shootT < 0) { keyUp(I, 'sprint'); keyDown(I, 'shoot'); shootT = t; shots++; } else if (dG < 26 && I.down.sprint) keyUp(I, 'sprint'); step(s, STEP); s.ev.length = 0; t += STEP; continue; }
         if (I.down.sprint) keyUp(I, 'sprint'); if (shootT >= 0 && t - shootT > 0.35) { keyUp(I, 'shoot'); shootT = -1; }
-        if (NODEF) { I.tx = 0; I.ty = 0; if (I.down.pass) keyUp(I, 'pass'); }
-        else if (own && own.t === 1) { const dx = own.x - p.x, dy = own.y - p.y, q = Math.hypot(dx, dy) || 1; I.tx = dx / q; I.ty = dy / q; if (!I.down.pass) keyDown(I, 'pass'); }
-        else { if (I.down.pass) keyUp(I, 'pass'); const dx = ball.x - p.x, dy = ball.y - p.y, q = Math.hypot(dx, dy) || 1; I.tx = dx / q; I.ty = dy / q; }
+        if (NODEF) { I.tx = 0; I.ty = 0; if (I.down.shoot && shootT < 0) keyUp(I, 'shoot'); }
+        else if (own && own.t === 1) { const dx = own.x - p.x, dy = own.y - p.y, q = Math.hypot(dx, dy) || 1; I.tx = dx / q; I.ty = dy / q; if (!I.down.shoot) keyDown(I, 'shoot'); }
+        else { if (I.down.shoot && shootT < 0) keyUp(I, 'shoot'); const dx = ball.x - p.x, dy = ball.y - p.y, q = Math.hypot(dx, dy) || 1; I.tx = dx / q; I.ty = dy / q; }
       }
     }
     step(s, STEP); s.ev.length = 0; t += STEP;

@@ -79,9 +79,9 @@ function defenseBench(acc: number[]) {
   while (trial < N / 2 && guard++ < 4000) {
     if (!untilLive(s, () => !!s.ball.owner && s.ball.owner.t === 1 && s.ball.owner.role !== 'GK' && s.M.protect <= 0)) continue;
     const h = s.HU[0]!; const list = s.team[0].filter(q => q.role !== 'GK').sort((a, b) => d(a, s.ball) - d(b, s.ball)); h.ctrl = list[0];
-    I.tx = 0; I.ty = 0; keyDown(I, 'pass'); let got = false;
+    I.tx = 0; I.ty = 0; keyDown(I, 'shoot'); let got = false;
     for (let i = 0; i < 240; i++) { step(s, STEP); s.ev.length = 0; const o = s.ball.owner; if (o && o.t === 0) { got = true; if (o === h.ctrl) byMe++; tsum += i / 60; break; } if (s.M.phase !== 'live') break; }
-    keyUp(I, 'pass'); if (got) won++; trial++;
+    keyUp(I, 'shoot'); if (got) won++; trial++;
   }
   acc[0] += won; acc[1] += trial; acc[2] += tsum; acc[3] += byMe;
 }

@@ -26,19 +26,21 @@ for (let g = 0; g < N; g++) {
       if (rel > 0 && --rel === 0) keyUp(I, relKey);
       if (p && s.M.phase === 'live') {
         if (bl.owner === p) {
+          if (I.down.shoot && rel === 0) keyUp(I, 'shoot'); // 수비 때 누르던 압박 키
           const gx = W - p.x, gy = CY - p.y, dG = Math.hypot(gx, gy); act++;
-          I.tx = gx / dG; I.ty = gy / dG * 0.6;
+          I.tx = gx / dG; I.ty = gy / dG * 0.6; const sp = s.M.setTaker === p && s.M.setAim; if (sp) { I.tx = 0; I.ty = 0; }
           let nd = 99; for (const o of s.team[1]) nd = Math.min(nd, Math.hypot(o.x - p.x, o.y - p.y));
           const ms = s.team[0].filter(m => m !== p && m.role !== 'GK' && !m.off && m.x > p.x - 4).sort((x, y) => (y.x - x.x));
           const fwd = ms.find(m => Math.hypot(m.x - p.x, m.y - p.y) < 26 && Math.hypot(m.x - p.x, m.y - p.y) > 5);
           if (rel === 0 && p.kickWind <= 0 && !p.pending && !I.down.pass && !I.down.lob && !I.down.shoot && !I.down.through) {
-            if (s.M.throwIn === p) { if (s.M.throwT > 0.8) { relKey = 'pass'; keyDown(I, relKey); rel = 3; } }
+            if (sp) { if (s.M.setT > 0.6) { relKey = s.M.aimX > W - 6 ? 'shoot' : s.M.spType === 'corner' ? 'lob' : 'pass'; keyDown(I, relKey); rel = relKey === 'shoot' ? 33 : relKey === 'lob' ? 12 : 3; } } // 세트피스: 조준점 그대로 — 코너킥 롱패스, 골문 조준이면 슛, 나머지는 짧게
+            else if (s.M.throwIn === p) { if (s.M.throwT > 0.8) { relKey = 'pass'; keyDown(I, relKey); rel = 3; } }
             else if (dG < 19 && Math.abs(gy) < 14) { I.ty = 0; relKey = 'shoot'; keyDown(I, relKey); rel = 18; inc('슛 누름'); sp0 = { p, t, nd, shot: bl.shot }; }
             else if (p.x > 80 && Math.abs(p.y - CY) > 15 && act > 20) { relKey = 'lob'; keyDown(I, relKey); rel = 10; inc('크로스 누름'); act = 0; }
             else if ((nd < 3 || act > 70) && fwd) { const q = Math.hypot(fwd.x - p.x, fwd.y - p.y); I.tx = (fwd.x - p.x) / q; I.ty = (fwd.y - p.y) / q; relKey = (g + (act | 0)) % 3 === 0 ? 'through' : 'pass'; keyDown(I, relKey); rel = 4; act = 0; }
             else if (act > 150) { relKey = 'lob'; keyDown(I, relKey); rel = 14; act = 0; inc('롱패스 누름'); }
           }
-        } else { act = 0; const o = bl.owner && bl.owner.t === 1 ? bl.owner : bl; const q = Math.hypot(o.x - p.x, o.y - p.y) || 1; I.tx = (o.x - p.x) / q; I.ty = (o.y - p.y) / q; if (bl.owner && bl.owner.t === 1) { if (!I.down.pass && rel === 0) keyDown(I, 'pass'); } else if (I.down.pass && rel === 0) keyUp(I, 'pass'); }
+        } else { act = 0; const o = bl.owner && bl.owner.t === 1 ? bl.owner : bl; const q = Math.hypot(o.x - p.x, o.y - p.y) || 1; I.tx = (o.x - p.x) / q; I.ty = (o.y - p.y) / q; if (bl.owner && bl.owner.t === 1) { if (!I.down.shoot && rel === 0) keyDown(I, 'shoot'); } else if (I.down.shoot && rel === 0) keyUp(I, 'shoot'); }
       }
     }
     step(s, STEP); t += STEP; s.ev.length = 0;
