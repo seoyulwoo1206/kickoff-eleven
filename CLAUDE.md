@@ -127,5 +127,5 @@
 ## 알려진 개선 과제
 - 게스트 입력 지연 = 왕복 핑. 클라이언트 예측은 없음.
 - AI 오프사이드 0건. 온라인은 전술·교체·토너먼트 없음(UI 숨김). 토너먼트 다른 경기 시뮬은 라운드당 1~2초 동기 실행(멈춤).
-- xT: 연구 표 `public/xt/xt_tables.json`이 들어와야 배포본에 보인다(형식: `partitions.<uniform|quadtree|tree|threat>.{M, zone[9600], xt.<dtmc|smp|transformer>.<5|10|15|inf>[M]}`). 폰 배치·2D 폴백·온라인 게스트는 미지원/미확인
+- xT: 연구 표 `public/xt/xt_tables.json`(2026-11-17 반영, 설명은 같은 폴더 README)이 있어야 배포본에 보인다. y 방향은 보고서 그림 1과 대조 전(형식: `partitions.<uniform|quadtree|tree|threat>.{M, zone[9600], xt.<dtmc|smp|transformer>.<5|10|15|inf>[M]}`). 폰 배치·2D 폴백·온라인 게스트는 미지원/미확인
 - 스냅샷은 선수당 19값(sta·kickWind·spin·feint·off·runT·runDir 포함), 리플레이 프레임은 15값. 필드를 늘리면 `protocol.ts` k=i*19와 `scene.ts` PF를 같이 바꿀 것
