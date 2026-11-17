@@ -7,6 +7,7 @@ import { gain, kick, passTo, n } from '../ball';
 import { steer, moveTo } from '../move';
 import { bestAIPass } from './carrier';
 
+const RB = 2.0, RT = 0.8, SL = 0.7, TB = 0.5; // 선방: 기본 다이빙 한계(m), 시간 여유로 늘어나는 한계, 한계까지의 확률 하락폭, 볼 시간 가산
 export function gkAI(s: Sim, k: Player, dt: number) {
   const { ball, M, team, HU } = s;
   const t = k.t, gx = t === 0 ? 0 : W, sg = t === 0 ? 1 : -1, own = ball.owner;
@@ -36,14 +37,20 @@ export function gkAI(s: Sim, k: Player, dt: number) {
       k.lastSave = ball.shot; const dy0 = Math.abs(ball.y - k.y), sp = Math.hypot(ball.vx, ball.vy), hi = ball.z > 1.6;
       const dy = Math.hypot(dy0, Math.max(0, ball.z - 1.5)); // 손이 닿아야 하는 거리: 가슴(1.5m) 위로 뜬 만큼도 거리다 (구석 위는 어렵고, 정면 높은 공은 쉽다)
       if (ball.isShot && ball.kicker) M.stats.onT[ball.kicker.t]++; // 골문 안으로 온 슛 = 유효 슈팅
-      let pr = dy < 0.5 ? 0.88 : skill * (1 - Math.max(0, dy - 0.5) / 3.2) * Math.max(0.8, 1 - Math.max(0, sp - 20) / 30);
-      if (ball.isShot) pr += (0.95 - pr) * clamp((ball.shotT - 0.35) / 0.5, 0, 1) * 0.8; // 날아오는 시간이 길수록(0.35초 넘는 만큼) 볼 시간이 있다 (뜬 공은 땅에서 안 느려지므로 이게 없으면 25m 풀파워가 42% 들어갔다)
+      // 선방 확률: 몸 정면(0.6m 안)은 거의 다 막고, 몸을 던져 닿는 한계 R까지 매끈하게 떨어지며, 그 밖은 못 막는다.
+      // 예전 식은 0.5m에서 .88 → .68로 뚝 떨어져 몸 옆 1m 공이 셋에 하나 들어가고, 먼 슛 보정 때문에 닿지 않는 구석 공을 막기도 해 들쭉날쭉했다
+      const tB = ball.isShot ? clamp((ball.shotT - 0.35) / 0.5, 0, 1) : 0.3; // 날아오는 시간이 길수록 자리를 잡고 더 멀리 몸을 던진다
+      const R = RB + n(G.div) * 0.5 + tB * RT, spF = Math.max(0.75, 1 - Math.max(0, sp - 22) / 40);
+      let pr = dy <= 0.6 ? 0.96 : dy >= R ? 0.04 : (0.9 - (dy - 0.6) / (R - 0.6) * SL) * Math.min(1.12, skill / 0.7) * spF;
+      if (dy < R) pr += (0.93 - pr) * tB * TB; // 닿는 범위 안이면, 볼 시간이 길수록 확실히 막는다 (닿지 않는 구석은 시간이 있어도 못 막는다)
+      if (ball.isShot && ball.shotT < 0.3 && dy > 0.6) pr *= 0.6 + ball.shotT / 0.3 * 0.4; // 코앞에서 찬 공은 반응할 틈이 없다
       k.dive = 0.5; k.diveDir = Math.sign(ball.y - k.y) || 1;
       if (M.spType === 'penalty' && M.protect > 0) { // 페널티: 한쪽을 찍고 몸을 던진다 (사람 팀 키퍼는 스틱 방향)
         const I = h ? s.INP[t] : null; const guess = I && Math.abs(I.my) > 0.3 ? Math.sign(I.my) : I ? 0 : (s.rnd() < 0.5 ? 1 : -1);
         const side = Math.abs(ball.y - CY) < 1 ? 0 : Math.sign(ball.y - CY);
         k.diveDir = guess || (Math.sign(ball.y - k.y) || 1); pr = guess === side ? 0.55 + n(G.div) * 0.3 : guess === 0 ? 0.15 : 0.06; }
       if (s.rnd() < pr) {
+        { const mv = clamp(ball.y - k.y, -1.8, 1.8) * 0.8; k.y += mv; k.vy = Math.sign(mv) * Math.min(8, Math.abs(mv) / 0.12); } // 막았으면 몸이 공에 가 있다 (닿지 않았는데 공이 튕기지 않게)
         if (sp < 14 + n(G.han) * 10 && ball.z < 1.8) gain(s, k); // 핸들링 좋으면 잡고, 아니면 쳐낸다
         else if (s.rnd() < 0.45 && !M.so) { const sd = ball.y > CY ? 1 : -1; ball.vx = Math.sign(ball.vx) * (7 + s.rnd() * 4); ball.vy = sd * (9 + s.rnd() * 5); ball.vz = 4 + s.rnd() * 4; ball.isShot = false; ball.lastTouch = t; ball.kicker = k; ball.shot++; k.lastSave = ball.shot; k.kickCD = 0.3; sfx(s, 'tackle'); } // 골라인 밖으로 쳐낸다 → 코너킥 (전엔 전부 경기장 안으로 쳐내 16경기에 코너킥이 0번이었다)
         else { ball.vx = -ball.vx * 0.3; ball.vy = (ball.y > k.y ? 1 : -1) * (6 + s.rnd() * 6); ball.vz = 3 + s.rnd() * 3; ball.lastTouch = t; ball.kicker = k; ball.shot++; k.lastSave = ball.shot; k.kickCD = 0.3; sfx(s, 'tackle'); }

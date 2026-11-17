@@ -112,11 +112,11 @@ export function laneRisk(s: Sim, p: Player, tg: { x: number; y: number }, t: num
   return r;
 }
 /** 코앞 차단: 패스 선로의 첫 3m 안에 상대 발이 있으면(1.1m) 차자마자 막힌다 */
-export function nearBlock(s: Sim, p: Player, tg: { x: number; y: number }, t: number) {
+export function nearBlock(s: Sim, p: Player, tg: { x: number; y: number }, t: number, far = 3.2, w = 1.1) {
   const ax = tg.x - p.x, ay = tg.y - p.y, L = Math.hypot(ax, ay) || 1, ux = ax / L, uy = ay / L;
   for (const o of s.team[1 - t]) {
-    if (o.off) continue; const dx = o.x - p.x, dy = o.y - p.y, u = dx * ux + dy * uy; if (u < 0.3 || u > 3.2) continue;
-    if (Math.abs(-dx * uy + dy * ux) < 1.1) return true;
+    if (o.off) continue; const dx = o.x - p.x, dy = o.y - p.y, u = dx * ux + dy * uy; if (u < 0.3 || u > far) continue;
+    if (Math.abs(-dx * uy + dy * ux) < w) return true;
   }
   return false;
 }
@@ -411,7 +411,7 @@ export function ballControl(s: Sim) {
     if (pt && !mine && pt.t === p.t && !gk && sp > 5) continue;
     const passing = !mine && ball.knock !== p && sp > 8; // 나한테 오는 공이 아닌데 지나간다 → 발을 뻗어 끊는 시도
     if (passing && !gk) { const dq = d(p, ball) || 1, c = ((p.x - ball.x) * ball.vx + (p.y - ball.y) * ball.vy) / (dq * sp); if (c < (ball.isShot ? 0 : -0.5)) continue; } // 이미 지나간 공엔 발이 안 닿는다: 슛은 옆·뒤(90° 밖), 패스는 뒤(120° 밖)에서 못 막는다 (슈터 옆·뒤에 붙은 수비가 슛의 68%를 잡아 버렸다. 패스까지 90°로 하면 리그 패스 성공률 75→88%·압박 회수 77→57%)
-    const q = d(p, ball), reach = gk ? 1.1 : mine ? (ball.z > 0.9 ? 1.9 : 1.5) : ball.knock === p ? 1.4 : passing ? 1.15 + n(p.attrs.int) * 0.15 : 0.95; if (q < reach && q < bd) { bd = q; best = p; } // 자기가 차 놓은 공은 발을 뻗어 다시 잡는다
+    const q = d(p, ball), reach = gk ? 1.1 : mine ? 1.5 : ball.knock === p ? 1.4 : passing ? 1.15 + n(p.attrs.int) * 0.15 : 0.95; if (q < reach && q < bd) { bd = q; best = p; } // 자기가 차 놓은 공은 발을 뻗어 다시 잡는다
   }
   if (!best) return;
   if (best.role !== 'GK' && ball.passTarget !== best && ball.knock !== best && sp > 8) { // 가로채기 판정: 빠른 공일수록·가로채기 능력이 낮을수록 헛발 (한 번 헛디디면 .25초 다시 못 뻗음)
@@ -423,6 +423,7 @@ export function ballControl(s: Sim) {
     }
   }
   if (ball.z > 0.9 && best.role !== 'GK') { // 헤딩 / 가슴 트래핑
+    { const dx = ball.x - best.x, dy = ball.y - best.y, q = Math.hypot(dx, dy); if (q > 0.45) { const k = (q - 0.45) / q; best.x += dx * k; best.y += dy * k; } } // 몸을 공에 갖다 댄다 (떨어진 채 공만 방향이 바뀌어 보이지 않게)
     const t = best.t, gx = t === 0 ? W : 0; const dG = Math.hypot(gx - best.x, CY - best.y), mine = ball.passTarget === best;
     if (dG < 13.5 && sp > 8 && (!mine || ball.z > 1.5)) { /* 골문 13.5m 안에서만 헤딩슛 (18m 밖 헤딩은 느리게 떠서 키퍼가 다 잡았다 — 그 밖에선 떨궈 잡는다) */ const kp = s.team[1 - t][0], dx = gx - ball.x, dy = CY + (kp.y < CY ? 2.2 : -2.2) + (s.rnd() - 0.5) * (5.5 - n(best.attrs.hea) * 3) - ball.y, q = Math.hypot(dx, dy); const hv = 17 + n(best.attrs.hea) * 6; /* 키퍼 반대쪽 구석을 노린다 */ { const T = q / hv, zt = 0.2 + s.rnd() * 1.5; ball.vz = (zt - ball.z + G * T * T / 2) / T; } /* 골라인에서 0.2~1.7m 높이로 (예전엔 vz −1로 바로 땅에 떨어져 굴러갔다) */
       ball.vx = dx / q * hv; ball.vy = dy / q * hv; ball.lastTouch = t; ball.kicker = best; ball.shot++; ball.isShot = true; ball.shotT = Math.min(0.45, q / hv); best.kickCD = 0.3; M.stats.shots[t]++; sfx(s, 'kick'); }

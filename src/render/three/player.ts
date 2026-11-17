@@ -106,16 +106,18 @@ export class PlayerModel {
       // 달리기/걷기 사이클
       const A = 0.75 * stride, lean = clamp(sp / 8, 0, 1) * 0.22;
       const knee = (phase: number) => 0.18 + 1.0 * Math.max(0, Math.cos(phase)) * stride + (stride ? 0.15 : 0);
+      const header = kickA >= 0 && kickA < 0.7 && (ball as { kicker?: unknown }).kicker === p && (ball.z ?? 0) > 1.1 && !(p.y < -0.2 || p.y > 68.2); // 방금 머리로 받은 공이 아직 떠 있다 → 뛰어오른 헤딩 자세
       let th0 = Math.sin(ph) * A, th1 = Math.sin(ph + Math.PI) * A, kn0 = knee(ph), kn1 = knee(ph + Math.PI);
       if (wind > 0) { th1 = -0.9 * (1 - wind * 0.3); kn1 = 1.1; th0 = -0.2; kn0 = 0.3; body.rotation.z = -0.08; }
       else if (p.feint > 0 && kickA < 0) { const f = Math.sin(tGlobal * 26); th0 = f * 0.5; th1 = -f * 0.5; kn0 = 0.6 + Math.max(0, f) * 0.5; kn1 = 0.6 + Math.max(0, -f) * 0.5; } // 헛다리
-      else if (kickA >= 0) { // 킥: 오른발(1)이 뒤에서 앞으로 휘두른다
-        const k = kickA, swing = k < 0.1 ? -0.9 : k < 0.45 ? -0.9 + (k - 0.1) / 0.35 * 2.2 : 1.3 - (k - 0.45) / 0.55 * 1.3;
-        th1 = swing; kn1 = k < 0.2 ? 1.2 : 0.3; th0 = -0.25; kn0 = 0.35; body.rotation.z = -0.1;
+      else if (kickA >= 0 && !header) { // 킥: 공이 떠나는 순간(kickA 0) 발은 이미 공에 닿아 있고, 그 뒤로 휘둘러 올린다. 뒤로 젖히는 건 와인드업(wind)에서 한다
+        const k = kickA, swing = k < 0.3 ? 0.2 + k / 0.3 * 1.1 : 1.3 - (k - 0.3) / 0.7 * 1.3;
+        th1 = swing; kn1 = k < 0.1 ? 0.45 : 0.25; th0 = -0.25; kn0 = 0.35; body.rotation.z = -0.1;
       }
       legPose(0, th0, kn0, 0.1); legPose(1, th1, kn1, 0.1);
       torso.rotation.z = -(lean + (own ? 0.12 : 0));
       armPose(0, -Math.sin(ph) * A * 0.9, 0.25 * sideOf(0), 1.0 + 0.3 * stride); armPose(1, Math.sin(ph) * A * 0.9, 0.25 * sideOf(1), 1.0 + 0.3 * stride);
+      if (header) { const j = Math.sin(Math.min(1, kickA / 0.7) * Math.PI); hips.position.y += 0.42 * j; legPose(0, -0.25, 0.7, 0.3); legPose(1, 0.15, 0.9, 0.3); torso.rotation.z = -0.3 * j; this.head.rotation.z = -0.35 * j; armPose(0, -0.6, 0.7 * sideOf(0), 0.9); armPose(1, -0.6, 0.7 * sideOf(1), 0.9); }
       // 스로인: 공을 머리 위로 든 자세(공 주인인데 공이 1.6m 위), 던진 직후엔 두 팔을 앞으로 뿌린다(터치라인 밖에서 찬 직후)
       const hold = own && (ball.z ?? 0) > 1.6, thrown = !hold && kickA >= 0 && (p.y < -0.2 || p.y > 68.2);
       if (hold || thrown) {

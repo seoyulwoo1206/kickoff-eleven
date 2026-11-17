@@ -131,7 +131,8 @@ export function goal(s: Sim, t: number) {
   M.stops++; M.adv = null;
   if (ball.kicker && ball.kicker.t === t) M.stats.onT[t]++;
   if (M.so) { M.phase = 'goal'; M.phaseT = 2.0; M.nextKick = 1 - t; M.scorer = ball.kicker; banner(s, 'GOAL!', '', 1500, true); sfx(s, 'goal'); crowdSwell(s, 0.18, 1.5); return; }
-  M.score[t]++; M.phase = 'goal'; M.phaseT = 7.4; // 세리머니 1.3초 + 리플레이 ~5.6초 M.nextKick = 1 - t; ball.owner = null; shake(s, 0.6); M.slow = 1.1;
+  M.score[t]++; M.phase = 'goal'; M.phaseT = 7.4; /* 세리머니 1.3초 + 리플레이 ~5.6초 */
+  M.nextKick = 1 - t; ball.owner = null; shake(s, 0.6); M.slow = 1.1; // 골을 먹은 팀이 킥오프 (이 줄이 위 주석에 먹혀 늘 팀 0이 킥오프하던 적이 있다)
   const k = ball.kicker, own = !(k && k.t === t), who = !own && k ? `${M.teams[t].name} ${k.num}번` : `${M.teams[1 - t].name} 자책골`;
   M.scorer = own ? null : k;
   banner(s, 'GOAL!', who, 3200, true); sfx(s, 'goal'); sfx(s, 'whistle'); crowdSwell(s, 0.2, 2.8); s.ev.push({ k: 'hud' });
