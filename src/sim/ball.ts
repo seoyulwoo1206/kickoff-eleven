@@ -316,7 +316,7 @@ export function slideCheck(s: Sim, p: Player) {
     if (d(p, ball) < 1.2 && ball.z < 0.8 && p.kickCD <= 0) { const a = Math.atan2(p.vy, p.vx); ball.vx = Math.cos(a) * 12; ball.vy = Math.sin(a) * 12; ball.vz = 1.5; ball.lastTouch = p.t; ball.kicker = p; ball.shot++; p.kickCD = 0.4; }
     return;
   }
-  if (o.t === p.t || o.role === 'GK' || M.protect > 0) return;
+  if (o.t === p.t || o.role === 'GK' || M.protect > 0 || o.shield > 0) return; // 누른 킥은 슬라이딩에도 지켜 준다
   const q = d(p, o); if (q > 1.8) return;
   const ba = Math.atan2(ball.y - p.y, ball.x - p.x), ma = Math.atan2(p.vy, p.vx);
   const behind = Math.cos(o.dir) * Math.cos(ma) + Math.sin(o.dir) * Math.sin(ma) > 0.6 && d(p, ball) > q;
@@ -410,12 +410,17 @@ export function ballControl(s: Sim) {
     const gk = p.role === 'GK', mine = pt === p; if (ball.z > (gk ? 2.4 : mine ? 2.2 : 1.7)) continue;
     if (pt && !mine && pt.t === p.t && !gk && sp > 5) continue;
     const passing = !mine && ball.knock !== p && sp > 8; // 나한테 오는 공이 아닌데 지나간다 → 발을 뻗어 끊는 시도
+    if (passing && !gk) { const dq = d(p, ball) || 1, c = ((p.x - ball.x) * ball.vx + (p.y - ball.y) * ball.vy) / (dq * sp); if (c < (ball.isShot ? 0 : -0.5)) continue; } // 이미 지나간 공엔 발이 안 닿는다: 슛은 옆·뒤(90° 밖), 패스는 뒤(120° 밖)에서 못 막는다 (슈터 옆·뒤에 붙은 수비가 슛의 68%를 잡아 버렸다. 패스까지 90°로 하면 리그 패스 성공률 75→88%·압박 회수 77→57%)
     const q = d(p, ball), reach = gk ? 1.1 : mine ? (ball.z > 0.9 ? 1.9 : 1.5) : ball.knock === p ? 1.4 : passing ? 1.15 + n(p.attrs.int) * 0.15 : 0.95; if (q < reach && q < bd) { bd = q; best = p; } // 자기가 차 놓은 공은 발을 뻗어 다시 잡는다
   }
   if (!best) return;
   if (best.role !== 'GK' && ball.passTarget !== best && ball.knock !== best && sp > 8) { // 가로채기 판정: 빠른 공일수록·가로채기 능력이 낮을수록 헛발 (한 번 헛디디면 .25초 다시 못 뻗음)
     const pr = clamp(1.35 - sp / 30, 0.3, 1) * (0.9 + n(best.attrs.int) * 0.2) * (best.stun > 0 ? 0 : 1);
     if (s.rnd() >= pr) { best.kickCD = 0.25; return; }
+    if (ball.isShot && ball.kicker && ball.kicker.t !== best.t && sp > 14) { // 슛 블록: 잡지 못하고 몸에 맞고 튄다 (코너킥·세컨드 볼)
+      const a = Math.atan2(ball.vy, ball.vx) + (s.rnd() < 0.5 ? 1 : -1) * (0.5 + s.rnd() * 1.5), v = sp * (0.25 + s.rnd() * 0.2);
+      ball.vx = Math.cos(a) * v; ball.vy = Math.sin(a) * v; ball.vz = 1.5 + s.rnd() * 3; ball.isShot = false; ball.passTarget = null; ball.curl = 0; ball.lastTouch = best.t; ball.kicker = best; ball.shot++; best.kickCD = 0.3; sfx(s, 'tackle'); return;
+    }
   }
   if (ball.z > 0.9 && best.role !== 'GK') { // 헤딩 / 가슴 트래핑
     const t = best.t, gx = t === 0 ? W : 0; const dG = Math.hypot(gx - best.x, CY - best.y), mine = ball.passTarget === best;

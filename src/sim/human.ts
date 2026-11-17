@@ -129,10 +129,10 @@ export function humanUpdate(s: Sim, h: Human, dt: number) {
     if (I.rel.lob) { const pw = clamp((I.holdT.lob - 0.1) / 0.5, 0, 1); queueKick(s, p, () => longPass(s, p, aim, 0.35 + pw * 0.65)); h.charging = false; return; }
     if (I.press.through) { const pw = I.down.sprint ? 0.8 : 0; queueKick(s, p, () => throughPass(s, p, aim, pw), 0.04); h.charging = false; return; }
     if (I.press.chip) { queueKick(s, p, () => chipShot(s, p)); h.charging = false; return; }
-    if (I.press.shoot) { h.charging = true; h.charge = 0; }
+    if (I.press.shoot) { h.charging = true; h.charge = 0; p.shield = Math.max(p.shield, 0.4); } // 슛은 누른 뒤 0.4초까지 지켜 준다: 게이지 절반 이하의 슛은 반드시 나간다 (.16초로는 모으는 사이 3번 중 2번을 뺏겼다). 끝까지 모으려면 공간이 있어야 한다
     if (h.charging) {
       if (I.down.shoot) h.charge = Math.min(1, h.charge + dt / 0.8);
-      if (I.rel.shoot || !I.down.shoot) { const pw = Math.max(0.3, h.charge), ay = mag > 0.15 ? my / mag : 0, fin = I.down.gkRush; queueKick(s, p, () => shoot(s, p, pw, ay, fin)); h.charging = false; h.charge = 0; } // Q를 누른 채 슛 = 감아차기
+      if (I.rel.shoot || !I.down.shoot) { const pw = Math.max(0.3, h.charge), ay = mag > 0.15 ? my / mag : 0, fin = I.down.gkRush; p.shield = Math.max(p.shield, 0.13); queueKick(s, p, () => shoot(s, p, pw, ay, fin)); h.charging = false; h.charge = 0; } // Q를 누른 채 슛 = 감아차기
     }
   } else {
     if (h.charging) { h.charging = false; h.charge = 0; }
