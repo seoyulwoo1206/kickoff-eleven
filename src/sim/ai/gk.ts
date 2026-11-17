@@ -7,7 +7,7 @@ import { gain, kick, passTo, n } from '../ball';
 import { steer, moveTo } from '../move';
 import { bestAIPass } from './carrier';
 
-const RB = 1.9, RT = 0.8, SL = 0.7, TB = 0.45, BD = 0.94; // 선방: 기본 다이빙 한계(m), 시간 여유로 늘어나는 한계, 한계까지의 확률 하락폭, 볼 시간 가산, 몸 정면 확률
+const RB = 2.05, RT = 0.9, SL = 0.65, TB = 0.45, BD = 0.95; // 선방: 기본 다이빙 한계(m), 시간 여유로 늘어나는 한계, 한계까지의 확률 하락폭, 볼 시간 가산, 몸 정면 확률
 export function gkAI(s: Sim, k: Player, dt: number) {
   const { ball, M, team, HU } = s;
   const t = k.t, gx = t === 0 ? 0 : W, sg = t === 0 ? 1 : -1, own = ball.owner;

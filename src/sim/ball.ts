@@ -23,7 +23,7 @@ export function knockOn(s: Sim, p: Player) {
   ball.vx = Math.cos(a) * v; ball.vy = Math.sin(a) * v; ball.lastTouch = p.t; ball.kicker = p; ball.passTarget = null; ball.knock = p; ball.isShot = false; ball.curl = 0; p.kickCD = close ? 0.12 : 0.18; ball.spin += 0.5;
 }
 export function kick(s: Sim, p: Player, vx: number, vy: number, vz = 0, curl = 0) {
-  const { ball, M, team } = s; const thrown = M.throwIn === p; if (thrown) M.throwIn = null;
+  const { ball, M, team } = s; const thrown = M.throwIn === p; if (thrown) M.throwIn = null; if (M.setTaker === p) M.setTaker = null;
   ball.owner = null; ball.knock = null; ball.thru = false; ball.x = clamp(p.x + Math.cos(p.dir) * 0.8, 0.3, W - 0.3); ball.y = clamp(p.y + Math.sin(p.dir) * 0.8, 0.3, H - 0.3); ball.z = 0.01;
   ball.vx = vx; ball.vy = vy; ball.vz = vz; ball.curl = curl; p.kickCD = 0.3; p.kickWind = 0; ball.lastTouch = p.t; ball.kicker = p; ball.shot++; ball.isShot = false; sfx(s, 'kick');
   M.react[1 - p.t] = DIFF[M.diff].react * (s.HU[1 - p.t] ? 0.6 : 0.8); // 상대 AI는 패스를 읽는 데 잠깐 걸린다 (사람 팀의 AI 동료도 — 0이면 AI의 패스가 37% 끊겨 사람 팀 상대로 슈팅이 경기당 0.3개였다. 커서 선수는 사람이 직접 읽는다)
@@ -374,6 +374,7 @@ export function updateBall(s: Sim, dt: number) {
   const o = ball.owner;
   if (o) {
     const h = HU[o.t], osp = Math.hypot(o.vx, o.vy), spr = h && h.ctrl === o && INP[o.t].down.sprint && osp > 4, ah = spr ? 1.1 : 0.75; // 질주 드리블은 공을 더 앞에
+    if (M.setTaker === o) { ball.x = M.setX; ball.y = M.setY; ball.z = 0; ball.vx = ball.vy = ball.vz = 0; return; } // 세트피스: 공은 놓인 자리에 그대로 (키커가 돌아서도 공이 선 밖으로 끌려 나가지 않게)
     if (M.throwIn === o) { ball.x = o.x + Math.cos(o.dir) * 0.12; ball.y = o.y + Math.sin(o.dir) * 0.12; ball.z = 2.0; ball.vx = ball.vy = ball.vz = 0; return; } // 스로인: 머리 위로 들고 있다
     if (o.spin > 0) { const a = o.dir + Math.PI / 2 * (o.spinDir || 1); ball.x = o.x + Math.cos(a) * 0.55; ball.y = o.y + Math.sin(a) * 0.55; } // 룰렛: 공이 몸 옆에서 돈다
     else { ball.x = o.x + Math.cos(o.dir) * ah; ball.y = o.y + Math.sin(o.dir) * ah; }
@@ -407,11 +408,13 @@ export function ballControl(s: Sim) {
   if (ball.owner) return;
   const sp = Math.hypot(ball.vx, ball.vy); let best: Player | null = null, bd = 1e9;
   const pt = ball.passTarget;
-  // 공중볼 맞이: 나한테 오는 뜬 공이 0.35초 안에 가장 가까워지면 그 지점으로 몸을 붙여 간다 (초속 4m까지).
+  // 공중볼 맞이: 나한테 오는 뜬 공이 0.35초 안에 머리 높이(2.0m)로 내려오는 지점 — 이미 그 아래면 가장 가까워지는 지점 — 으로 몸을 붙여 간다 (초속 4m까지; 더 길게·빠르게 해도 크로스 첫 터치는 같았다).
   // 전엔 1.5m 밖에서 공이 닿은 걸로 치고 그 틱에 몸을 0.5~1m 옮겨 붙였다 — 헤딩·가슴 트래핑이 순간이동처럼 보였다
   if (pt && !pt.off && pt.stun <= 0 && ball.z > 0.9 && sp > 6) {
-    const rvx = ball.vx - pt.vx, rvy = ball.vy - pt.vy, rv2 = rvx * rvx + rvy * rvy, tca = rv2 > 1 ? ((pt.x - ball.x) * rvx + (pt.y - ball.y) * rvy) / rv2 : -1;
-    if (tca > 0 && tca < 0.35) { const ex = ball.x + rvx * tca - pt.x, ey = ball.y + rvy * tca - pt.y, q = Math.hypot(ex, ey); if (q > 0.25 && q < 2.2) { const k = Math.min(q - 0.25, 4 * STEP) / q; pt.x += ex * k; pt.y += ey * k; } }
+    const rvx = ball.vx - pt.vx, rvy = ball.vy - pt.vy, rv2 = rvx * rvx + rvy * rvy; let th = -1;
+    if (ball.z > 2.0) { const g = G * (ball.isShot ? SG : 1); th = (ball.vz + Math.sqrt(ball.vz * ball.vz + 2 * g * (ball.z - 2.0))) / g; }
+    else if (rv2 > 1) th = ((pt.x - ball.x) * rvx + (pt.y - ball.y) * rvy) / rv2;
+    if (th > 0 && th < 0.35) { const ex = ball.x + rvx * th - pt.x, ey = ball.y + rvy * th - pt.y, q = Math.hypot(ex, ey); if (q > 0.25 && q < 3) { const k = Math.min(q - 0.25, 4 * STEP) / q; pt.x += ex * k; pt.y += ey * k; } }
   }
   for (const p of players) {
     if (p.kickCD > 0 || p.stun > 0 || p.off) continue; if (p.beatT > 0 && ball.knock && ball.knock.t !== p.t) continue; // 방금 제쳐진 수비수는 상대가 차 놓은 공에 발을 못 댄다

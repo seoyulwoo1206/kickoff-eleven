@@ -1,7 +1,7 @@
 /* 크로스 시험: 측면 깊숙이(골라인에서 9~17m, 터치라인에서 4~9m) 공을 잡은 사람이 골문 쪽을 조준해 롱패스(A)를 탭/반/풀로 찬다.
    윙어가 30m 밖에서 터치라인을 따라 몰고 올라간 뒤 찬다.
    공이 받는 선수 머리 높이(2.2m)로 내려왔을 때 받는 선수와의 거리, 누가 처음 건드렸나, 그 뒤 3초 안의 슛·골.
-   사용: npx tsx tools/cross.ts [--n 80] */
+   사용: npx tsx tools/cross.ts [--n 80] [--hold] [--dbg] */
 import { TEAMS } from '../src/data/teams';
 import { createMatch, step } from '../src/sim/match';
 import { STEP, W, H, CY } from '../src/sim/consts';
@@ -29,7 +29,7 @@ for (const [name, hold] of [['탭', 0.06], ['반', 0.35], ['풀', 0.7]] as [stri
     const ax = W - 5 - p.x, ay = CY - p.y, al = Math.hypot(ax, ay); I.tx = ax / al; I.ty = ay / al; s.M.protect = 0.6; // 골문 앞(골라인 5m 앞 가운데)을 조준
     const shot0 = b.shot; keyDown(I, 'lob'); for (let k = 0; k < Math.round(hold * 60); k++) { step(s, STEP); s.ev.length = 0; } keyUp(I, 'lob');
     let tgt: Player | null = null, kicked = false; for (let k = 0; k < 30 && !kicked; k++) { step(s, STEP); s.ev.length = 0; if (b.shot !== shot0 && b.kicker === p) { kicked = true; tgt = b.passTarget; } }
-    if (!kicked) continue; r.n++; I.tx = 0; I.ty = 0;
+    if (!kicked) continue; r.n++; if (!process.argv.includes('--hold')) { I.tx = 0; I.ty = 0; } // --hold: 찬 뒤에도 조준하던 방향키를 계속 누르고 있다 (사람은 보통 그런다)
     if (!tgt) { r.noTgt++; continue; }
     dist.push(Math.hypot(tgt.x - p.x, tgt.y - p.y));
     let hd = ''; let first: Player | null = null, measured = false, up = false, t = 0, sc = s.M.score[0], shots0 = s.M.stats.shots[0], sh = b.shot, res = '';
