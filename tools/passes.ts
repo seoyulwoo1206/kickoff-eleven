@@ -19,7 +19,7 @@ const MODES: Mode[] = [
   { name: '스루 보통', key: 'through', hold: 0.05 }, { name: '스루 + 질주', key: 'through', hold: 0.05, sprint: true },
 ];
 for (const mode of MODES) {
-  const out = { n: 0, tgt: 0, mate: 0, opp: 0, oob: 0, behind: 0 }; const dist: number[] = [], v0: number[] = [], err: number[] = [], arr: number[] = [], trav: number[] = [], run: number[] = [], lead: number[] = [], tim: number[] = []; let gkGot = 0, kx = 0, ky = 0, tx0 = 0, ty0 = 0;
+  const out = { n: 0, tgt: 0, mate: 0, opp: 0, oob: 0, behind: 0 }; const dist: number[] = [], v0: number[] = [], err: number[] = [], arr: number[] = [], trav: number[] = [], run: number[] = [], lead: number[] = [], tim: number[] = []; let gkGot = 0, kx = 0, ky = 0, tx0 = 0, ty0 = 0, tvx = 0, tvy = 0, aimA = 0, off30 = 0, off60 = 0, kicks = 0, runN = 0, behind = 0, slowed = 0; const leadRun: number[] = [];
   for (let seed = 1; out.n < N && seed < 40; seed++) {
     const s = createMatch({ teams: [A, B], len: 300, diff: 'normal', tempo: 1, firstKick: 0, humans: [{ tag: 'P1', col: '#fff', cursor: 'manual' }, null], net: false, seed, squads: [squadOf(A), squadOf(B)] });
     const I = s.INP[0], h = s.HU[0]!; let wait = 0, st = 0, holdT = 0, shot = -1, tgt: Player | null = null, kicker: Player | null = null, bounced = false, t0 = 0;
@@ -29,22 +29,23 @@ for (const mode of MODES) {
         if (p && b.owner === p && s.M.phase === 'live' && p.x > 25 && p.x < 80) {
           wait += STEP;
           const ms = s.team[0].filter(m => m !== p && m.role !== 'GK' && !m.off && m.x > p.x + 4 && Math.hypot(m.x - p.x, m.y - p.y) > (mode.key === 'lob' ? 14 : 6));
-          if (wait > 0.5 && ms.length) { const m = ms.sort((a, c) => Math.abs(a.y - p.y) - Math.abs(c.y - p.y))[0], q = Math.hypot(m.x - p.x, m.y - p.y); I.tx = (m.x - p.x) / q; I.ty = (m.y - p.y) / q; if (mode.sprint) keyDown(I, 'sprint'); keyDown(I, mode.key); st = 1; holdT = 0; shot = b.shot; kicker = p; }
+          if (wait > 0.5 && ms.length) { const m = ms.sort((a, c) => Math.abs(a.y - p.y) - Math.abs(c.y - p.y))[0], q = Math.hypot(m.x - p.x, m.y - p.y); I.tx = (m.x - p.x) / q; I.ty = (m.y - p.y) / q; aimA = Math.atan2(I.ty, I.tx); if (mode.sprint) keyDown(I, 'sprint'); keyDown(I, mode.key); st = 1; holdT = 0; shot = b.shot; kicker = p; }
           else { I.tx = 0.6; I.ty = 0; }
         } else { wait = 0; if (p) { const o = b.owner && b.owner.t === 1 ? b.owner : b; I.tx = Math.sign(o.x - p.x) * 0.7; I.ty = Math.sign(o.y - p.y) * 0.7; } }
       } else if (st === 1) { holdT += STEP; if (holdT >= mode.hold) { keyUp(I, mode.key); if (mode.sprint) keyUp(I, 'sprint'); st = 2; t0 = 0; } }
       else if (st === 2) { // 킥이 나가길 기다린다
-        t0 += STEP; if (b.shot !== shot && b.kicker === kicker) { tgt = b.passTarget; if (!tgt) { st = 0; wait = 0; } else { st = 3; t0 = 0; bounced = false; out.n++; kx = b.x; ky = b.y; tx0 = tgt.x; ty0 = tgt.y; dist.push(Math.hypot(tgt.x - kicker!.x, tgt.y - kicker!.y)); v0.push(Math.hypot(b.vx, b.vy)); if (tgt.x < kicker!.x - 2) out.behind++; } }
+        t0 += STEP; if (b.shot !== shot && b.kicker === kicker) { { let da = Math.abs(Math.atan2(b.vy, b.vx) - aimA); if (da > Math.PI) da = 2 * Math.PI - da; kicks++; if (da > 0.52) off30++; if (da > 1.05) off60++; } tgt = b.passTarget; if (!tgt) { st = 0; wait = 0; } else { st = 3; t0 = 0; bounced = false; out.n++; kx = b.x; ky = b.y; tx0 = tgt.x; ty0 = tgt.y; tvx = tgt.vx; tvy = tgt.vy; dist.push(Math.hypot(tgt.x - kicker!.x, tgt.y - kicker!.y)); v0.push(Math.hypot(b.vx, b.vy)); if (tgt.x < kicker!.x - 2) out.behind++; } }
         else if (t0 > 1 || b.owner !== kicker && b.kicker !== kicker) { st = 0; wait = 0; }
       } else { // 결과
         t0 += STEP; I.tx = 0; I.ty = 0;
         if (!bounced && mode.key === 'lob' && b.z < 0.3 && t0 > 0.3 && !b.owner) { bounced = true; err.push(Math.hypot(b.x - tgt!.x, b.y - tgt!.y)); arr.push(Math.hypot(b.vx, b.vy)); }
-        if (b.owner) { if (b.owner.t === 0) { trav.push(Math.hypot(b.x - kx, b.y - ky)); run.push(Math.hypot(b.owner.x - tx0, b.owner.y - ty0)); lead.push(b.owner.x - tx0); tim.push(t0); } else if (b.owner.role === 'GK') gkGot++; if (b.owner === tgt) out.tgt++; else if (b.owner.t === 0) out.mate++; else out.opp++; if (mode.key !== 'lob' && b.owner === tgt) arr.push(0); st = 0; wait = 0; }
+        if (b.owner) { if (b.owner === tgt && Math.hypot(tvx, tvy) > 3) { const sp0 = Math.hypot(tvx, tvy), lr = ((tgt.x - tx0) * tvx + (tgt.y - ty0) * tvy) / sp0; runN++; leadRun.push(lr); if (lr < 1) behind++; if (Math.hypot(tgt.vx, tgt.vy) < sp0 * 0.6) slowed++; }
+        if (b.owner.t === 0) { trav.push(Math.hypot(b.x - kx, b.y - ky)); run.push(Math.hypot(b.owner.x - tx0, b.owner.y - ty0)); lead.push(b.owner.x - tx0); tim.push(t0); } else if (b.owner.role === 'GK') gkGot++; if (b.owner === tgt) out.tgt++; else if (b.owner.t === 0) out.mate++; else out.opp++; if (mode.key !== 'lob' && b.owner === tgt) arr.push(0); st = 0; wait = 0; }
         else if (s.M.phase !== 'live' || b.x < 0 || b.x > W || b.y < 0 || b.y > H) { out.oob++; st = 0; wait = 0; }
         else if (t0 > 6) { out.opp++; st = 0; wait = 0; }
       }
       step(s, STEP); s.ev.length = 0;
     }
   }
-  console.log(`${mode.name}: n=${out.n} · 받는 선수까지 중앙값 ${med(dist).toFixed(0)}m (최대 ${Math.max(0, ...dist).toFixed(0)}m) · 초기 속도 ${med(v0).toFixed(0)}m/s · 받음 ${pct(out.tgt, out.n)} · 다른 동료 ${pct(out.mate, out.n)} · 상대 ${pct(out.opp, out.n)} · 아웃 ${pct(out.oob, out.n)} · 뒤쪽 동료가 대상 ${pct(out.behind, out.n)}` + (mode.key !== 'lob' ? ` · 받을 때까지 공이 간 거리 중앙값 ${med(trav).toFixed(0)}m(상위 10% ${[...trav].sort((x, y) => x - y)[Math.floor(trav.length * 0.9)]?.toFixed(0)}m) · 받는 선수가 뛴 거리 ${med(run).toFixed(0)}m(상위 10% ${[...run].sort((x, y) => x - y)[Math.floor(run.length * 0.9)]?.toFixed(0)}m) · 받는 선수 앞으로 ${med(lead).toFixed(0)}m · ${med(tim).toFixed(1)}s · 키퍼가 주움 ${pct(gkGot, out.n)}` : '') + (mode.key === 'lob' ? ` · 첫 바운드 오차 ${med(err).toFixed(1)}m · 그때 공 속도 ${med(arr).toFixed(0)}m/s` : ''));
+  console.log(`${mode.name}: n=${out.n} · 받는 선수까지 중앙값 ${med(dist).toFixed(0)}m (최대 ${Math.max(0, ...dist).toFixed(0)}m) · 초기 속도 ${med(v0).toFixed(0)}m/s · 받음 ${pct(out.tgt, out.n)} · 다른 동료 ${pct(out.mate, out.n)} · 상대 ${pct(out.opp, out.n)} · 아웃 ${pct(out.oob, out.n)} · 뒤쪽 동료가 대상 ${pct(out.behind, out.n)}` + (mode.key !== 'lob' ? ` · 받을 때까지 공이 간 거리 중앙값 ${med(trav).toFixed(0)}m(상위 10% ${[...trav].sort((x, y) => x - y)[Math.floor(trav.length * 0.9)]?.toFixed(0)}m) · 받는 선수가 뛴 거리 ${med(run).toFixed(0)}m(상위 10% ${[...run].sort((x, y) => x - y)[Math.floor(run.length * 0.9)]?.toFixed(0)}m) · 받는 선수 앞으로 ${med(lead).toFixed(0)}m · ${med(tim).toFixed(1)}s · 키퍼가 주움 ${pct(gkGot, out.n)} | 조준과 30° 넘게 다른 방향으로 나간 공 ${pct(off30, kicks)}, 60° 넘게 ${pct(off60, kicks)} | 달리던 선수(${runN}명) 기준: 달리던 방향으로 ${med(leadRun).toFixed(1)}m 앞에서 받음 · 제자리·뒤에서 받음 ${pct(behind, runN)} · 받으며 속도가 60% 밑으로 ${pct(slowed, runN)}` : '') + (mode.key === 'lob' ? ` · 첫 바운드 오차 ${med(err).toFixed(1)}m · 그때 공 속도 ${med(arr).toFixed(0)}m/s` : ''));
 }

@@ -1,4 +1,4 @@
-import { W, H, CX, CY, GH, GZ, G, FA, FB, STEP } from './consts';
+import { W, H, CX, CY, GH, GZ, G, SG, FA, FB, STEP } from './consts';
 import { clamp, d, wx, angDiff } from './util';
 import { DIFF } from '../data/teams';
 import type { Sim, Player, Pred } from './types';
@@ -215,7 +215,7 @@ export function throughPass(s: Sim, p: Player, ang: number, power = 0, maxR = po
         let outSoon = 0; { let v2 = meet.v, d2 = 0; for (let k = 0; k < 7 && v2 > 1; k++) { v2 = Math.max(0, v2 - (FA + FB * v2) * 0.1); d2 += v2 * 0.1; const ox = meet.x + ax * d2, oy = meet.y + ay * d2; if (oy < 0 || oy > H) { outSoon = 2; break; } if (ox < 0 || ox > W) { outSoon = k < 4 ? 1 : 0; break; } } } // 터치라인(스로인)은 0.7초, 골라인은 0.4초 안
         let open = 99; for (const o of opps) open = Math.min(open, Math.hypot(o.x + o.vx * Math.min(meet.tt, 0.5) - meet.x, o.y + o.vy * Math.min(meet.tt, 0.5) - meet.y));
         const prog = wx(meet.x, t) - wx(p.x, t), lead = wx(meet.x, t) - wx(m.x, t); // 전진 거리, 받는 선수 앞으로 내준 거리
-        const sc = Math.min(prog, 22) / 6 + clamp(lead, -3, 8) / 4 + Math.min(open, 8) / 3 - meet.tt * 0.4 - (cut ? 3 : 0) - Math.max(0, meet.v - VOK) / 3.5 - (off ? 0.5 : 0)
+        const sc = Math.min(prog, 22) / 6 + clamp(lead, -3, 8) / 4 + Math.min(open, 8) / 3 - meet.tt * 0.4 - (cut ? 3 : 0) - Math.max(0, meet.v - VOK - clamp((rq - 12) * 0.5, 0, 6)) / 3.5 - (off ? 0.5 : 0)
           + Math.max(0, m.vx * ax + m.vy * ay) / 4 - (wx(m.x, t) > line + 1.0 ? 3 : 0) + Math.min((rx * Math.cos(ang) + ry * Math.sin(ang)) / rq, 0.96) / 0.96 * 7 + (m.runT > 0 ? 1.5 : 0) - (nearBlock(s, p, meet, t) ? 3 : 0) - outSoon; // outSoon: 한 발 늦으면 선 밖으로 나갈 공 (터치라인 2, 골라인 1) // 조준한 동료가 최우선(±16° 안은 동점). 스루는 앞 공간으로: 전진·리드 우대, 조준 방향·침투 중인 동료 우대, 선로를 끊길 공·받을 때 너무 빠른 공 감점
         if (!best || sc > best.sc) best = { sc, m, a, v: v0 };
       }
@@ -288,13 +288,13 @@ export function shoot(s: Sim, p: Player, power: number, aimY: number, finesseIn 
   if (p.sta < 0.4) err *= 1 + (0.4 - p.sta) * 0.8;
   if (!HU[t]) err *= DIFF[M.diff].err;
   ty = clamp(ty + err, CY - GH - 1.5, CY + GH + 1.5);
-  const sp = (16 + 17 * power) * (0.92 + n(A.pow) * 0.1) * (finesse ? 0.85 : 1) * (volley ? 1.08 : 1), dx = gx - ball.x, dy = ty - ball.y, q = Math.hypot(dx, dy);
+  const sp = (19 + 16 * power) * (0.92 + n(A.pow) * 0.1) * (finesse ? 0.85 : 1) * (volley ? 1.08 : 1), dx = gx - ball.x, dy = ty - ball.y, q = Math.hypot(dx, dy);
   // 높이: 골라인을 지날 때의 목표 높이 zt를 정하고 거기 맞는 vz를 역산한다. 세게 찰수록 높고 들쭉날쭉(풀파워는 크로스바를 넘기도), 결정력이 좋으면 덜 흔들린다.
   // 예전 식 vz=1+power×4×(.3~.9)는 중력 22에서 최고 높이가 8~75cm라 전부 깔아 차는 슛이었다
   let zt = 0.3 + power * 1.1 + (s.rnd() * 2 - 1) * (0.45 + power * 0.55) * (1.45 - A.fin / 100 * 0.6); if (power > 0.85) zt += (power - 0.85) * 1.4; if (finesse) zt = 0.9 + s.rnd() * 0.9; if (volley) zt += 0.3;
   zt = Math.max(0.05, zt);
   let T = q / sp; T = q / (sp * (1 - (0.05 + 0.0038 * sp) * T * 0.5)); // 공기저항으로 조금 늦게 도착
-  const vz = (zt + G * T * T / 2) / T / (1 - (0.05 + 0.0038 * sp) * T * 0.3);
+  const vz = (zt + G * SG * T * T / 2) / T / (1 - (0.05 + 0.0038 * sp) * T * 0.3);
   // 감아차기: 조준점 바깥쪽으로 향했다가 안으로 휘어 들어온다
   const curlDir = finesse ? Math.sign(ty - CY) || 1 : 0, curl = finesse ? curlDir * (t === 0 ? 1 : -1) * (3.5 + n(A.fin) * 1.5) : 0;
   const a0 = Math.atan2(dy, dx) + (finesse ? -curlDir * (t === 0 ? 1 : -1) * 0.14 : 0);
@@ -351,7 +351,7 @@ export function computePred(s: Sim) {
   const { ball, pred } = s;
   pred.length = 0; const b = { x: ball.x, y: ball.y, z: ball.z, vx: ball.vx, vy: ball.vy, vz: ball.vz, curl: ball.curl }; const PDT = 0.05;
   for (let i = 0; i < 60; i++) {
-    if (b.z > 0 || b.vz > 0) { b.vz -= G * PDT; b.z += b.vz * PDT; airStep(b, PDT); if (b.z <= 0) { b.z = 0; b.vz = b.vz < -2 ? -b.vz * 0.45 : 0; b.curl *= 0.5; } }
+    if (b.z > 0 || b.vz > 0) { b.vz -= G * (ball.isShot ? SG : 1) * PDT; b.z += b.vz * PDT; airStep(b, PDT); if (b.z <= 0) { b.z = 0; b.vz = b.vz < -2 ? -b.vz * 0.45 : 0; b.curl *= 0.5; } }
     else { const sp = Math.hypot(b.vx, b.vy); if (sp > 0) { const ns = Math.max(0, sp - (FA + FB * sp) * PDT); b.vx *= ns / sp; b.vy *= ns / sp; } if (b.curl) { const hs = Math.hypot(b.vx, b.vy) || 1; b.vx += -b.vy / hs * b.curl * 0.5 * PDT; b.vy += b.vx / hs * b.curl * 0.5 * PDT; b.curl *= 1 - 1.5 * PDT; } }
     b.x += b.vx * PDT; b.y += b.vy * PDT; pred.push({ x: clamp(b.x, -1, W + 1), y: clamp(b.y, -1, H + 1), z: b.z, t: (i + 1) * PDT });
   }
@@ -378,7 +378,7 @@ export function updateBall(s: Sim, dt: number) {
     ball.z = 0; ball.vx = o.vx; ball.vy = o.vy; ball.vz = 0; ball.spin += osp * dt * 3; return;
   }
   if (ball.z > 0 || ball.vz > 0) {
-    ball.vz -= G * dt; ball.z += ball.vz * dt; airStep(ball, dt);
+    ball.vz -= G * (ball.isShot ? SG : 1) * dt; ball.z += ball.vz * dt; airStep(ball, dt);
     if (ball.z <= 0) { ball.z = 0; if (ball.vz < -2) { ball.vz = -ball.vz * 0.45; ball.vx *= 0.85; ball.vy *= 0.85; ball.curl *= 0.5; } else ball.vz = 0; }
   } else {
     const sp = Math.hypot(ball.vx, ball.vy); if (sp > 0) { const ns = Math.max(0, sp - (FA + FB * sp) * dt); ball.vx *= ns / sp; ball.vy *= ns / sp; }
@@ -425,7 +425,7 @@ export function ballControl(s: Sim) {
   if (ball.z > 0.9 && best.role !== 'GK') { // 헤딩 / 가슴 트래핑
     { const dx = ball.x - best.x, dy = ball.y - best.y, q = Math.hypot(dx, dy); if (q > 0.45) { const k = (q - 0.45) / q; best.x += dx * k; best.y += dy * k; } } // 몸을 공에 갖다 댄다 (떨어진 채 공만 방향이 바뀌어 보이지 않게)
     const t = best.t, gx = t === 0 ? W : 0; const dG = Math.hypot(gx - best.x, CY - best.y), mine = ball.passTarget === best;
-    if (dG < 13.5 && sp > 8 && (!mine || ball.z > 1.5)) { /* 골문 13.5m 안에서만 헤딩슛 (18m 밖 헤딩은 느리게 떠서 키퍼가 다 잡았다 — 그 밖에선 떨궈 잡는다) */ const kp = s.team[1 - t][0], dx = gx - ball.x, dy = CY + (kp.y < CY ? 2.2 : -2.2) + (s.rnd() - 0.5) * (5.5 - n(best.attrs.hea) * 3) - ball.y, q = Math.hypot(dx, dy); const hv = 17 + n(best.attrs.hea) * 6; /* 키퍼 반대쪽 구석을 노린다 */ { const T = q / hv, zt = 0.2 + s.rnd() * 1.5; ball.vz = (zt - ball.z + G * T * T / 2) / T; } /* 골라인에서 0.2~1.7m 높이로 (예전엔 vz −1로 바로 땅에 떨어져 굴러갔다) */
+    if (dG < 13.5 && sp > 8 && (!mine || ball.z > 1.5)) { /* 골문 13.5m 안에서만 헤딩슛 (18m 밖 헤딩은 느리게 떠서 키퍼가 다 잡았다 — 그 밖에선 떨궈 잡는다) */ const kp = s.team[1 - t][0], dx = gx - ball.x, dy = CY + (kp.y < CY ? 2.2 : -2.2) + (s.rnd() - 0.5) * (5.5 - n(best.attrs.hea) * 3) - ball.y, q = Math.hypot(dx, dy); const hv = 17 + n(best.attrs.hea) * 6; /* 키퍼 반대쪽 구석을 노린다 */ { const T = q / hv, zt = 0.2 + s.rnd() * 1.5; ball.vz = (zt - ball.z + G * SG * T * T / 2) / T; } /* 골라인에서 0.2~1.7m 높이로 (예전엔 vz −1로 바로 땅에 떨어져 굴러갔다) */
       ball.vx = dx / q * hv; ball.vy = dy / q * hv; ball.lastTouch = t; ball.kicker = best; ball.shot++; ball.isShot = true; ball.shotT = Math.min(0.45, q / hv); best.kickCD = 0.3; M.stats.shots[t]++; sfx(s, 'kick'); }
     else { ball.vx *= 0.2; ball.vy *= 0.2; ball.vz = 0; ball.z = 0; gain(s, best); }
     return;

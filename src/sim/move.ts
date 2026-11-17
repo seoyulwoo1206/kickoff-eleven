@@ -39,6 +39,7 @@ export function gapY(s: Sim, t: number, y0: number, line: number) {
   return best;
 }
 /** 대형 위치: 공 위치에 따라 블록이 움직이고, 공격 땐 FW는 공보다 앞, MF는 공 근처까지 전진. 오프사이드 라인 뒤에 선다 */
+const FWU = 14; // 수비 중 가장 앞선 공격수가 공보다 앞에 서는 거리 (20이면 스크립트 조작 8경기 17:4·슈팅 68개로 너무 쉬웠다)
 export function targetFor(s: Sim, p: Player, att: boolean, def: boolean) {
   const { ball, M } = s;
   const t = p.t, lb = wx(ball.x, t), tac = M.tac[t];
@@ -74,6 +75,12 @@ export function targetFor(s: Sim, p: Player, att: boolean, def: boolean) {
     if ((p.pos === 'LW' || p.pos === 'RW' || p.pos === 'LM' || p.pos === 'RM') && lb > 55) { x += 6; y += (CY - p.by) * 0.25; } // 윙어 침투: 안쪽으로 파고든다
     if (tac.style === 'wide') y += (p.by - CY) * 0.15; // 측면 전술: 더 넓게
   }
+  if (!att && p.role === 'FW') { // 수비 중에도 공격수는 올라가 있는다 (역습 출구): 가장 앞선 공격수는 공보다 FWU m 앞, 나머지는 그 절반쯤 앞 — 상대 최종 수비보다는 뒤.
+    // 없으면 공을 뺏는 순간 공보다 8m 넘게 앞선 동료가 0.2명이라 역습이 혼자 뛰는 것밖에 안 됐다 (기본 대형 bx가 전부 자기 진영이라 공격수도 공과 나란히 내려온다)
+    const fws = s.team[t].filter(q => q.role === 'FW' && !q.off), top = fws.reduce((a, b) => (b.bx > a.bx ? b : a), fws[0]) === p;
+    x = Math.max(x, Math.min(lb + (top ? FWU : FWU * 0.55), offsideLine(s, t) - 2, 72));
+  }
+  if (!att && p.role === 'MF' && Math.abs(p.by - CY) > 14) x = Math.max(x, Math.min(lb - 1, 56)); // 측면 미드필더는 풀백 줄까지 내려가지 않고 공 높이에서 버틴다 (뺏으면 바로 측면 출구)
   if (att && p.role === 'FW' && tac.style === 'counter') x += 4;
   if (!att && tac.style === 'possession' && p.role === 'MF') x -= 2;
   if (!att && p.role === 'DF') { const hold = defLine(lb); x = Math.min(Math.max(x, hold + tac.line * 3), Math.max(lb - 3, 6)); } // 수비 라인은 공 거리에 맞춰 올라온다 (공보다는 항상 골 쪽)
