@@ -32,6 +32,7 @@ export interface KeyboardHooks {
   /** C: 카메라 전환 */
   cycleCamera: () => void;
   cycleView: () => void;
+  toggleXt?: () => void;
 }
 export function installKeyboard(h: KeyboardHooks) {
   const route = (code: string): [number, Key] | null => {
@@ -44,6 +45,7 @@ export function installKeyboard(h: KeyboardHooks) {
     if (e.code === 'Escape' || e.code === 'KeyP') { h.togglePause(); e.preventDefault(); return; }
     if (e.code === 'KeyC' && !e.repeat) { h.cycleCamera(); return; }
     if (e.code === 'KeyR' && !e.repeat && !route('KeyR')) { h.cycleView(); return; }
+    if (e.code === 'KeyG' && !e.repeat && !route('KeyG')) { h.toggleXt?.(); return; }
     if (!h.isPlaying()) return; const r = route(e.code); if (!r) return; e.preventDefault(); keyDown(h.inp[r[0]], r[1], e.repeat);
   });
   window.addEventListener('keyup', e => { const r = route(e.code); if (!r) return; keyUp(h.inp[r[0]], r[1]); });

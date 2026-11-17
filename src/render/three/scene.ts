@@ -11,6 +11,7 @@ import { ballTexture, puffTexture, ringTexture } from './textures';
 import { opts } from '../../options';
 import { displayName, shirtName } from '../../data/squads';
 import { backTarget } from '../../sim/human';
+import { XT, drawMap } from '../../xt/view';
 
 interface Puff { sp: THREE.Sprite; vx: number; vz: number; life: number; t: number; }
 const PF = 15, BF = 6; // 리플레이 프레임: 선수당 15값, 공 6값
@@ -246,10 +247,16 @@ export class ThreeRenderer implements IRenderer {
       ctx.fillRect(hp.x - w / 2, hp.y - 15, w, 14); ctx.fillStyle = p.role === 'GK' ? kit.gk : kit.c1; ctx.fillRect(hp.x - w / 2, hp.y - 15, 3, 14);
       ctx.fillStyle = '#fff'; ctx.fillText(txt, hp.x + 1, hp.y - 2); ctx.globalAlpha = 1;
     }
+    // xT: 방금 한 패스·드리블이 만든 ΔxT(%p)를 그 자리 위에 잠깐 띄운다 (패널을 열고 '하나' 보기일 때)
+    if (XT.on && XT.pops.length) {
+      const now = performance.now() / 1000; ctx.font = '800 14px "Saira Condensed","Arial Narrow",sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'bottom';
+      for (const q of XT.pops) { const a = now - q.at; if (a < 0 || a > 1.4) continue; const sp = this.toScreen(q.x, q.y, 2.3 + a * 0.9); if (!sp.on) continue; ctx.globalAlpha = Math.min(1, (1.4 - a) / 0.4); ctx.lineWidth = 3; ctx.strokeStyle = 'rgba(9,17,27,.85)'; const tx = (q.v >= 0 ? '+' : '−') + (Math.abs(q.v) * 100).toFixed(1); ctx.strokeText(tx, sp.x, sp.y); ctx.fillStyle = q.v >= 0 ? '#8fe3a3' : '#ff8a5c'; ctx.fillText(tx, sp.x, sp.y); }
+      ctx.globalAlpha = 1;
+    }
     // 미니맵 (코너킥 시점에선 박스가 다 보이므로 숨긴다 — 먼 쪽 코너의 키커를 가린다)
     if (this.spB > 0.5) return;
     const mk = clamp(cw * 0.22 / W, 0.8, 1.6), mw = W * mk, mh = H * mk, mx0 = cw - mw - Math.max(12, ins.r), my0 = ins.t + 56;
-    ctx.fillStyle = 'rgba(9,17,27,.62)'; ctx.fillRect(mx0 - 3, my0 - 3, mw + 6, mh + 6); ctx.strokeStyle = 'rgba(238,243,234,.35)'; ctx.lineWidth = 1; ctx.strokeRect(mx0, my0, mw, mh);
+    ctx.fillStyle = 'rgba(9,17,27,.62)'; ctx.fillRect(mx0 - 3, my0 - 3, mw + 6, mh + 6); if (XT.on && !XT.all && XT.map) drawMap(ctx, mx0, my0, mw, mh, XT.mapTeam, 0.85); /* xT 구역 지도 (공 가진 팀의 공격 방향) */ ctx.strokeStyle = 'rgba(238,243,234,.35)'; ctx.lineWidth = 1; ctx.strokeRect(mx0, my0, mw, mh);
     ctx.beginPath(); ctx.moveTo(mx0 + mw / 2, my0); ctx.lineTo(mx0 + mw / 2, my0 + mh); ctx.stroke();
     for (const p of players) { const kit = M.kit[p.t]; ctx.fillStyle = p.role === 'GK' ? kit.gk : kit.c1; const hh = HU.find(h => h && h.ctrl === p); ctx.beginPath(); ctx.arc(mx0 + p.x * mk, my0 + p.y * mk, hh ? 3.2 : 2.3, 0, 7); ctx.fill(); if (hh) { ctx.strokeStyle = hh.col; ctx.lineWidth = 1.5; ctx.stroke(); } }
     ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(mx0 + ball.x * mk, my0 + ball.y * mk, 2, 0, 7); ctx.fill();

@@ -2,7 +2,7 @@ import { W, H, CX, CY, GH, GZ, G, SG, FA, FB, STEP } from './consts';
 import { clamp, d, wx, angDiff } from './util';
 import { DIFF } from '../data/teams';
 import type { Sim, Player, Pred } from './types';
-import { banner, sfx, crowdSwell, puff } from './events';
+import { banner, sfx, crowdSwell, puff, xtEv } from './events';
 import { setPiece } from './match';
 import { foulCommitted } from './rules';
 
@@ -31,6 +31,7 @@ export function kick(s: Sim, p: Player, vx: number, vy: number, vz = 0, curl = 0
   if (!thrown && (M.phase === 'live' || M.spType !== 'throw')) { const line = offsideLine(s, p.t); for (const m of team[p.t]) m.offs = m !== p && wx(m.x, p.t) > line + 0.3; }
   else for (const m of team[p.t]) m.offs = false;
   if (Math.hypot(vx, vy) > 20) puff(s, ball.x, ball.y, 4, 2);
+  xtEv(s, 'kick', p.t, p.num, p.x, p.y);
 }
 /** 킥 와인드업: 0.1초 뒤에 실행 (애니메이션 발 접촉 프레임에 공이 출발). 그 사이 공을 잃으면 취소 */
 export function queueKick(s: Sim, p: Player, fn: () => void, wind = 0.1) {
@@ -80,6 +81,7 @@ export function gain(s: Sim, p: Player) {
   if (p.offs && M.phase === 'live' && ball.kicker && ball.kicker.t === p.t && ball.kicker !== p) { offside(s, p); return; }
   for (const q of players) q.offs = false;
   if (ball.passTarget === p && ball.kicker && ball.kicker.t === p.t) M.stats.passC[p.t]++; // 패스 성공
+  xtEv(s, 'gain', p.t, p.num, p.x, p.y);
   ball.owner = p; ball.knock = null; ball.lastTouch = p.t; ball.passTarget = null; ball.isShot = false; ball.z = 0; ball.vz = 0; ball.curl = 0; p.holdT = 0; p.decT = Math.max(p.decT, 0.15); p.cutCD = Math.max(p.cutCD, 0.45);
   if (p.role === 'GK') p.dir = p.t === 0 ? 0 : Math.PI;
   const h = HU[p.t]; if (h) { h.ctrl = p; h.lock = 0; if (wasPass) p.shield = Math.max(p.shield, 0.3); } // 공을 잡은 선수에게 커서 (키퍼 포함). 패스를 받은 직후 .3초는 뺏기지 않는다
@@ -266,7 +268,7 @@ export function chipShot(s: Sim, p: Player) {
   const L = Math.abs(gx - ball.x) + 0.8, T = clamp(L / 15, 0.9, 1.5), vz = G * T / 2, sp = L / T;
   const ty = CY + (s.rnd() - 0.5) * (3.5 - n(p.attrs.fin) * 2) + (k.y < CY ? 1.2 : -1.2);
   const dx = gx - ball.x, dy = ty - ball.y, q = Math.hypot(dx, dy) || 1;
-  p.dir = Math.atan2(dy, dx); kick(s, p, dx / q * sp, dy / q * sp, vz); ball.isShot = true; M.stats.shots[t]++; k.reactT = 0.3;
+  p.dir = Math.atan2(dy, dx); kick(s, p, dx / q * sp, dy / q * sp, vz); ball.isShot = true; xtEv(s, 'shot', p.t, p.num, p.x, p.y); M.stats.shots[t]++; k.reactT = 0.3;
 }
 /** 약발로 차는가: 목표 방향이 몸 기준으로 주발 반대쪽에 있으면 */
 function weakFoot(p: Player, aimAng: number) { const rel = angDiff(p.dir, aimAng); return p.foot === 'R' ? rel < -0.25 : rel > 0.25; }
@@ -298,7 +300,7 @@ export function shoot(s: Sim, p: Player, power: number, aimY: number, finesseIn 
   // 감아차기: 조준점 바깥쪽으로 향했다가 안으로 휘어 들어온다
   const curlDir = finesse ? Math.sign(ty - CY) || 1 : 0, curl = finesse ? curlDir * (t === 0 ? 1 : -1) * (3.5 + n(A.fin) * 1.5) : 0;
   const a0 = Math.atan2(dy, dx) + (finesse ? -curlDir * (t === 0 ? 1 : -1) * 0.14 : 0);
-  p.dir = a0; kick(s, p, Math.cos(a0) * sp, Math.sin(a0) * sp, vz, curl); ball.isShot = true; ball.shotT = dist / sp;
+  p.dir = a0; kick(s, p, Math.cos(a0) * sp, Math.sin(a0) * sp, vz, curl); ball.isShot = true; xtEv(s, 'shot', p.t, p.num, p.x, p.y); ball.shotT = dist / sp;
   kp.reactT = (HU[1 - t] ? 0.3 - n(kp.attrs.rea) * 0.08 : (0.32 - n(kp.attrs.rea) * 0.08) / DIFF[M.diff].gk) * (dist < 12 ? 0.8 : 1); // 키퍼 반응 지연
   M.stats.shots[t]++;
   if (dist < 30) crowdSwell(s, 0.1, 1.2);
@@ -426,7 +428,7 @@ export function ballControl(s: Sim) {
     { const dx = ball.x - best.x, dy = ball.y - best.y, q = Math.hypot(dx, dy); if (q > 0.45) { const k = (q - 0.45) / q; best.x += dx * k; best.y += dy * k; } } // 몸을 공에 갖다 댄다 (떨어진 채 공만 방향이 바뀌어 보이지 않게)
     const t = best.t, gx = t === 0 ? W : 0; const dG = Math.hypot(gx - best.x, CY - best.y), mine = ball.passTarget === best;
     if (dG < 13.5 && sp > 8 && (!mine || ball.z > 1.5)) { /* 골문 13.5m 안에서만 헤딩슛 (18m 밖 헤딩은 느리게 떠서 키퍼가 다 잡았다 — 그 밖에선 떨궈 잡는다) */ const kp = s.team[1 - t][0], dx = gx - ball.x, dy = CY + (kp.y < CY ? 2.2 : -2.2) + (s.rnd() - 0.5) * (5.5 - n(best.attrs.hea) * 3) - ball.y, q = Math.hypot(dx, dy); const hv = 17 + n(best.attrs.hea) * 6; /* 키퍼 반대쪽 구석을 노린다 */ { const T = q / hv, zt = 0.2 + s.rnd() * 1.5; ball.vz = (zt - ball.z + G * SG * T * T / 2) / T; } /* 골라인에서 0.2~1.7m 높이로 (예전엔 vz −1로 바로 땅에 떨어져 굴러갔다) */
-      ball.vx = dx / q * hv; ball.vy = dy / q * hv; ball.lastTouch = t; ball.kicker = best; ball.shot++; ball.isShot = true; ball.shotT = Math.min(0.45, q / hv); best.kickCD = 0.3; M.stats.shots[t]++; sfx(s, 'kick'); }
+      ball.vx = dx / q * hv; ball.vy = dy / q * hv; ball.lastTouch = t; ball.kicker = best; ball.shot++; ball.isShot = true; xtEv(s, 'shot', best.t, best.num, best.x, best.y); ball.shotT = Math.min(0.45, q / hv); best.kickCD = 0.3; M.stats.shots[t]++; sfx(s, 'kick'); }
     else { ball.vx *= 0.2; ball.vy *= 0.2; ball.vz = 0; ball.z = 0; gain(s, best); }
     return;
   }

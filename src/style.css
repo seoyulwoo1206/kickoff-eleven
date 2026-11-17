@@ -168,3 +168,40 @@ body.touch button.touchonly{display:inline-block}
 @keyframes introVs{from{opacity:0;transform:scale(.4)}to{opacity:1;transform:none}}
 @media (max-width:560px){#intro li{grid-template-columns:1.8em 1fr auto}#intro li .p{display:none}#intro .vs small{display:none}}
 @media (prefers-reduced-motion:reduce){#intro .it,#intro li,#intro .vs{animation-duration:.01s;animation-delay:0s!important}}
+
+/* xT 패널 (연구 R&E의 분할×xT 표를 경기에 붙인 것) */
+#xtBtn{position:fixed;top:calc(env(safe-area-inset-top,0px) + 6px);right:calc(max(12px,env(safe-area-inset-right,0px)) + 48px);z-index:5;height:40px;padding:0 13px;border-radius:8px;border:1px solid var(--rule);background:var(--panel);color:var(--chalk);font-family:var(--f-num);font-weight:800;font-size:16px;letter-spacing:.06em}
+#xtBtn[aria-pressed="true"]{background:var(--amber);color:var(--amber-ink);border-color:var(--amber)}
+#xtPanel{position:fixed;left:max(12px,env(safe-area-inset-left,0px));top:calc(env(safe-area-inset-top,0px) + 50px);z-index:21;width:min(350px,46vw);max-height:calc(100vh - 60px);overflow-y:auto;background:var(--panel);border:1px solid var(--rule);border-radius:10px;padding:10px 11px;display:grid;gap:7px;-webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px)}
+#xtPanel[hidden]{display:none}
+#xtPanel.all{width:min(780px,60vw);grid-template-columns:1fr 1fr;column-gap:14px}
+#xtPanel.all>.xth,#xtPanel.all>canvas,#xtPanel.all>p{grid-column:1/-1}
+#xtPanel .xth{display:flex;align-items:center;gap:8px;font-family:var(--f-num);letter-spacing:.06em}
+#xtPanel .xth b{font-weight:800;font-size:15px}
+#xtPanel .xth span{margin-left:auto;font-weight:800;font-size:17px;font-variant-numeric:tabular-nums;color:var(--amber)}
+#xtPanel .xth button{background:transparent;border:0;color:var(--muted);font-size:20px;line-height:1;padding:2px 6px}
+#xtPanel .xtr{display:grid;grid-template-columns:34px 1fr;align-items:center;gap:6px}
+#xtPanel .xtr[hidden]{display:none}
+#xtPanel .xtr>span{font-size:11px;font-weight:700;letter-spacing:.08em;color:var(--muted)}
+.seg.sm{display:flex;flex-wrap:wrap}
+.seg.sm button{padding:5px 8px;font-size:12px;flex:1 1 auto;white-space:nowrap}
+.seg.sm button:disabled{opacity:.35}
+#xtGraph{width:100%;height:150px;display:block}
+#xtPanel.all #xtGraph{height:max(200px,min(500px,calc(100vh - 240px)))}
+#xtMap{width:100%;aspect-ratio:105/68;display:block;border-radius:4px}
+#xtPanel.all #xtMap{display:none}
+#xtNote{margin:0;font-size:11px;line-height:1.45;color:var(--muted)}
+#rXt{display:grid;gap:7px}
+#rXt[hidden]{display:none}
+.xttab{width:100%;border-collapse:collapse;font-size:12px;font-variant-numeric:tabular-nums}
+.xttab th,.xttab td{padding:4px 5px;text-align:right;border-bottom:1px solid var(--rule);white-space:nowrap}
+.xttab th:first-child,.xttab td:first-child{text-align:left;max-width:118px;overflow:hidden;text-overflow:ellipsis}
+.xttab th{font-weight:700;color:var(--muted);font-size:11px}
+.xttab th.on{color:var(--chalk)}
+.xttab small{display:block;font-size:10px;color:var(--muted);font-weight:500}
+.xttab td.top{color:var(--amber);font-weight:700}
+.xttab td i{display:inline-block;width:4px;height:11px;border-radius:1px;margin-right:5px;vertical-align:-1px}
+.xttab tr.tm td{color:var(--muted);border-bottom:0;padding-top:3px;padding-bottom:1px}
+.xtnote{margin:0;font-size:11px;line-height:1.5;color:var(--muted)}
+.xtnote b{color:var(--amber);font-weight:700}
+body.xto #result,body.xto #pause{justify-items:end}

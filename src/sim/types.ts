@@ -50,6 +50,8 @@ export interface MatchInfo {
   adv: { t: number; x: number; y: number; timer: number; on: Player } | null;
 }
 export interface Pred { x: number; y: number; z: number; t: number; }
+/** xT 집계용 사건 (계산은 시뮬 밖 src/xt/에서): 공을 받음·참·슛·아웃(세트피스·킥오프)·골 */
+export type XtKind = 'gain' | 'kick' | 'shot' | 'out' | 'goal';
 export type SimEvent =
   | { k: 'banner'; big: string; small: string; ms: number; goal: boolean }
   | { k: 'sfx'; type: SfxType }
@@ -59,6 +61,7 @@ export type SimEvent =
   | { k: 'hud' }
   | { k: 'card'; t: number; num: number; kind: 'Y' | 'R' }
   | { k: 'sub'; t: number; num: number }
+  | { k: 'xt'; e: XtKind; t: number; num: number; x: number; y: number; tick: number }
   | { k: 'full' };
 export interface HumanCfg { tag: string; col: string; cursor: 'manual' | 'auto'; }
 export interface MatchCfg {

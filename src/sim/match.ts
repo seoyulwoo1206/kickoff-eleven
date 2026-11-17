@@ -10,7 +10,7 @@ import type { PlayerDef } from '../data/squad';
 import { FORMATIONS, type Slot } from '../data/formations';
 import { newInp, readInput, clearPresses, type Inp } from '../input/actions';
 import type { Sim, MatchCfg, Player, Human, HumanCfg, SetPieceType } from './types';
-import { banner, sfx, crowdSwell, shake } from './events';
+import { banner, sfx, crowdSwell, shake, xtEv } from './events';
 import { computePred, updateBall, ballControl, runPending, dribbleCut, retarget } from './ball';
 import { steer, moveTo, integrate } from './move';
 import { autoCursor, humanUpdate } from './human';
@@ -86,6 +86,7 @@ export function kickoff(s: Sim, kt: number) {
   const fw = team[kt].filter(p => p.role !== 'GK' && !p.off), tk = fw[fw.length - 2] ?? fw[0], mate = fw[fw.length - 1] ?? fw[0];
   tk.x = wx(51.7, kt); tk.y = CY; mate.x = wx(50.5, kt); mate.y = CY + 6; tk.dir = kt === 0 ? Math.PI : 0; mate.dir = tk.dir; // 킥오프 두 선수는 자기 진영을 본다
   placeBall(s, CX, CY); ball.owner = tk; ball.lastTouch = kt;
+  xtEv(s, 'out', kt, 0, CX, CY);
   if (!HU[kt]) { tk.forcePass = true; tk.decT = 0.25; }
   M.phase = 'kickoff'; M.phaseT = 1.3; M.protect = 0; M.adv = null;
   for (const h of HU) { if (!h) continue; h.charging = false; h.charge = 0; h.lock = 0; setCtrl(h, h.t === kt ? tk : nearestOutfield(s, h.t, ball)); }
@@ -93,6 +94,7 @@ export function kickoff(s: Sim, kt: number) {
 }
 export function setPiece(s: Sim, type: SetPieceType, t: number, x: number, y: number) {
   const { M, players, team, ball, HU } = s;
+  xtEv(s, 'out', t, 0, x, y);
   placeBall(s, x, y); ball.owner = null; M.throwIn = null;
   const tk = type === 'goalkick' ? team[t][0] : nearestOutfield(s, t, { x, y });
   let ang: number;
@@ -130,6 +132,7 @@ export function goal(s: Sim, t: number) {
   for (const q of s.players) { q.pending = null; q.kickWind = 0; }
   M.stops++; M.adv = null;
   if (ball.kicker && ball.kicker.t === t) M.stats.onT[t]++;
+  xtEv(s, 'goal', t, ball.kicker ? ball.kicker.num : 0, ball.x, ball.y);
   if (M.so) { M.phase = 'goal'; M.phaseT = 2.0; M.nextKick = 1 - t; M.scorer = ball.kicker; banner(s, 'GOAL!', '', 1500, true); sfx(s, 'goal'); crowdSwell(s, 0.18, 1.5); return; }
   M.score[t]++; M.phase = 'goal'; M.phaseT = 7.4; /* 세리머니 1.3초 + 리플레이 ~5.6초 */
   M.nextKick = 1 - t; ball.owner = null; shake(s, 0.6); M.slow = 1.1; // 골을 먹은 팀이 킥오프 (이 줄이 위 주석에 먹혀 늘 팀 0이 킥오프하던 적이 있다)

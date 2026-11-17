@@ -30,6 +30,10 @@ import { defaultTactics, applyFormation, LINE_NAMES, STYLE_NAMES, PRESS_NAMES, t
 import { substitute } from './sim/rules';
 import { FORMATION_KEYS } from './data/formations';
 import { overall } from './data/squad';
+import { XT, loadXt, resetXt, xtEvent, xtSample, refreshMap, fixSelection, renderPanel, panelNote, resultHtml, SAMPLE_EVERY } from './xt/view';
+import { has, modelsOf, PARTS, MODELS, TKEYS, type Part, type Model, type TKey } from './xt/table';
+import { switchPlayer } from './sim/human';
+import type { Human } from './sim/types';
 
 const $ = (id: string) => document.getElementById(id) as HTMLElement;
 type State = 'menu' | 'play' | 'paused' | 'over';
@@ -90,12 +94,13 @@ function startMatch(cfg?: StartCfg) {
     tactics: net ? [null, null] : [menuTac[0], menuTac[1]], lineups: net ? [null, null] : [menuLineup[0], menuLineup[1]],
     knockout: cupMatch && !!cup && cup.stage !== 'group', shootoutOnly: opts.mode === 'pk',
   }, INP);
+  resetXt(); autoHU = null;
   introT = (net || opts.mode === 'pk') ? 0 : INTRO_LEN; if (introT > 0) R.setCamMode?.('intro');
   renderPauseTactics();
   if (NET.role === 'guest') { snapBuf.buf = []; snapBuf.off = null; }
   R.reset(); acc = 0; simLast = 0; state = 'play';
   $('menu').hidden = true; $('result').hidden = true; $('pause').hidden = true; $('hud').hidden = false; $('pauseBtn').hidden = false; $('touch').hidden = !isTouch;
-  $('hPing').hidden = !net; showPing();
+  $('hPing').hidden = !net; showPing(); xtSync();
   resetHud(); drain(sim); updateHud(sim, LOCAL()); crowdStart();
   if (introT > 0) { showIntro(sim, opts.names, cupMatch && cup ? '월드컵' : '친선 경기'); anthem(); } else { hideIntro(); anthemStop(0.1); } // 입장: 선발 라인업 + 음악
   saveOpts();
@@ -117,6 +122,7 @@ function applyLocalEv(e: SimEvent, relay: boolean) {
     case 'card': renderPauseTactics(); if (e.kind === 'Y' || e.kind === 'R') boo(); break;
     case 'sub': renderPauseTactics(); break;
     case 'full': fullTime(); break;
+    case 'xt': if (XT.tb) { const p = e.e === 'out' || e.e === 'goal' || !sim ? null : sim.team[e.t].find(q => q.num === e.num); xtEvent(e, p ? displayName(p, opts.names) : null, performance.now() / 1000); } break; // 게스트에겐 중계하지 않는다
   }
 }
 function buzz(type: string) { if (!opts.vibrate || !isTouch || !navigator.vibrate) return; try { if (type === 'goal') navigator.vibrate([80, 40, 120]); else if (type === 'tackle') navigator.vibrate(25); else if (type === 'post') navigator.vibrate(45); } catch { /* */ } }
@@ -124,7 +130,7 @@ function fullTime() {
   if (!sim) return; sim.M.phase = 'full'; state = 'over'; $('touch').hidden = true;
   if (NET.role === 'host') { netSend(makeSnap(sim, perf, R.cam.shake)); netSend({ t: 'ev', k: 'full' }); }
   if (NET.role !== 'guest') sfx('long');
-  fillResult(sim, LOCAL(), NET.role === 'guest');
+  fillResult(sim, LOCAL(), NET.role === 'guest'); fillXtResult();
   $('cupNextBtn').hidden = !cupMatch; $('againBtn').hidden = cupMatch || NET.role === 'guest';
   if (cupMatch && cup) { const so = sim.M.so ? [sim.M.so.kicks[0].filter(v => v).length, sim.M.so.kicks[1].filter(v => v).length] as [number, number] : undefined; advance(cup, [sim.M.score[0], sim.M.score[1]], so, sim.M.so?.winner); saveCup(cup); }
   window.setTimeout(() => { if (state === 'over') { $('result').hidden = false; ($('againBtn') as HTMLButtonElement).focus(); } }, 900);
@@ -137,7 +143,7 @@ function pauseGame(remote?: boolean) {
 function resumeGame(remote?: boolean) { if (state !== 'paused') return; state = 'play'; $('pause').hidden = true; lastTs = 0; simLast = 0; if (remote !== true && NET.ready) netSend({ t: 'resume' }); }
 function toMenu(remote?: boolean) {
   if (remote !== true && NET.ready && state !== 'menu') netSend({ t: 'quit' });
-  state = 'menu'; sim = null; crowdStop();
+  state = 'menu'; sim = null; crowdStop(); XT.all = false; xtSync();
   $('pause').hidden = true; $('result').hidden = true; $('hud').hidden = true; $('pauseBtn').hidden = true; $('touch').hidden = true; $('menu').hidden = false; hideBanner(); renderMenu();
 }
 function showPing() { const el = $('hPing'); if (NET.rtt >= 0) el.textContent = '핑 ' + NET.rtt + 'ms'; if (state === 'menu' && NET.ready) netStatus('연결됨' + (NET.rtt >= 0 ? ' · 핑 ' + NET.rtt + 'ms' : '') + (NET.role === 'host' ? ' · 팀을 고르고 킥오프를 누르세요.' : ' · 호스트가 킥오프하면 시작돼요.'), true); }
@@ -194,7 +200,7 @@ function netInterpNow() { if (sim) netInterp(sim, snapBuf, perf, (x, y) => R.puf
 window.setInterval(() => { if (NET.role === 'guest' && state === 'play' && sim) { readInput(INP[0], STEP); const m = encodeInput(INP[0], inSt); if (m) netSend(m); clearPresses(INP[0]); } }, 1000 / 60);
 
 /* ---------- 입력 ---------- */
-installKeyboard({ inp: INP, isPlaying: () => state === 'play', hasLocalP2: () => !!(sim && sim.M.twoP && !NET.role), togglePause: () => { if (state === 'play') pauseGame(); else if (state === 'paused') resumeGame(); }, cycleCamera, cycleView });
+installKeyboard({ inp: INP, isPlaying: () => state === 'play', hasLocalP2: () => !!(sim && sim.M.twoP && !NET.role), togglePause: () => { if (state === 'play') pauseGame(); else if (state === 'paused') resumeGame(); }, cycleCamera, cycleView, toggleXt: () => toggleXt() });
 installTouch(INP[0], () => { if (!isTouch) { isTouch = true; document.body.classList.add('touch'); if (state === 'play' || state === 'paused') $('touch').hidden = false; } }, () => ({ stickSprint: opts.stickSprint }));
 if (isTouch) document.body.classList.add('touch');
 applyTouchStyle(opts.btnSize, opts.btnAlpha);
@@ -274,7 +280,7 @@ $('keysBtn').addEventListener('click', () => { renderKeys(); $('keys').hidden = 
 $('keysClose').addEventListener('click', () => { $('keys').hidden = true; });
 bindSeg('segGfx', opts.gfx, v => { opts.gfx = v as typeof opts.gfx; R.setQuality?.(opts.gfx); saveOpts(); });
 $('camBtn').addEventListener('click', cycleCamera); $('viewBtn').addEventListener('click', cycleView); setView(opts.view, false);
-window.addEventListener('wheel', e => { if (state === 'play' && !e.ctrlKey) setView(opts.view + Math.sign(e.deltaY) * 0.1); }, { passive: true });
+window.addEventListener('wheel', e => { if (state === 'play' && !e.ctrlKey && !(e.target as HTMLElement | null)?.closest?.('#xtPanel')) setView(opts.view + Math.sign(e.deltaY) * 0.1); }, { passive: true });
 bindSeg('segSnd', audio.on ? 'on' : 'off', v => { audio.on = v === 'on'; opts.sound = audio.on; });
 $('startBtn').addEventListener('click', () => { ensureAudio(); if (opts.mode === 'cup') { openCup(); return; } startMatch(); });
 $('pauseBtn').addEventListener('click', () => pauseGame());
@@ -292,13 +298,60 @@ $('copyBtn').addEventListener('click', async () => { try { await navigator.clipb
 window.addEventListener('beforeunload', () => { if (NET.ready) netSend({ t: 'quit' }); });
 renderMenu(); renderMenuTactics();
 
+/* ---------- xT 패널 ---------- */
+// 연구(R&E)의 분할×xT 표를 경기에 붙인 것 (src/xt/). 표(public/xt/xt_tables.json)가 없으면 버튼 자체가 안 보인다.
+// 'xT' 버튼·G 키로 옆 패널(공 위치 xT의 실시간 그래프 + 구역 지도)을 열고 격자·모델·T를 고른다.
+// '전체'는 격자 4 × 모델 3 그래프를 한꺼번에 띄우고, 그동안 양 팀을 AI가 몬다(사람 조작을 빼 두었다가 '하나'로 돌아오면 되돌린다)
+let autoHU: [Human | null, Human | null] | null = null;
+let xtFrame = 0;
+const xtUsable = () => !!XT.tb && !!sim && NET.role !== 'guest' && state !== 'menu';
+function xtSync() {
+  const ok = xtUsable(), tb = XT.tb; if (!ok) { XT.on = false; XT.all = false; }
+  $('xtBtn').hidden = !ok; $('xtBtn').setAttribute('aria-pressed', String(XT.on)); $('xtPanel').hidden = !XT.on; document.body.classList.toggle('xto', XT.on); /* 패널이 열려 있으면 일시정지·결과 카드를 오른쪽으로 민다 */
+  $('xtPanel').classList.toggle('all', XT.all); $('xtRowPart').hidden = XT.all; $('xtRowModel').hidden = XT.all; $('xtRowSpeed').hidden = !XT.all;
+  setSeg('segXtView', XT.all ? 'all' : 'one'); setSeg('segXtPart', XT.part); setSeg('segXtModel', XT.model); setSeg('segXtT', XT.T); setSeg('segXtWin', XT.win); setSeg('segXtSpeed', XT.speed);
+  if (tb) {
+    $('xtAllBtn').textContent = `전체 ${PARTS.length * modelsOf(tb).length}개 · AI 자동`; ($('xtAllBtn') as HTMLButtonElement).disabled = !!sim && sim.M.net;
+    $('segXtPart').querySelectorAll('button').forEach(b => { b.disabled = !has(tb, b.dataset.v as Part, XT.model, XT.T); });
+    $('segXtModel').querySelectorAll('button').forEach(b => { b.disabled = !PARTS.some(p => has(tb, p, b.dataset.v as Model, XT.T)); });
+    $('segXtT').querySelectorAll('button').forEach(b => { b.disabled = !PARTS.some(p => MODELS.some(m => has(tb, p, m, b.dataset.v as TKey))); });
+  }
+  $('xtNote').textContent = panelNote(); xtFrame = 0; applyAuto();
+}
+function xtChanged() { fixSelection(); opts.xt = { part: XT.part, model: XT.model, T: XT.T }; saveOpts(); refreshMap(); xtSync(); if (state === 'over') fillXtResult(); }
+function toggleXt(on = !XT.on) { if (!xtUsable()) return; XT.on = on; if (!on) XT.all = false; xtSync(); }
+function setXtAll(all: boolean) { XT.all = all && !(sim && sim.M.net); XT.win = XT.all ? 'match' : 'recent'; xtSync(); }
+/** 전체 보기 = AI 자동 진행: 사람 조작(HU)을 빼 두고, 돌아오면 되돌려 공에 가까운 선수로 커서를 잡는다 */
+function applyAuto() {
+  if (!sim) { autoHU = null; return; }
+  const want = XT.on && XT.all && !sim.M.net;
+  if (want && !autoHU) { autoHU = [sim.HU[0], sim.HU[1]]; sim.HU[0] = sim.HU[1] = null; for (const I of INP) { dropKeys(I); clearPresses(I); I.tx = I.ty = 0; } }
+  else if (!want && autoHU) { sim.HU[0] = autoHU[0]; sim.HU[1] = autoHU[1]; autoHU = null; for (const h of sim.HU) if (h) { h.charging = false; h.charge = 0; if (!sim.M.so) switchPlayer(sim, h); } }
+  $('touch').hidden = !isTouch || !!autoHU || state === 'menu' || state === 'over';
+}
+function fillXtResult() {
+  const el = $('rXt'); if (!sim || !XT.tb || NET.role === 'guest') { el.hidden = true; return; }
+  const M = sim.M; el.innerHTML = resultHtml([M.teams[0].code, M.teams[1].code], [M.kit[0].c1, M.kit[1].c1]); el.hidden = false;
+}
+{ const o = opts.xt; if ((PARTS as string[]).includes(o.part)) XT.part = o.part as Part; if ((MODELS as string[]).includes(o.model)) XT.model = o.model as Model; if ((TKEYS as string[]).includes(o.T)) XT.T = o.T as TKey; }
+$('xtBtn').addEventListener('click', () => toggleXt()); $('xtClose').addEventListener('click', () => toggleXt(false));
+bindSeg('segXtView', 'one', v => setXtAll(v === 'all'));
+bindSeg('segXtPart', XT.part, v => { XT.part = v as Part; xtChanged(); });
+bindSeg('segXtModel', XT.model, v => { XT.model = v as Model; xtChanged(); });
+bindSeg('segXtT', XT.T, v => { XT.T = v as TKey; xtChanged(); });
+bindSeg('segXtWin', XT.win, v => { XT.win = v as typeof XT.win; xtFrame = 0; });
+bindSeg('segXtSpeed', 1, v => { XT.speed = +v; });
+for (const id of ['xtBtn', 'xtPanel']) $(id).addEventListener('click', () => (document.activeElement as HTMLElement | null)?.blur()); // 버튼에 포커스가 남으면 Space(P2 키) 등이 버튼을 다시 누른다
+void loadXt().then(() => xtSync());
+
 /* ---------- 루프 ---------- */
 function runSteps(dt: number) {
   if (!sim) return;
-  acc += dt * (sim.M.slow > 0 ? 0.35 : 1) * sim.M.tempo; // 골 직후 슬로우모션 · 경기 템포
+  acc += dt * (sim.M.slow > 0 ? 0.35 : 1) * sim.M.tempo * (autoHU ? XT.speed : 1); // 골 직후 슬로우모션 · 경기 템포 · xT 전체 보기(AI 자동)의 속도 배율
   let n = 0;
   while (acc >= STEP && n < 6) {
     step(sim, STEP); acc -= STEP; n++; drain(sim);
+    if (XT.tb && sim.M.tick % SAMPLE_EVERY === 0) { const b = sim.ball; xtSample(sim.M.tick, b.x, b.y, b.owner ? b.owner.t : (b.lastTouch === 1 ? 1 : 0), sim.M.phase === 'live'); }
     if (NET.role === 'host' && NET.ready && sim.M.tick % 2 === 0 && state === 'play') netSend(makeSnap(sim, perf, R.cam.shake));
     if (state !== 'play') break;
   }
@@ -323,6 +376,7 @@ function frame(ts: number) {
   } else if (state === 'paused' && NET.role === 'guest' && sim) netInterpNow();
   netPing(perf);
   R.render(sim, dt, perf, state === 'paused');
+  if (XT.on && sim && state !== 'menu' && xtFrame++ % 4 === 0) $('xtNow').textContent = renderPanel($('xtGraph') as HTMLCanvasElement, $('xtMap') as HTMLCanvasElement, sim.M.tick, [sim.M.teams[0].code, sim.M.teams[1].code], sim.ball);
   if (rawDt < 0.2 && document.visibilityState === 'visible') autoQuality(dt);
 }
 // 프레임이 3초 넘게 28fps 아래면 품질을 한 단계 내린다 (자동, 올리지는 않음)
@@ -350,4 +404,4 @@ function gauges(s: Sim) {
 if (import.meta.env.PROD && 'serviceWorker' in navigator) window.addEventListener('load', () => { navigator.serviceWorker.register('./sw.js').catch(() => { /* http 등에선 불가 */ }); });
 function resize() { R.resize(); $('rotateTip').hidden = !(isTouch && R.ch > R.cw); }
 window.addEventListener('resize', resize); resize(); requestAnimationFrame(frame);
-if (import.meta.env.DEV) (window as unknown as { __KO11: unknown }).__KO11 = { R, getSim: () => sim, INP, startMatch, perfNow: () => perf };
+if (import.meta.env.DEV) (window as unknown as { __KO11: unknown }).__KO11 = { R, getSim: () => sim, INP, startMatch, perfNow: () => perf, XT, frame, dbg: () => ({ state, introT, acc, lastTs, role: NET.role, auto: !!autoHU }) };
