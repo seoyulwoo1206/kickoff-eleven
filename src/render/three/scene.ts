@@ -25,7 +25,7 @@ export class ThreeRenderer implements IRenderer {
   private models = new Map<Player, PlayerModel>(); private modelSim: Sim | null = null; private namesMode = opts.names;
   private ball: THREE.Mesh; private ballShadow: THREE.Mesh; private rings: THREE.Mesh[] = [];
   private puffs: Puff[] = []; private puffTex: THREE.Texture; private blobTex: THREE.Texture;
-  private ov: CanvasRenderingContext2D; private view = 1.35; private lead = 0; private wide = 0; private lastPhase = ''; private camPos = new THREE.Vector3(); private camLook = new THREE.Vector3(CX, 0, CY);
+  private ov: CanvasRenderingContext2D; private view = 1.35; private lead = 0; private wide = 0; private spB = 0; private lastPhase = ''; private camPos = new THREE.Vector3(); private camLook = new THREE.Vector3(CX, 0, CY);
   private tmpV = new THREE.Vector3(); private shk = { x: 0, y: 0 }; private crowdT = 0;
   // 골 리플레이: 최근 4초를 링버퍼에 담아두고 골 1.3초 뒤부터 0.55배속으로 보여준다
   private frames: Frame[] = []; private goalAt = -1; private replay = false; private replayT = 0; private pose: PoseState[] = []; private rBall = { x: 0, y: 0, z: 0, vx: 0, vy: 0, owner: null as Player | null };
@@ -67,7 +67,7 @@ export class ThreeRenderer implements IRenderer {
     const cs = getComputedStyle(this.insetEl);
     this.ins = { t: parseFloat(cs.paddingTop) || 0, r: parseFloat(cs.paddingRight) || 0, b: parseFloat(cs.paddingBottom) || 0, l: parseFloat(cs.paddingLeft) || 0 };
   }
-  reset() { for (const q of this.puffs) { q.sp.visible = false; q.t = 2; } this.cam.x = CX; this.cam.y = CY; this.cam.z = 1; this.lead = 0; this.lastPhase = ''; this.frames.length = 0; this.goalAt = -1; this.replay = false; }
+  reset() { for (const q of this.puffs) { q.sp.visible = false; q.t = 2; } this.cam.x = CX; this.cam.y = CY; this.cam.z = 1; this.lead = 0; this.spB = 0; this.lastPhase = ''; this.frames.length = 0; this.goalAt = -1; this.replay = false; }
   private pushFrame(sim: Sim, perf: number) {
     const n = sim.players.length; let f = this.frames.length > 260 ? this.frames.shift()! : { t: 0, P: new Float32Array(n * PF), B: new Float32Array(BF) };
     if (f.P.length !== n * PF) f = { t: 0, P: new Float32Array(n * PF), B: new Float32Array(BF) };
@@ -111,7 +111,10 @@ export class ThreeRenderer implements IRenderer {
     const aspect = this.cw / Math.max(1, this.ch);
     // 시야: 기본 폭 × 시야 배율(view). 공이 중원에 있을 땐 10% 더 넓게(전개를 본다), 골 앞에선 원래대로
     const midT = sim && ball && sim.M.phase !== 'goal' ? 1 - clamp((Math.abs(ball.x - CX) - 18) / 22, 0, 1) : 0; this.wide += (midT - this.wide) * (1 - Math.pow(0.35, dtR));
-    const VW = (this.cw < 600 ? 30 : aspect > 1.9 ? 34 : 38) * this.view * (1 + 0.1 * this.wide) / cam.z; // 화면에 보이는 가로 폭 (m)
+    // 코너킥: 차기 전엔 코너와 박스가 한 화면에 들어오게 넓히고 박스 쪽을 본다 (전엔 공만 비춰 박스 안 동료가 안 보였다). 차고 나면 1초쯤에 걸쳐 원래대로
+    const corner = !!sim && !!ball && sim.M.spType === 'corner' && !!ball.owner && (sim.M.phase === 'setpiece' || sim.M.phase === 'live') && (ball.x < 3 || ball.x > W - 3) && (ball.y < 3 || ball.y > H - 3);
+    this.spB += ((corner ? 1 : 0) - this.spB) * (1 - Math.pow(corner ? 0.01 : 0.25, dtR));
+    const VW = (this.cw < 600 ? 30 : aspect > 1.9 ? 34 : 38) * Math.max(this.view, 1.35 * this.spB) * (1 + 0.1 * this.wide) * (1 + 0.2 * this.spB) / cam.z; // 화면에 보이는 가로 폭 (m)
     const L = VW / (2 * Math.tan(this.camera.fov * Math.PI / 360) * aspect); // 그 폭이 보이는 거리
     let tx: number, ty: number;
     if (!sim || !ball) { tx = CX + Math.sin(perf * 0.07) * 22; ty = CY + Math.cos(perf * 0.05) * 8; } else {
@@ -119,6 +122,7 @@ export class ThreeRenderer implements IRenderer {
       const pt = ball.owner ? ball.owner.t : ball.knock ? ball.knock.t : ball.lastTouch, tl = sim.M.phase === 'live' && (pt === 0 || pt === 1) ? (pt === 0 ? 1 : -1) * VW * 0.11 : 0;
       this.lead += (tl - this.lead) * (1 - Math.pow(0.3, dtR));
       tx = ball.x + ball.vx * 0.22 + this.lead; ty = ball.y + ball.vy * 0.18;
+      if (this.spB > 0.01) { const bx = ball.x > CX || this.spB < 1 && cam.x > CX ? W - 14 : 14, by = CY + (ball.y - CY) * 0.4; tx += (bx - tx) * this.spB; ty += (by - ty) * this.spB; }
     }
     const vh = VW / aspect * 1.5;
     // 카메라는 비스듬히 내려다보므로 화면 아래쪽(가까운 터치라인)은 조준점에서 가까운 거리까지만 보인다 → 아래 여유를 따로 계산
@@ -242,7 +246,8 @@ export class ThreeRenderer implements IRenderer {
       ctx.fillRect(hp.x - w / 2, hp.y - 15, w, 14); ctx.fillStyle = p.role === 'GK' ? kit.gk : kit.c1; ctx.fillRect(hp.x - w / 2, hp.y - 15, 3, 14);
       ctx.fillStyle = '#fff'; ctx.fillText(txt, hp.x + 1, hp.y - 2); ctx.globalAlpha = 1;
     }
-    // 미니맵
+    // 미니맵 (코너킥 시점에선 박스가 다 보이므로 숨긴다 — 먼 쪽 코너의 키커를 가린다)
+    if (this.spB > 0.5) return;
     const mk = clamp(cw * 0.22 / W, 0.8, 1.6), mw = W * mk, mh = H * mk, mx0 = cw - mw - Math.max(12, ins.r), my0 = ins.t + 56;
     ctx.fillStyle = 'rgba(9,17,27,.62)'; ctx.fillRect(mx0 - 3, my0 - 3, mw + 6, mh + 6); ctx.strokeStyle = 'rgba(238,243,234,.35)'; ctx.lineWidth = 1; ctx.strokeRect(mx0, my0, mw, mh);
     ctx.beginPath(); ctx.moveTo(mx0 + mw / 2, my0); ctx.lineTo(mx0 + mw / 2, my0 + mh); ctx.stroke();
