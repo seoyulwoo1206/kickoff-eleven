@@ -78,7 +78,7 @@ export class PlayerModel {
   }
   setBlob(on: boolean) { this.blob.visible = on; }
   /** 상태로 포즈를 만든다. tGlobal은 연출용 시간 */
-  update(p: PoseState, ball: { x: number; y: number; z?: number; owner?: Player | null }, tGlobal: number) {
+  update(p: PoseState, ball: { x: number; y: number; z?: number; vx?: number; vy?: number; owner?: Player | null; passTarget?: unknown; kicker?: unknown }, tGlobal: number) {
     const r = this.root;
     r.position.set(p.x, 0, p.y); r.rotation.set(0, -p.dir, 0);
     const sp = Math.hypot(p.vx, p.vy), moving = sp > 0.6, stride = moving ? clamp(sp / 8, 0.45, 1.25) : 0;
@@ -106,7 +106,11 @@ export class PlayerModel {
       // 달리기/걷기 사이클
       const A = 0.75 * stride, lean = clamp(sp / 8, 0, 1) * 0.22;
       const knee = (phase: number) => 0.18 + 1.0 * Math.max(0, Math.cos(phase)) * stride + (stride ? 0.15 : 0);
-      const header = kickA >= 0 && kickA < 0.7 && (ball as { kicker?: unknown }).kicker === p && (ball.z ?? 0) > 1.1 && !(p.y < -0.2 || p.y > 68.2); // 방금 머리로 받은 공이 아직 떠 있다 → 뛰어오른 헤딩 자세
+      const bz = ball.z ?? 0, outside = p.y < -0.2 || p.y > 68.2;
+      const header = kickA >= 0 && kickA < 0.85 && ball.kicker === p && bz > 1.1 && !outside; // 방금 머리로 받아 넘긴 공이 아직 떠 있다 → 헤딩 뒤 내려오는 중
+      // 공중볼 맞이: 나한테 오는 뜬 공이 0.3초 안에 닿는다 → 미리 뛰어올라 닿는 순간이 꼭대기 (전엔 공이 떠난 뒤에야 뛰었다)
+      let pre = 0; if (ball.passTarget === p && !ball.owner && bz > 1.4 && bz < 3.6) { const q = Math.hypot(ball.x - p.x, ball.y - p.y), tA = Math.max(0, q - 0.7) / Math.max(6, Math.hypot(ball.vx ?? 0, ball.vy ?? 0)); if (tA < 0.3) pre = 1 - (tA / 0.3) ** 2; }
+      const drop = own && !outside && bz > 0.2 ? Math.min(1, bz / 2.2) : 0; // 머리·가슴으로 떨군 공이 발밑으로 내려오는 동안
       let th0 = Math.sin(ph) * A, th1 = Math.sin(ph + Math.PI) * A, kn0 = knee(ph), kn1 = knee(ph + Math.PI);
       if (wind > 0) { th1 = -0.9 * (1 - wind * 0.3); kn1 = 1.1; th0 = -0.2; kn0 = 0.3; body.rotation.z = -0.08; }
       else if (p.feint > 0 && kickA < 0) { const f = Math.sin(tGlobal * 26); th0 = f * 0.5; th1 = -f * 0.5; kn0 = 0.6 + Math.max(0, f) * 0.5; kn1 = 0.6 + Math.max(0, -f) * 0.5; } // 헛다리
@@ -117,9 +121,14 @@ export class PlayerModel {
       legPose(0, th0, kn0, 0.1); legPose(1, th1, kn1, 0.1);
       torso.rotation.z = -(lean + (own ? 0.12 : 0));
       armPose(0, -Math.sin(ph) * A * 0.9, 0.25 * sideOf(0), 1.0 + 0.3 * stride); armPose(1, Math.sin(ph) * A * 0.9, 0.25 * sideOf(1), 1.0 + 0.3 * stride);
-      if (header) { const j = Math.sin(Math.min(1, kickA / 0.7) * Math.PI); hips.position.y += 0.42 * j; legPose(0, -0.25, 0.7, 0.3); legPose(1, 0.15, 0.9, 0.3); torso.rotation.z = -0.3 * j; this.head.rotation.z = -0.35 * j; armPose(0, -0.6, 0.7 * sideOf(0), 0.9); armPose(1, -0.6, 0.7 * sideOf(1), 0.9); }
+      if (header || pre > 0 || drop > 0) { // 뛰어오른 자세: 오르는 동안 몸을 뒤로 젖혔다가, 머리로 넘긴 뒤엔 앞으로 숙이며 내려온다
+        const j = header ? Math.cos(Math.min(1, kickA / 0.85) * Math.PI / 2) : Math.max(pre, drop), nod = header ? Math.min(1, kickA / 0.25) : 0;
+        hips.position.y += 0.42 * j; legPose(0, -0.25 * j, 0.25 + 0.5 * j, 0.3); legPose(1, 0.15 * j, 0.3 + 0.6 * j, 0.3);
+        torso.rotation.z = header ? 0.2 - 0.6 * nod : drop > 0 ? 0.22 * drop : 0.2 * pre; this.head.rotation.z = header ? 0.15 - 0.55 * nod : 0.12 * Math.max(pre, drop);
+        armPose(0, -0.5 * j, (0.3 + 0.5 * j) * sideOf(0), 0.9); armPose(1, -0.5 * j, (0.3 + 0.5 * j) * sideOf(1), 0.9);
+      }
       // 스로인: 공을 머리 위로 든 자세(공 주인인데 공이 1.6m 위), 던진 직후엔 두 팔을 앞으로 뿌린다(터치라인 밖에서 찬 직후)
-      const hold = own && (ball.z ?? 0) > 1.6, thrown = !hold && kickA >= 0 && (p.y < -0.2 || p.y > 68.2);
+      const hold = own && bz > 1.6 && outside, thrown = !hold && kickA >= 0 && outside; // 터치라인 밖에서만 (뜬 공을 떨궈 잡는 순간에도 공이 1.6m 위다)
       if (hold || thrown) {
         const k = hold ? 0 : Math.min(1, kickA / 0.35), sw2 = 3.35 - k * 2.1 + (hold ? Math.sin(tGlobal * 3) * 0.04 : 0);
         armPose(0, sw2, 0.14 * sideOf(0), 0.35 - k * 0.2); armPose(1, sw2, 0.14 * sideOf(1), 0.35 - k * 0.2);

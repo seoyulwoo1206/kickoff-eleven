@@ -55,7 +55,7 @@ npm run dev
 
 ## xT 패널 (연구 연동)
 
-경기 중 오른쪽 위 `xT` 버튼(또는 G 키)을 누르면 공 위치의 득점 위협도(xT)를 실시간 그래프와 구역 지도로 보여 줍니다. 격자(Uniform / Quadtree / Decision Tree / Threat Grid)·모델(DTMC / SMP / Transformer)·T를 고를 수 있고, "전체"를 누르면 AI가 양 팀을 몰면서 격자 × 모델 그래프가 한꺼번에 뜹니다. 경기가 끝나면 결과 화면에 선수별 xT 증가량이 분할 4종으로 나란히 나옵니다.
+경기 중 오른쪽 위 `xT` 버튼(또는 G 키)을 누르면 공 위치의 득점 위협도(xT)를 실시간 그래프와 구역 지도로 보여 줍니다. 패널이 열려 있는 동안은 AI가 양 팀을 대신 조작하고(패널에서 "직접"으로 바꿀 수 있음), 경기 화면은 패널 오른쪽에 영상처럼 놓입니다. 격자(Uniform / Quadtree / Decision Tree / Threat Grid)·모델(DTMC / SMP / Transformer)·T·속도를 고를 수 있고, "전체"를 누르면 격자 × 모델 그래프 12개가 한꺼번에 뜹니다. 경기가 끝나면 결과 화면에 선수별 xT 증가량이 분할 4종으로 나란히 나옵니다.
 
 표는 연구에서 뽑은 `xt_tables.json`을 `public/xt/`에 두면 읽습니다(없으면 버튼이 보이지 않습니다). 개발 중에는 `npx tsx tools/xt-placeholder.ts`로 형식만 같은 임시 표를 만들어 `npm run dev`에서 볼 수 있습니다 — 연구 값이 아닙니다.
 

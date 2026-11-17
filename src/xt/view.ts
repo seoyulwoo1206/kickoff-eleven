@@ -9,8 +9,8 @@ interface Sample { tick: number; x: number; y: number; t: number; live: boolean;
 interface Mark { tick: number; t: number; kind: 'shot' | 'goal'; }
 export const XT = {
   tb: null as XtTables | null,
-  /** 패널 열림 / 전체 보기(격자×모델 그래프 전부 + AI 자동 진행) */
-  on: false, all: false,
+  /** 패널 열림 / 전체 보기(격자×모델 그래프 전부) / 패널이 열린 동안 양 팀을 AI가 조작(끄면 직접 조작) */
+  on: false, all: false, auto: true,
   part: 'tree' as Part, model: 'dtmc' as Model, T: '10' as TKey,
   /** 그래프 구간: 최근 45초 / 경기 전체. 전체 보기에서 AI 진행 속도 배율 */
   win: 'recent' as 'recent' | 'match', speed: 1,
@@ -89,7 +89,7 @@ export function drawMap(ctx: CanvasRenderingContext2D, x0: number, y0: number, w
   ctx.restore();
 }
 
-export const pct = (v: number) => (v * 100).toFixed(v < 0.0995 ? 1 : 0) + '%';
+export const pct = (v: number) => (v * 100).toFixed(v < 0.000995 ? 2 : v < 0.0995 ? 1 : 0) + '%';
 export const settingLabel = () => `${MODEL_NAME[XT.model]} · T ${T_NAME[XT.T]}`;
 
 /* ---------- 패널 그래프 ---------- */
@@ -161,9 +161,9 @@ export function renderPanel(graph: HTMLCanvasElement, mapCv: HTMLCanvasElement, 
 /** 패널 아래 설명 한 줄 */
 export function panelNote() {
   const tb = XT.tb; if (!tb) return ''; const ph = tb.placeholder ? ' ※ 개발용 임시 표 — 연구 값이 아닙니다.' : ' Data: StatsBomb Open Data';
-  if (XT.all) return `공 위치의 xT(실제 축구 기준 위협도, T ${T_NAME[XT.T]})를 격자 ${PARTS.length}종 × 모델 ${modelsOf(tb).length}종으로 나란히. 양 팀 모두 AI가 조작합니다.` + ph;
+  if (XT.all) return `공 위치의 xT(실제 축구 기준 위협도, T ${T_NAME[XT.T]})를 격자 ${PARTS.length}종 × 모델 ${modelsOf(tb).length}종으로 나란히.${XT.auto ? ' 양 팀 모두 AI가 조작합니다.' : ''}` + ph;
   const pt = tb.partitions[XT.part], v = pt?.xt[XT.model]?.[XT.T]; if (!pt || !v) return '이 조합의 표가 없습니다.' + ph;
-  return `${PART_NAME[XT.part]} ${pt.M}구역 · 구역 값 ${pct(Math.min(...v))}~${pct(Math.max(...v))} (지도 색은 로그 눈금). 공을 가진 팀이 T ${T_NAME[XT.T]} 안에 득점할 확률(실제 축구 기준).` + ph;
+  return `${PART_NAME[XT.part]} ${pt.M}구역 · 구역 값 ${pct(Math.min(...v))}~${pct(Math.max(...v))} (지도 색은 로그 눈금). 공을 가진 팀이 T ${T_NAME[XT.T]} 안에 득점할 확률(실제 축구 기준).${XT.auto ? ' 양 팀 모두 AI가 조작합니다.' : ''}` + ph;
 }
 
 /* ---------- 결과 화면 ---------- */

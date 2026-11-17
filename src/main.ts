@@ -301,33 +301,43 @@ renderMenu(); renderMenuTactics();
 /* ---------- xT 패널 ---------- */
 // 연구(R&E)의 분할×xT 표를 경기에 붙인 것 (src/xt/). 표(public/xt/xt_tables.json)가 없으면 버튼 자체가 안 보인다.
 // 'xT' 버튼·G 키로 옆 패널(공 위치 xT의 실시간 그래프 + 구역 지도)을 열고 격자·모델·T를 고른다.
-// '전체'는 격자 4 × 모델 3 그래프를 한꺼번에 띄우고, 그동안 양 팀을 AI가 몬다(사람 조작을 빼 두었다가 '하나'로 돌아오면 되돌린다)
+// 패널이 열린 동안은 양 팀을 AI가 몬다(조작 'AI가 대신' — 사람 조작을 빼 두었다가 닫거나 '직접'으로 바꾸면 되돌린다), 속도 1/2/4배.
+// 경기 화면은 패널 오른쪽에 16:9 영상처럼 놓인다(`layoutStage`). '전체'는 격자 4 × 모델 3 그래프를 한꺼번에
 let autoHU: [Human | null, Human | null] | null = null;
 let xtFrame = 0;
 const xtUsable = () => !!XT.tb && !!sim && NET.role !== 'guest' && state !== 'menu';
 function xtSync() {
   const ok = xtUsable(), tb = XT.tb; if (!ok) { XT.on = false; XT.all = false; }
   $('xtBtn').hidden = !ok; $('xtBtn').setAttribute('aria-pressed', String(XT.on)); $('xtPanel').hidden = !XT.on; document.body.classList.toggle('xto', XT.on); /* 패널이 열려 있으면 일시정지·결과 카드를 오른쪽으로 민다 */
-  $('xtPanel').classList.toggle('all', XT.all); $('xtRowPart').hidden = XT.all; $('xtRowModel').hidden = XT.all; $('xtRowSpeed').hidden = !XT.all;
-  setSeg('segXtView', XT.all ? 'all' : 'one'); setSeg('segXtPart', XT.part); setSeg('segXtModel', XT.model); setSeg('segXtT', XT.T); setSeg('segXtWin', XT.win); setSeg('segXtSpeed', XT.speed);
+  $('xtPanel').classList.toggle('all', XT.all); $('xtRowPart').hidden = XT.all; $('xtRowModel').hidden = XT.all; { const net = !!sim && sim.M.net; $('xtRowCtl').hidden = net; $('xtRowSpeed').hidden = net || !XT.auto; }
+  setSeg('segXtView', XT.all ? 'all' : 'one'); setSeg('segXtPart', XT.part); setSeg('segXtModel', XT.model); setSeg('segXtT', XT.T); setSeg('segXtWin', XT.win); setSeg('segXtSpeed', XT.speed); setSeg('segXtCtl', XT.auto ? 'ai' : 'me');
   if (tb) {
-    $('xtAllBtn').textContent = `전체 ${PARTS.length * modelsOf(tb).length}개 · AI 자동`; ($('xtAllBtn') as HTMLButtonElement).disabled = !!sim && sim.M.net;
+    $('xtAllBtn').textContent = `전체 ${PARTS.length * modelsOf(tb).length}개`;
     $('segXtPart').querySelectorAll('button').forEach(b => { b.disabled = !has(tb, b.dataset.v as Part, XT.model, XT.T); });
     $('segXtModel').querySelectorAll('button').forEach(b => { b.disabled = !PARTS.some(p => has(tb, p, b.dataset.v as Model, XT.T)); });
     $('segXtT').querySelectorAll('button').forEach(b => { b.disabled = !PARTS.some(p => MODELS.some(m => has(tb, p, m, b.dataset.v as TKey))); });
   }
-  $('xtNote').textContent = panelNote(); xtFrame = 0; applyAuto();
+  $('xtNote').textContent = panelNote(); xtFrame = 0; applyAuto(); layoutStage();
 }
 function xtChanged() { fixSelection(); opts.xt = { part: XT.part, model: XT.model, T: XT.T }; saveOpts(); refreshMap(); xtSync(); if (state === 'over') fillXtResult(); }
 function toggleXt(on = !XT.on) { if (!xtUsable()) return; XT.on = on; if (!on) XT.all = false; xtSync(); }
-function setXtAll(all: boolean) { XT.all = all && !(sim && sim.M.net); XT.win = XT.all ? 'match' : 'recent'; xtSync(); }
-/** 전체 보기 = AI 자동 진행: 사람 조작(HU)을 빼 두고, 돌아오면 되돌려 공에 가까운 선수로 커서를 잡는다 */
+function setXtAll(all: boolean) { XT.all = all; XT.win = XT.all ? 'match' : 'recent'; xtSync(); }
+/** 패널이 열려 있고 조작이 'AI가 대신'이면 사람 조작(HU)을 빼 두고, 닫거나 '직접'이면 되돌려 공에 가까운 선수로 커서를 잡는다 */
 function applyAuto() {
   if (!sim) { autoHU = null; return; }
-  const want = XT.on && XT.all && !sim.M.net;
+  const want = XT.on && XT.auto && !sim.M.net;
   if (want && !autoHU) { autoHU = [sim.HU[0], sim.HU[1]]; sim.HU[0] = sim.HU[1] = null; for (const I of INP) { dropKeys(I); clearPresses(I); I.tx = I.ty = 0; } }
   else if (!want && autoHU) { sim.HU[0] = autoHU[0]; sim.HU[1] = autoHU[1]; autoHU = null; for (const h of sim.HU) if (h) { h.charging = false; h.charge = 0; if (!sim.M.so) switchPlayer(sim, h); } }
   $('touch').hidden = !isTouch || !!autoHU || state === 'menu' || state === 'over';
+}
+/** 패널이 열려 있으면 경기 화면(#cv·#ov)을 패널 오른쪽에 16:9 영상처럼 놓는다. 닫으면 전체 화면. 자리가 너무 좁으면(폰 세로 등) 그대로 둔다 */
+function layoutStage() {
+  const cv = $('cv'), ov = $('ov'); let css = '';
+  if (XT.on && !$('xtPanel').hidden) {
+    const p = $('xtPanel').getBoundingClientRect(), m = 12, x0 = p.right + m, y0 = p.top, aw = window.innerWidth - m - x0, ah = window.innerHeight - m - y0;
+    if (aw >= 260 && ah >= 150) { let w = aw, h = w * 9 / 16; if (h > ah) { h = ah; w = h * 16 / 9; } css = `left:${Math.round(x0 + (aw - w) / 2)}px;top:${Math.round(y0)}px;width:${Math.round(w)}px;height:${Math.round(h)}px;right:auto;bottom:auto;border-radius:10px;`; }
+  }
+  if (cv.style.cssText !== css || ov.style.cssText !== css) { cv.style.cssText = css; ov.style.cssText = css; R.resize(); }
 }
 function fillXtResult() {
   const el = $('rXt'); if (!sim || !XT.tb || NET.role === 'guest') { el.hidden = true; return; }
@@ -341,6 +351,7 @@ bindSeg('segXtModel', XT.model, v => { XT.model = v as Model; xtChanged(); });
 bindSeg('segXtT', XT.T, v => { XT.T = v as TKey; xtChanged(); });
 bindSeg('segXtWin', XT.win, v => { XT.win = v as typeof XT.win; xtFrame = 0; });
 bindSeg('segXtSpeed', 1, v => { XT.speed = +v; });
+bindSeg('segXtCtl', 'ai', v => { XT.auto = v === 'ai'; xtSync(); });
 for (const id of ['xtBtn', 'xtPanel']) $(id).addEventListener('click', () => (document.activeElement as HTMLElement | null)?.blur()); // 버튼에 포커스가 남으면 Space(P2 키) 등이 버튼을 다시 누른다
 void loadXt().then(() => xtSync());
 
@@ -402,6 +413,6 @@ function gauges(s: Sim) {
   touchGauge('bL', I.down.lob ? Math.min(1, Math.max(0, (I.holdT.lob - 0.1) / 0.5)) : 0);
 }
 if (import.meta.env.PROD && 'serviceWorker' in navigator) window.addEventListener('load', () => { navigator.serviceWorker.register('./sw.js').catch(() => { /* http 등에선 불가 */ }); });
-function resize() { R.resize(); $('rotateTip').hidden = !(isTouch && R.ch > R.cw); }
+function resize() { layoutStage(); R.resize(); $('rotateTip').hidden = !(isTouch && R.ch > R.cw); }
 window.addEventListener('resize', resize); resize(); requestAnimationFrame(frame);
 if (import.meta.env.DEV) (window as unknown as { __KO11: unknown }).__KO11 = { R, getSim: () => sim, INP, startMatch, perfNow: () => perf, XT, frame, dbg: () => ({ state, introT, acc, lastTs, role: NET.role, auto: !!autoHU }) };

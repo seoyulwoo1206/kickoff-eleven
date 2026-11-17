@@ -172,10 +172,11 @@ body.touch button.touchonly{display:inline-block}
 /* xT 패널 (연구 R&E의 분할×xT 표를 경기에 붙인 것) */
 #xtBtn{position:fixed;top:calc(env(safe-area-inset-top,0px) + 6px);right:calc(max(12px,env(safe-area-inset-right,0px)) + 48px);z-index:5;height:40px;padding:0 13px;border-radius:8px;border:1px solid var(--rule);background:var(--panel);color:var(--chalk);font-family:var(--f-num);font-weight:800;font-size:16px;letter-spacing:.06em}
 #xtBtn[aria-pressed="true"]{background:var(--amber);color:var(--amber-ink);border-color:var(--amber)}
-#xtPanel{position:fixed;left:max(12px,env(safe-area-inset-left,0px));top:calc(env(safe-area-inset-top,0px) + 50px);z-index:21;width:min(350px,46vw);max-height:calc(100vh - 60px);overflow-y:auto;background:var(--panel);border:1px solid var(--rule);border-radius:10px;padding:10px 11px;display:grid;gap:7px;-webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px)}
+#xtPanel{box-sizing:border-box;position:fixed;left:max(12px,env(safe-area-inset-left,0px));top:calc(env(safe-area-inset-top,0px) + 50px);z-index:21;width:min(366px,46vw);max-height:calc(100vh - 60px);overflow-y:auto;background:var(--panel);border:1px solid var(--rule);border-radius:10px;padding:10px 11px;display:grid;grid-template-columns:1fr 1fr;gap:7px 12px;-webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px)}
+#xtPanel>*{grid-column:1/-1}
+#xtPanel>.xtr.half{grid-column:auto}
 #xtPanel[hidden]{display:none}
-#xtPanel.all{width:min(780px,60vw);grid-template-columns:1fr 1fr;column-gap:14px}
-#xtPanel.all>.xth,#xtPanel.all>canvas,#xtPanel.all>p{grid-column:1/-1}
+#xtPanel.all{width:min(700px,54vw)}
 #xtPanel .xth{display:flex;align-items:center;gap:8px;font-family:var(--f-num);letter-spacing:.06em}
 #xtPanel .xth b{font-weight:800;font-size:15px}
 #xtPanel .xth span{margin-left:auto;font-weight:800;font-size:17px;font-variant-numeric:tabular-nums;color:var(--amber)}
@@ -186,8 +187,8 @@ body.touch button.touchonly{display:inline-block}
 .seg.sm{display:flex;flex-wrap:wrap}
 .seg.sm button{padding:5px 8px;font-size:12px;flex:1 1 auto;white-space:nowrap}
 .seg.sm button:disabled{opacity:.35}
-#xtGraph{width:100%;height:150px;display:block}
-#xtPanel.all #xtGraph{height:max(200px,min(500px,calc(100vh - 240px)))}
+#xtGraph{width:100%;height:128px;display:block}
+#xtPanel.all #xtGraph{height:max(200px,min(500px,calc(100vh - 275px)))}
 #xtMap{width:100%;aspect-ratio:105/68;display:block;border-radius:4px}
 #xtPanel.all #xtMap{display:none}
 #xtNote{margin:0;font-size:11px;line-height:1.45;color:var(--muted)}

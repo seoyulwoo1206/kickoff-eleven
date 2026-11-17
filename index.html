@@ -20,12 +20,13 @@
 <button id="xtBtn" aria-pressed="false" title="xT 패널 열기·닫기 (G)" hidden>xT</button>
 <aside id="xtPanel" hidden>
   <div class="xth"><b>xT 실시간</b><span id="xtNow"></span><button id="xtClose" aria-label="xT 패널 닫기">×</button></div>
-  <div class="xtr"><span>보기</span><div class="seg sm" id="segXtView"><button data-v="one">하나</button><button data-v="all" id="xtAllBtn">전체 · AI 자동</button></div></div>
+  <div class="xtr half"><span>보기</span><div class="seg sm" id="segXtView"><button data-v="one">하나</button><button data-v="all" id="xtAllBtn">전체</button></div></div>
+  <div class="xtr half" id="xtRowCtl"><span>조작</span><div class="seg sm" id="segXtCtl"><button data-v="ai" title="양 팀을 AI가 조작">AI</button><button data-v="me" title="내가 직접 조작">직접</button></div></div>
   <div class="xtr" id="xtRowPart"><span>격자</span><div class="seg sm" id="segXtPart"><button data-v="uniform">Uniform</button><button data-v="quadtree">Quadtree</button><button data-v="tree">Decision Tree</button><button data-v="threat">Threat Grid</button></div></div>
   <div class="xtr" id="xtRowModel"><span>모델</span><div class="seg sm" id="segXtModel"><button data-v="dtmc">DTMC</button><button data-v="smp">SMP</button><button data-v="tf">Transformer</button></div></div>
   <div class="xtr"><span>T</span><div class="seg sm" id="segXtT"><button data-v="5">5초</button><button data-v="10">10초</button><button data-v="15">15초</button><button data-v="inf">∞</button></div></div>
-  <div class="xtr"><span>구간</span><div class="seg sm" id="segXtWin"><button data-v="recent">최근 45초</button><button data-v="match">경기 전체</button></div></div>
-  <div class="xtr" id="xtRowSpeed" hidden><span>속도</span><div class="seg sm" id="segXtSpeed"><button data-v="1">1×</button><button data-v="2">2×</button><button data-v="4">4×</button></div></div>
+  <div class="xtr half"><span>구간</span><div class="seg sm" id="segXtWin"><button data-v="recent" title="최근 45초">45초</button><button data-v="match" title="경기 전체">전체</button></div></div>
+  <div class="xtr half" id="xtRowSpeed" hidden><span>속도</span><div class="seg sm" id="segXtSpeed"><button data-v="1">1×</button><button data-v="2">2×</button><button data-v="4">4×</button></div></div>
   <canvas id="xtGraph"></canvas>
   <canvas id="xtMap"></canvas>
   <p id="xtNote"></p>
@@ -40,7 +41,7 @@
 </div>
 
 <div id="menu" class="overlay"><div class="card">
-  <header><div class="eyebrow">11 대 11 · 풀경기 · <span id="build">BUILD 1117-E</span></div><h1>킥오프 일레븐</h1><p class="lede">팀을 고르고 킥오프. 공 근처 선수로 커서가 자동으로 옮겨가고, 같은 키보드로 친구와 1대1도 됩니다.</p></header>
+  <header><div class="eyebrow">11 대 11 · 풀경기 · <span id="build">BUILD 1117-F</span></div><h1>킥오프 일레븐</h1><p class="lede">팀을 고르고 킥오프. 공 근처 선수로 커서가 자동으로 옮겨가고, 같은 키보드로 친구와 1대1도 됩니다.</p></header>
   <div class="opts">
     <div class="opt"><span class="label">대전 방식</span><div class="seg" id="segMode"><button id="mAI" data-v="ai" aria-pressed="true">AI 대전</button><button id="m2P" data-v="2p">2인 대전 (한 키보드)</button><button id="mNet" data-v="net">온라인 대전</button><button id="mCup" data-v="cup">월드컵</button><button id="mPK" data-v="pk">승부차기</button></div></div>
     <div class="opt" id="optLen"><span class="label">경기 시간</span><div class="seg" id="segLen"><button id="len180" data-v="180">3분</button><button id="len300" data-v="300" aria-pressed="true">5분</button><button id="len480" data-v="480">8분</button></div></div>
