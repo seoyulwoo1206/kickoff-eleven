@@ -2,11 +2,11 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { W, H, CX, CY, GH, GZ } from '../../sim/consts';
-import { grassTexture, grassDetail, netTexture, adTexture, ADS, skyTexture } from './textures';
+import { grassTexture, grassDetail, netTexture, adTexture, ADS, skyTexture, seatTexture } from './textures';
 import type { Quality } from '../types';
 
 export interface Net { mesh: THREE.Mesh; base: Float32Array; side: number; shake: number; }
-export interface Stadium { group: THREE.Group; nets: Net[]; crowd: THREE.InstancedMesh[]; crowdBase: Float32Array[]; near: THREE.Object3D[]; } // near: 카메라 쪽(큰 y) 관중석 — 중계 카메라에선 숨긴다
+export interface Stadium { group: THREE.Group; nets: Net[]; crowd: THREE.InstancedMesh[]; crowdBase: Float32Array[]; near: THREE.Object3D[]; bodies: { inst: THREE.InstancedMesh; kind: Uint8Array }[]; } // near: 카메라 쪽(큰 y) 관중석 — 중계 카메라에선 숨긴다
 
 const rnd = Math.random;
 const LINE = 0.12;
@@ -42,7 +42,7 @@ function buildPitch() {
   // 가까이서 보일 결: 디테일 노이즈를 곱한다
   mat.onBeforeCompile = sh => {
     sh.uniforms.detailMap = { value: det }; sh.uniforms.detailRep = { value: new THREE.Vector2(gt.TW / 0.9, gt.TH / 0.9) };
-    sh.fragmentShader = sh.fragmentShader.replace('#include <map_fragment>', `#include <map_fragment>\n diffuseColor.rgb *= texture2D(detailMap, vMapUv * detailRep).rgb * 2.0;`).replace('uniform vec3 diffuse;', 'uniform vec3 diffuse; uniform sampler2D detailMap; uniform vec2 detailRep;');
+    sh.fragmentShader = sh.fragmentShader.replace('#include <map_fragment>', `#include <map_fragment>\n vec3 dA = texture2D(detailMap, vMapUv * detailRep).rgb, dB = texture2D(detailMap, vMapUv * detailRep * 0.113 + 0.37).rgb; diffuseColor.rgb *= dA * 2.0 * (0.86 + dB.g * 0.28);`).replace('uniform vec3 diffuse;', 'uniform vec3 diffuse; uniform sampler2D detailMap; uniform vec2 detailRep;');
   };
   const m = new THREE.Mesh(geo, mat); m.receiveShadow = true; return m;
 }
@@ -51,8 +51,8 @@ function buildGround() { // 잔디 바깥 바닥 (트랙·콘크리트)
   return new THREE.Mesh(geo, new THREE.MeshStandardMaterial({ color: 0x3a3d44, roughness: 1 }));
 }
 function buildTrack() {
-  const geo = new THREE.PlaneGeometry(W + 20, H + 20); geo.rotateX(-Math.PI / 2); geo.translate(CX, -0.01, CY);
-  return new THREE.Mesh(geo, new THREE.MeshStandardMaterial({ color: 0x8a4a3c, roughness: 1 }));
+  const geo = new THREE.PlaneGeometry(W + GAP * 2, H + GAP * 2); geo.rotateX(-Math.PI / 2); geo.translate(CX, -0.01, CY);
+  return new THREE.Mesh(geo, new THREE.MeshStandardMaterial({ color: 0x2c4f2d, roughness: 1 }));
 }
 function buildBoards() {
   const g = new THREE.Group(), hgt = 1.0;
@@ -106,64 +106,103 @@ function buildGoals(): { group: THREE.Group; nets: Net[] } {
   }
   return { group: g, nets };
 }
-/** 관중석: 계단 프로필을 길이 방향으로 돌출. 한 면씩 네 방향 */
+/* ---------- 관중석 ----------
+   네 면이 모서리에서 45°로 맞물리는 그릇 모양(2층 + 지붕). 각 면은 자기 좌표(가로 x, 뒤쪽 -z, 앞 가장자리가 터치라인에서 GAP)에서 만들고 돌려 놓는다.
+   깊이 d의 가로 반폭은 L/2 + d (모서리가 대각선으로 잘려 옆 면과 만난다). 관중은 몸통·머리 두 InstancedMesh (몸통은 옷 색, 머리는 피부색 + 정수리 머리카락) */
+const GAP = 13, SEAT = 0.56;
+class Quads { // 네모들을 모아 한 지오메트리로 (면마다 정점을 따로 둬 각진 면)
+  pos: number[] = []; uv: number[] = []; idx: number[] = [];
+  quad(a: number[], b: number[], c: number[], d: number[], u0 = 0, u1 = 1, v0 = 0, v1 = 1) { const n = this.pos.length / 3; this.pos.push(...a, ...b, ...c, ...d); this.uv.push(u0, v0, u1, v0, u1, v1, u0, v1); this.idx.push(n, n + 1, n + 2, n, n + 2, n + 3); }
+  /** 앞 가장자리(깊이 dA, 높이 yA)에서 뒤 가장자리(dB, yB)까지 가로로 긴 띠. 양 끝은 45°. uPer = u 1칸의 길이(m) */
+  strip(L: number, dA: number, yA: number, dB: number, yB: number, uPer = 1, inset = 0) { const a = L / 2 + dA - inset, b = L / 2 + dB - inset; this.quad([-a, yA, -dA], [a, yA, -dA], [b, yB, -dB], [-b, yB, -dB], -a / uPer, a / uPer); }
+  build() { const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(this.pos, 3)); g.setAttribute('uv', new THREE.Float32BufferAttribute(this.uv, 2)); g.setIndex(this.idx); g.computeVertexNormals(); return g; }
+}
+interface Tier { d0: number; y0: number; rows: number; sd: number; sh: number; dens: number; }
+const TIERS: Tier[] = [{ d0: 0, y0: 1.3, rows: 20, sd: 0.9, sh: 0.48, dens: 0.9 }, { d0: 19.4, y0: 13.4, rows: 14, sd: 0.86, sh: 0.62, dens: 0.72 }];
+const D_BACK = 32.5, Y_ROOF_BACK = 27, D_ROOF_FRONT = 5, Y_ROOF_FRONT = 24.6;
+export const CROWD_NEUTRAL = [0xe9e9e6, 0xc9ccd2, 0x8d939c, 0x2a2e36, 0x1f3a66, 0x5a6b7d, 0xb8a58a, 0x3f4a3d, 0x6d2f2f, 0xd9d2c2];
+const SKINS = [0xf1cfae, 0xe2b48e, 0xc9966b, 0xa87850, 0x7a5236, 0x54382a], LIT = 1.55; // LIT: 관중은 조명탑 불빛을 받은 것처럼 밝게 (인스턴스 색은 선형 값이라 1을 넘어도 된다)
 function buildStands(q: Quality) {
-  const g = new THREE.Group(), crowd: THREE.InstancedMesh[] = [], crowdBase: Float32Array[] = [], near: THREE.Object3D[] = [];
-  const ROWS = 14, STEP_D = 1.5, STEP_H = 0.85, GAP = 13; // 터치라인에서 관중석까지
-  const standMat = new THREE.MeshStandardMaterial({ color: 0x262c36, roughness: 0.9 });
-  const seatMat = new THREE.MeshStandardMaterial({ color: 0x1c2733, roughness: 0.9 });
-  const prof = new THREE.Shape(); prof.moveTo(0, 0); prof.lineTo(0, 1.2);
-  for (let i = 0; i < ROWS; i++) { prof.lineTo(i * STEP_D, 1.2 + i * STEP_H); prof.lineTo((i + 1) * STEP_D, 1.2 + i * STEP_H); }
-  prof.lineTo(ROWS * STEP_D, 1.2 + ROWS * STEP_H); prof.lineTo(ROWS * STEP_D + 2, 1.2 + ROWS * STEP_H); prof.lineTo(ROWS * STEP_D + 2, 0); prof.closePath();
-  // 관중 한 명: 몸통 상자 + 머리 구
-  const body = new THREE.BoxGeometry(0.42, 0.55, 0.32); body.translate(0, 0.28, 0);
-  const head = new THREE.SphereGeometry(0.14, 6, 5); head.translate(0, 0.68, 0);
-  const person = mergeGeometries([body, head]);
-  const personMat = new THREE.MeshLambertMaterial({ color: 0xffffff });
-  const density = q === 'high' ? 1 : q === 'mid' ? 0.5 : 0.22;
-  const sides: { len: number; cx: number; cz: number; rot: number }[] = [
-    { len: W + 30, cx: CX, cz: -GAP, rot: 0 }, // 먼 쪽 (카메라 반대편)
-    { len: W + 30, cx: CX, cz: H + GAP, rot: Math.PI },
-    { len: H + 10, cx: -GAP, cz: CY, rot: Math.PI / 2 },
-    { len: H + 10, cx: W + GAP, cz: CY, rot: -Math.PI / 2 },
+  const g = new THREE.Group(), crowd: THREE.InstancedMesh[] = [], crowdBase: Float32Array[] = [], near: THREE.Object3D[] = [], bodies: { inst: THREE.InstancedMesh; kind: Uint8Array }[] = [];
+  const concrete = new THREE.MeshLambertMaterial({ color: 0x666c76 }), dark = new THREE.MeshLambertMaterial({ color: 0x2c313a, side: THREE.DoubleSide });
+  const seatTex = seatTexture(), seatMat = new THREE.MeshLambertMaterial({ map: seatTex, color: 0x29456f }), seatMat2 = new THREE.MeshLambertMaterial({ map: seatTex, color: 0x223a5e });
+  const aisleMat = new THREE.MeshLambertMaterial({ color: 0x8b9099 }), railMat = new THREE.MeshLambertMaterial({ color: 0xd9dde3 });
+  const roofMat = new THREE.MeshLambertMaterial({ color: 0xaab2bf, emissive: 0x1c2128, side: THREE.DoubleSide }), edgeMat = new THREE.MeshLambertMaterial({ color: 0xeef1f5, emissive: 0x30343a, side: THREE.DoubleSide });
+  const ribbonMats = ADS.map(ad => { const t = adTexture(ad); return new THREE.MeshBasicMaterial({ map: t }); });
+  // 관중 한 명: 앉은 상체(어깨가 넓은 여섯 각 기둥) + 머리(정수리는 어둡게 = 머리카락)
+  const body = new THREE.CylinderGeometry(0.21, 0.16, 0.5, 5, 1, false); body.scale(1, 1, 0.64); body.translate(0, 0.27, 0);
+  const head = new THREE.SphereGeometry(0.12, 5, 3); head.translate(0, 0.67, 0);
+  { const p = head.attributes.position, c = new Float32Array(p.count * 3); for (let k = 0; k < p.count; k++) { const v = p.getY(k) > 0.71 || (p.getY(k) > 0.66 && p.getZ(k) < -0.02) ? 0.2 : 1; c[k * 3] = c[k * 3 + 1] = c[k * 3 + 2] = v; } head.setAttribute('color', new THREE.BufferAttribute(c, 3)); }
+  const bodyMat = new THREE.MeshLambertMaterial({ color: 0xffffff }), headMat = new THREE.MeshLambertMaterial({ color: 0xffffff, vertexColors: true });
+  const density = q === 'high' ? 1 : q === 'mid' ? 0.55 : 0.26;
+  const sides: { L: number; cx: number; cz: number; rot: number }[] = [
+    { L: W + GAP * 2, cx: CX, cz: -GAP, rot: 0 }, // 먼 쪽 (카메라 반대편)
+    { L: W + GAP * 2, cx: CX, cz: H + GAP, rot: Math.PI },
+    { L: H + GAP * 2, cx: -GAP, cz: CY, rot: Math.PI / 2 },
+    { L: H + GAP * 2, cx: W + GAP, cz: CY, rot: -Math.PI / 2 },
   ];
-  for (const sd of sides) {
-    const geo = new THREE.ExtrudeGeometry(prof, { depth: sd.len, bevelEnabled: false }); geo.translate(0, 0, -sd.len / 2);
-    // 프로필의 x축(깊이)이 경기장에서 멀어지는 방향(-z 로컬)이 되게 회전
-    const stand = new THREE.Mesh(geo, standMat); stand.rotation.y = Math.PI / 2; const holder = new THREE.Group(); holder.add(stand);
-    holder.position.set(sd.cx, 0, sd.cz); holder.rotation.y = sd.rot; holder.rotateY(0);
-    // 좌석 띠 (어두운 줄)
-    for (let i = 0; i < ROWS; i++) { const sm = new THREE.Mesh(new THREE.BoxGeometry(sd.len, 0.08, STEP_D * 0.5), seatMat); sm.position.set(0, 1.2 + i * STEP_H + 0.04, -(i * STEP_D + STEP_D * 0.55)); holder.add(sm); }
-    // 지붕
-    const roof = new THREE.Mesh(new THREE.BoxGeometry(sd.len + 2, 0.5, ROWS * STEP_D * 0.75), new THREE.MeshStandardMaterial({ color: 0x3d4452, roughness: 0.8 }));
-    roof.position.set(0, 1.2 + ROWS * STEP_H + 7, -(ROWS * STEP_D * 0.62)); roof.rotation.x = 0.12; holder.add(roof);
-    for (let i = -1; i <= 1; i++) { const col = new THREE.Mesh(new THREE.CylinderGeometry(0.25, 0.25, 1.2 + ROWS * STEP_H + 7, 8), standMat); col.position.set(i * sd.len * 0.45, (1.2 + ROWS * STEP_H + 7) / 2, -(ROWS * STEP_D + 1.5)); holder.add(col); }
+  sides.forEach((sd, si) => {
+    const L = sd.L, holder = new THREE.Group(); holder.position.set(sd.cx, 0, sd.cz); holder.rotation.y = sd.rot;
+    const steps = new Quads(), seats = new Quads(), seats2 = new Quads(), aisles = new Quads(), caps = new Quads(), roof = new Quads(), edge = new Quads(), rail = new Quads(), ribbon = new Quads();
+    const isAisle = (x: number) => Math.abs(((x + 600) % 15) - 7.5) > 6.85; // 15m마다 폭 1.3m 통로
+    // 앞 벽
+    steps.strip(L, 0, 0, 0, TIERS[0].y0); rail.strip(L, 0.05, TIERS[0].y0, 0.05, TIERS[0].y0 + 0.5);
+    const people: number[] = [];
+    TIERS.forEach((T, ti) => {
+      for (let r = 0; r < T.rows; r++) {
+        const d = T.d0 + r * T.sd, y = T.y0 + r * T.sh;
+        steps.strip(L, d, y, d + T.sd, y); steps.strip(L, d + T.sd, y, d + T.sd, y + T.sh); // 디딤판·챌판
+        (r % 2 ^ ti ? seats : seats2).strip(L, d + T.sd * 0.93, y + 0.04, d + T.sd * 0.93, y + 0.44, SEAT, 0.5); // 좌석 등받이 줄 (줄마다 두 색이 번갈아)
+        for (const sg of [-1, 1]) { const x0 = sg * (L / 2 + d), x1 = sg * (L / 2 + d + T.sd); caps.quad([x0, 0, -d], [x1, 0, -d - T.sd], [x1, y, -d - T.sd], [x0, y, -d]); } // 모서리 단면 (옆 면이 가려질 때 속이 비어 보이지 않게)
+        const half = L / 2 + d - 0.9, n = Math.floor(half * 2 / SEAT);
+        for (let c = 0; c < n; c++) { const x = -half + (c + 0.5) * SEAT; if (isAisle(x) || rnd() > density * T.dens) continue; people.push(x + (rnd() - 0.5) * 0.12, y + 0.02, -(d + T.sd * 0.5), 0.9 + rnd() * 0.28); }
+      }
+      const dE = T.d0 + T.rows * T.sd, yE = T.y0 + T.rows * T.sh;
+      for (let x = -Math.floor(L / 2 / 15) * 15 - 7.5; x < L / 2 + T.d0; x += 15) { if (Math.abs(x) > L / 2 + T.d0 - 2) continue; aisles.quad([x - 0.6, T.y0 + 0.3, -T.d0], [x + 0.6, T.y0 + 0.3, -T.d0], [x + 0.6, yE + 0.3, -dE], [x - 0.6, yE + 0.3, -dE]); } // 통로 (계단 위에 얹은 경사 띠)
+      if (ti === 0) { // 1층 뒤 통로와 2층 앞 벽(위쪽은 광고 띠)
+        const U = TIERS[1]; steps.strip(L, dE, yE, U.d0, yE); steps.strip(L, U.d0, yE, U.d0, U.y0 - 1.25); ribbon.strip(L, U.d0 - 0.02, U.y0 - 1.25, U.d0 - 0.02, U.y0, 22); rail.strip(L, U.d0 + 0.05, U.y0, U.d0 + 0.05, U.y0 + 0.45);
+      } else { steps.strip(L, dE, yE, D_BACK, yE); }
+    });
+    // 뒷벽·지붕(앞으로 길게 나온 캔틸레버)·지붕 앞 테두리
+    caps.strip(L, D_BACK, 0, D_BACK, Y_ROOF_BACK); roof.strip(L, D_ROOF_FRONT, Y_ROOF_FRONT, D_BACK, Y_ROOF_BACK);
+    edge.strip(L, D_ROOF_FRONT, Y_ROOF_FRONT - 0.9, D_ROOF_FRONT, Y_ROOF_FRONT + 0.25);
+    for (let x = -Math.floor(L / 2 / 15) * 15; x <= L / 2; x += 15) edge.quad([x - 0.25, Y_ROOF_FRONT - 0.5, -D_ROOF_FRONT], [x + 0.25, Y_ROOF_FRONT - 0.5, -D_ROOF_FRONT], [x + 0.25, Y_ROOF_BACK - 0.6, -D_BACK], [x - 0.25, Y_ROOF_BACK - 0.6, -D_BACK]); // 지붕 들보
+    const add = (qd: Quads, m: THREE.Material) => { if (qd.idx.length) holder.add(new THREE.Mesh(qd.build(), m)); };
+    add(steps, concrete); add(seats, seatMat); add(seats2, seatMat2); add(aisles, aisleMat); add(caps, dark); add(roof, roofMat); add(edge, edgeMat); add(rail, railMat); add(ribbon, ribbonMats[si % ribbonMats.length]);
     // 관중
-    const perRow = Math.floor(sd.len / 0.6), total = perRow * ROWS, n = Math.floor(total * density * 0.9);
-    const inst = new THREE.InstancedMesh(person, personMat, Math.max(1, n)); const mtx = new THREE.Matrix4(), col = new THREE.Color();
-    const base = new Float32Array(n * 3); let k = 0;
-    const pal = [0xe8e8e8, 0x1b3f8f, 0xd7262b, 0x111111, 0xffb627, 0x19a974, 0x8a8f99, 0x5c3a2e, 0xf2c14e, 0x2e6fd1];
-    for (let r = 0; r < ROWS && k < n; r++) for (let c = 0; c < perRow && k < n; c++) {
-      if (rnd() > density * 0.9) continue;
-      const x = -sd.len / 2 + 0.3 + c * 0.6 + (rnd() - 0.5) * 0.2, y = 1.2 + r * STEP_H, z = -(r * STEP_D + STEP_D * 0.3);
-      base[k * 3] = x; base[k * 3 + 1] = y; base[k * 3 + 2] = z;
-      mtx.makeRotationY((rnd() - 0.5) * 0.4); mtx.setPosition(x, y, z); inst.setMatrixAt(k, mtx);
-      col.setHex(pal[Math.floor(rnd() * pal.length)]).offsetHSL(0, 0, (rnd() - 0.5) * 0.2); inst.setColorAt(k, col); k++;
+    const n = people.length / 4, bi = new THREE.InstancedMesh(body, bodyMat, Math.max(1, n)), hi = new THREE.InstancedMesh(head, headMat, Math.max(1, n));
+    const mtx = new THREE.Matrix4(), col = new THREE.Color(), base = new Float32Array(n * 3), kind = new Uint8Array(n), qt = new THREE.Quaternion(), up = new THREE.Vector3(0, 1, 0), sc = new THREE.Vector3(), ps = new THREE.Vector3();
+    for (let k = 0; k < n; k++) {
+      const x = people[k * 4], y = people[k * 4 + 1], z = people[k * 4 + 2], hgt = people[k * 4 + 3]; base[k * 3] = x; base[k * 3 + 1] = y; base[k * 3 + 2] = z;
+      qt.setFromAxisAngle(up, (rnd() - 0.5) * 0.5); sc.set(1, hgt, 1); ps.set(x, y, z); mtx.compose(ps, qt, sc); bi.setMatrixAt(k, mtx); hi.setMatrixAt(k, mtx);
+      const r = rnd(); kind[k] = r < 0.3 ? 0 : r < 0.52 ? 1 : 2 + Math.floor(rnd() * CROWD_NEUTRAL.length); // 0·1 = 두 팀 색(경기마다 다시 칠한다), 그 밖은 평상복
+      col.setHex(CROWD_NEUTRAL[(kind[k] + k) % CROWD_NEUTRAL.length]).offsetHSL(0, 0, (rnd() - 0.5) * 0.12).multiplyScalar(LIT); bi.setColorAt(k, col);
+      col.setHex(SKINS[Math.floor(rnd() * SKINS.length)]).offsetHSL(0, 0, (rnd() - 0.5) * 0.06).multiplyScalar(LIT); hi.setColorAt(k, col);
     }
-    inst.count = k; inst.instanceMatrix.needsUpdate = true; if (inst.instanceColor) inst.instanceColor.needsUpdate = true;
-    holder.add(inst); crowd.push(inst); crowdBase.push(base);
+    bi.count = hi.count = n; bi.instanceMatrix.needsUpdate = hi.instanceMatrix.needsUpdate = true; if (bi.instanceColor) bi.instanceColor.needsUpdate = true; if (hi.instanceColor) hi.instanceColor.needsUpdate = true;
+    bi.computeBoundingSphere(); hi.computeBoundingSphere(); // 화면 밖 면의 관중은 그리지 않는다
+    holder.add(bi, hi); crowd.push(bi, hi); crowdBase.push(base, base); bodies.push({ inst: bi, kind });
     if (sd.cz > H) near.push(holder); // 카메라 쪽 관중석
     g.add(holder);
+  });
+  return { group: g, crowd, crowdBase, near, bodies };
+}
+/** 관중 옷 색: 두 팀 유니폼 색을 섞어 다시 칠한다 (경기 시작 때) */
+export function tintCrowd(st: Stadium, c0: string, c1: string) {
+  const col = new THREE.Color(), a = new THREE.Color(c0), b = new THREE.Color(c1);
+  for (const { inst, kind } of st.bodies) {
+    for (let k = 0; k < kind.length; k++) { if (kind[k] > 1) continue; col.copy(kind[k] === 0 ? a : b).offsetHSL(0, -0.08, ((k * 37) % 11 - 5) * 0.012).multiplyScalar(LIT); inst.setColorAt(k, col); }
+    if (inst.instanceColor) inst.instanceColor.needsUpdate = true;
   }
-  return { group: g, crowd, crowdBase, near };
 }
 function buildFloodlights() {
   const g = new THREE.Group(), mat = new THREE.MeshStandardMaterial({ color: 0x6b7280, roughness: 0.7, metalness: 0.4 });
   const head = new THREE.MeshBasicMaterial({ color: 0xfff6d5 });
-  for (const [x, z] of [[-26, -24], [W + 26, -24], [-26, H + 24], [W + 26, H + 24]]) {
-    const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.35, 0.6, 40, 8), mat); pole.position.set(x, 20, z); g.add(pole);
-    const hd = new THREE.Mesh(new THREE.BoxGeometry(7, 4, 1.2), head); hd.position.set(x, 40, z); hd.lookAt(CX, 0, CY); hd.rotateX(0); g.add(hd);
-    const back = new THREE.Mesh(new THREE.BoxGeometry(7.4, 4.4, 0.6), mat); back.position.copy(hd.position); back.quaternion.copy(hd.quaternion); back.translateZ(-0.9); g.add(back);
+  const R = GAP + D_BACK + 6;
+  for (const [x, z] of [[-R, -R], [W + R, -R], [-R, H + R], [W + R, H + R]]) {
+    const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.5, 0.9, 52, 8), mat); pole.position.set(x, 26, z); g.add(pole);
+    const hd = new THREE.Mesh(new THREE.BoxGeometry(11, 6, 1.2), head); hd.position.set(x, 53, z); hd.lookAt(CX, 0, CY); g.add(hd);
+    const back = new THREE.Mesh(new THREE.BoxGeometry(11.6, 6.6, 0.6), mat); back.position.copy(hd.position); back.quaternion.copy(hd.quaternion); back.translateZ(-0.9); g.add(back);
   }
   return g;
 }
@@ -177,7 +216,7 @@ export function buildStadium(q: Quality): Stadium {
   group.add(buildGround(), buildTrack(), buildPitch(), buildLines(), buildBoards(), buildFloodlights(), buildSky());
   const goals = buildGoals(); group.add(goals.group);
   const stands = buildStands(q); group.add(stands.group);
-  return { group, nets: goals.nets, crowd: stands.crowd, crowdBase: stands.crowdBase, near: stands.near };
+  return { group, nets: goals.nets, crowd: stands.crowd, crowdBase: stands.crowdBase, near: stands.near, bodies: stands.bodies };
 }
 /** 그물 흔들림: 골 직후 뒤 그물이 출렁인다 */
 export function updateNets(nets: Net[], dt: number) {

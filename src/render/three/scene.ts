@@ -5,7 +5,7 @@ import { W, H, CX, CY } from '../../sim/consts';
 import { clamp } from '../../sim/util';
 import type { Sim, Player } from '../../sim/types';
 import type { IRenderer, Quality, CamMode } from '../types';
-import { buildStadium, updateNets, type Stadium } from './stadium';
+import { buildStadium, updateNets, tintCrowd, type Stadium } from './stadium';
 import { PlayerModel, type PoseState } from './player';
 import { ballTexture, puffTexture, ringTexture } from './textures';
 import { opts } from '../../options';
@@ -56,7 +56,7 @@ export class ThreeRenderer implements IRenderer {
     const shadows = q !== 'low'; this.gl.shadowMap.enabled = shadows; this.sun.castShadow = shadows;
     const sz = q === 'high' ? 2048 : 1024; if (this.sun.shadow.mapSize.width !== sz) { this.sun.shadow.mapSize.set(sz, sz); if (this.sun.shadow.map) { this.sun.shadow.map.dispose(); this.sun.shadow.map = null; } }
     if (this.stadium) { this.scene.remove(this.stadium.group); }
-    this.stadium = buildStadium(q); this.scene.add(this.stadium.group);
+    this.stadium = buildStadium(q); this.scene.add(this.stadium.group); if (this.modelSim) tintCrowd(this.stadium, this.modelSim.M.kit[0].c1, this.modelSim.M.kit[1].c1);
     for (const m of this.models.values()) m.setBlob(!shadows);
     this.scene.traverse(o => { const m = (o as THREE.Mesh).material as THREE.Material | undefined; if (m) m.needsUpdate = true; });
   }
@@ -99,7 +99,7 @@ export class ThreeRenderer implements IRenderer {
     if (this.modelSim === sim && this.namesMode === opts.names) return;
     for (const m of this.models.values()) this.scene.remove(m.root); this.models.clear();
     for (const p of sim.players) { const m = new PlayerModel(p, sim.M.kit[p.t], this.blobTex, shirtName(p, opts.names)); m.setBlob(this.quality === 'low'); this.scene.add(m.root); this.models.set(p, m); }
-    this.modelSim = sim; this.namesMode = opts.names;
+    this.modelSim = sim; this.namesMode = opts.names; tintCrowd(this.stadium, sim.M.kit[0].c1, sim.M.kit[1].c1);
   }
   /** 월드 → 화면 좌표 (오버레이용) */
   private toScreen(x: number, y: number, z = 0) { // 시뮬 (x, y, 높이) → 화면. 월드는 (x, 높이, y)
@@ -178,7 +178,7 @@ export class ThreeRenderer implements IRenderer {
     this.fps += (1 / Math.max(1e-3, dtR) - this.fps) * 0.05;
     if (sim) this.syncModels(sim); else if (this.modelSim) { for (const m of this.models.values()) this.scene.remove(m.root); this.models.clear(); this.modelSim = null; }
     this.updateCamera(sim, dtR, perf);
-    { const hide = !this.replay && (this.mode === 'tv' || this.mode === 'top'); for (const o of this.stadium.near) o.visible = !hide; } // 중계 카메라는 가까운 쪽 관중석 자리까지 내려가므로 그 관중석을 그리지 않는다
+    { const hide = !this.replay && (this.mode === 'tv' || this.mode === 'top' || this.mode === 'intro'); for (const o of this.stadium.near) o.visible = !hide; } // 입장 카메라도 가까운 쪽 관중석 자리(지붕 높이)에 있다 // 중계 카메라는 가까운 쪽 관중석 자리까지 내려가므로 그 관중석을 그리지 않는다
     if (!paused) { this.updatePuffs(dtR); updateNets(this.stadium.nets, dtR); this.updateCrowd(sim, dtR); }
     if (sim) {
       const { HU, M } = sim;

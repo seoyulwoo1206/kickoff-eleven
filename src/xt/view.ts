@@ -19,6 +19,8 @@ export const XT = {
   map: null as HTMLCanvasElement | null,
   tr: new XtTracker(), names: new Map<string, string>(), pops: [] as XtPop[],
   hist: [] as Sample[], marks: [] as Mark[],
+  /** 그래프·지도 위의 커서 위치 (캔버스 안 CSS px). 없으면 null */
+  hover: null as { x: number; y: number } | null, hoverMap: null as { x: number; y: number } | null,
 };
 export const SAMPLE_EVERY = 6, RECENT_SEC = 45;
 const C0 = '#ffb627', C1 = '#4fd3ff'; // 팀 0(위)·팀 1(아래) — 커서 색과 같다
@@ -110,7 +112,7 @@ function columns(tb: XtTables, part: Part, m: Model, T: TKey, t0: number, t1: nu
   return { up, dn, mx };
 }
 interface Cell { part: Part; model: Model; ok: boolean; up: Float32Array; dn: Float32Array; mx: number; }
-function drawCell(ctx: CanvasRenderingContext2D, c: Cell, x0: number, y0: number, w: number, h: number, ymax: number, t0: number, t1: number, title: string, now: number, big: boolean) {
+function drawCell(ctx: CanvasRenderingContext2D, c: Cell, x0: number, y0: number, w: number, h: number, ymax: number, t0: number, t1: number, title: string, now: number, big: boolean, hf: number, codes: [string, string]) {
   ctx.fillStyle = 'rgba(255,255,255,.045)'; ctx.fillRect(x0, y0, w, h);
   const mid = y0 + h / 2, amp = h / 2 - (big ? 16 : 12), n = c.up.length, cw = w / n;
   if (c.ok) { // 막대 높이는 제곱근 눈금: 값이 중원 0.3%대 ~ 골문 앞 수십 %로 퍼져 있어 선형이면 중원이 다 바닥에 붙는다
@@ -125,6 +127,14 @@ function drawCell(ctx: CanvasRenderingContext2D, c: Cell, x0: number, y0: number
   ctx.fillStyle = 'rgba(255,255,255,.3)'; ctx.fillRect(x0, mid - 0.5, w, 1);
   ctx.textBaseline = 'top'; ctx.textAlign = 'left'; ctx.font = `700 ${big ? 12 : 10.5}px "Saira Condensed","Arial Narrow",sans-serif`; ctx.fillStyle = 'rgba(238,243,234,.92)'; ctx.fillText(title, x0 + 5, y0 + 3);
   if (!c.ok) { ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillStyle = 'rgba(238,243,234,.5)'; ctx.fillText('표에 없음', x0 + w / 2, mid); return; }
+  if (hf >= 0) { // 커서가 가리키는 시각의 값: 세로선 + 그 열의 팀별 값 (위·아래)
+    const i = Math.min(n - 1, Math.floor(hf * n)), px = x0 + (i + 0.5) * cw, u = c.up[i], dv = c.dn[i];
+    ctx.fillStyle = 'rgba(255,255,255,.85)'; ctx.fillRect(px - 0.5, y0, 1, h);
+    ctx.textAlign = 'right'; const fs = big ? 12 : 10.5; ctx.font = `800 ${fs}px "Saira Condensed","Arial Narrow",sans-serif`;
+    const lab = (txt: string, col: string, yy: number) => { const tw = ctx.measureText(txt).width + 8; ctx.fillStyle = 'rgba(9,17,27,.9)'; ctx.fillRect(x0 + w - tw - 2, yy - 1, tw, fs + 4); ctx.fillStyle = col; ctx.fillText(txt, x0 + w - 6, yy + 1); };
+    if (u > 0) lab(`${codes[0]} ${pct(u)}`, C0, y0 + 2); if (dv > 0) lab(`${codes[1]} ${pct(dv)}`, C1, y0 + h - fs - 5); if (!(u > 0) && !(dv > 0)) lab('–', 'rgba(238,243,234,.7)', y0 + 2);
+    return;
+  }
   ctx.textAlign = 'right'; ctx.fillStyle = isFinite(now) ? '#fff' : 'rgba(238,243,234,.5)'; ctx.fillText(isFinite(now) ? pct(now) : '–', x0 + w - 5, y0 + 3);
 }
 /** 패널을 그린다. graph: 그래프 캔버스, mapCv: 구역 지도 캔버스(하나 보기에서만), nowTick: 지금 시뮬 틱, codes: 팀 코드.
@@ -138,12 +148,16 @@ export function renderPanel(graph: HTMLCanvasElement, mapCv: HTMLCanvasElement, 
   const cols = XT.all ? models.length : 1, rows = XT.all ? PARTS.length : 1, gap = 4, cwid = (w - gap * (cols - 1)) / cols, chei = (h - 14 - gap * (rows - 1)) / rows, n = Math.max(20, Math.floor(cwid / 2));
   const cells: Cell[] = combos.map(([p, m]) => { const ok = has(tb, p, m, XT.T); return ok ? { part: p, model: m, ok, ...columns(tb, p, m, XT.T, t0, t1, n) } : { part: p, model: m, ok, up: new Float32Array(n), dn: new Float32Array(n), mx: 0 }; });
   const ymax = Math.max(0.02, ...cells.map(c => c.mx)) * 1.1; // 모든 그래프가 같은 세로 눈금
-  cells.forEach((c, i) => drawCell(ctx, c, (i % cols) * (cwid + gap), Math.floor(i / cols) * (chei + gap), cwid, chei, ymax, t0, t1, XT.all ? `${PART_NAME[c.part]} · ${MODEL_NAME[c.model]}` : `${PART_NAME[c.part]} · ${MODEL_NAME[c.model]} · T ${T_NAME[XT.T]}`, cur(c.part, c.model), !XT.all));
+  // 커서: 어느 칸 위든 그 칸 안에서의 가로 비율(= 시각)을 모든 칸에 같이 표시한다
+  let hf = -1; const hv = XT.hover; if (hv && hv.y < h - 14) { const cx = hv.x % (cwid + gap); if (cx <= cwid && hv.x >= 0 && hv.x <= w) hf = Math.min(0.9999, Math.max(0, cx / cwid)); }
+  const hTick = hf >= 0 ? t0 + (Math.floor(hf * n) + 0.5) / n * (t1 - t0) : -1;
+  cells.forEach((c, i) => drawCell(ctx, c, (i % cols) * (cwid + gap), Math.floor(i / cols) * (chei + gap), cwid, chei, ymax, t0, t1, XT.all ? `${PART_NAME[c.part]} · ${MODEL_NAME[c.model]}` : `${PART_NAME[c.part]} · ${MODEL_NAME[c.model]} · T ${T_NAME[XT.T]}`, cur(c.part, c.model), !XT.all, hf, codes));
   // 범례: 위 = 팀 0, 아래 = 팀 1, 세로 눈금, 구간
   ctx.font = '600 10.5px "Saira Condensed","Arial Narrow",sans-serif'; ctx.textBaseline = 'bottom'; ctx.textAlign = 'left'; const by = h - 1;
   ctx.fillStyle = C0; ctx.fillRect(0, by - 9, 8, 8); ctx.fillStyle = 'rgba(238,243,234,.8)'; ctx.fillText(`위 ${codes[0]}`, 11, by); const o = 16 + ctx.measureText(`위 ${codes[0]}`).width;
   ctx.fillStyle = C1; ctx.fillRect(o, by - 9, 8, 8); ctx.fillStyle = 'rgba(238,243,234,.8)'; ctx.fillText(`아래 ${codes[1]}`, o + 11, by);
-  ctx.textAlign = 'right'; ctx.fillText(`세로 √눈금, 끝 ${pct(ymax)} · ${XT.win === 'recent' ? `최근 ${RECENT_SEC}초` : '경기 전체'} · ▼슛 ●골`, w, by);
+  const mmss = (tk: number) => { const sec = Math.max(0, Math.floor(tk / 60)); return `${Math.floor(sec / 60)}:${String(sec % 60).padStart(2, '0')}`; };
+  ctx.textAlign = 'right'; ctx.fillText(hf >= 0 ? `커서: ${((t1 - hTick) / 60).toFixed(1)}초 전 (경기 ${mmss(hTick)}) · 그 순간 공 위치의 xT` : `세로 √눈금, 끝 ${pct(ymax)} · ${XT.win === 'recent' ? `최근 ${RECENT_SEC}초` : '경기 전체'} · ▼슛 ●골`, w, by);
   // 구역 지도 + 공 (하나 보기)
   if (!XT.all && XT.map) {
     const M = fit(mapCv), c2 = M.ctx, mw = M.w, mh = M.h; c2.clearRect(0, 0, mw, mh); drawMap(c2, 0, 0, mw, mh, XT.mapTeam);
@@ -152,6 +166,16 @@ export function renderPanel(graph: HTMLCanvasElement, mapCv: HTMLCanvasElement, 
     const H = XT.hist; c2.strokeStyle = 'rgba(255,255,255,.7)'; c2.lineWidth = 1.5; c2.beginPath(); let st = false; // 최근 4초 공 자취
     for (let i = Math.max(0, H.length - 40); i < H.length; i++) { const px = H[i].x / 105 * mw, py = H[i].y / 68 * mh; if (!st) { c2.moveTo(px, py); st = true; } else c2.lineTo(px, py); } c2.stroke();
     const bx = ball.x / 105 * mw, byy = ball.y / 68 * mh; c2.fillStyle = '#fff'; c2.strokeStyle = '#09121b'; c2.lineWidth = 1.5; c2.beginPath(); c2.arc(bx, byy, 4, 0, 7); c2.fill(); c2.stroke();
+    if (hTick >= 0) { // 그래프의 커서 시각에 공이 있던 자리
+      let best: Sample | null = null, bd = 1e9; for (let i = H.length - 1; i >= 0; i--) { const dd = Math.abs(H[i].tick - hTick); if (dd < bd) { bd = dd; best = H[i]; } else if (H[i].tick < hTick) break; }
+      if (best && bd < 40) { const px = best.x / 105 * mw, py = best.y / 68 * mh; c2.strokeStyle = '#fff'; c2.lineWidth = 2; c2.beginPath(); c2.arc(px, py, 7, 0, 7); c2.stroke(); c2.strokeStyle = '#09121b'; c2.lineWidth = 1; c2.beginPath(); c2.arc(px, py, 8.5, 0, 7); c2.stroke(); }
+    }
+    const hm = XT.hoverMap; if (hm && hm.x >= 0 && hm.x <= mw && hm.y >= 0 && hm.y <= mh) { // 지도 위 커서: 그 자리(지금 지도 방향 = 공 가진 팀 기준)의 구역 값
+      const gx = hm.x / mw * 105, gy = hm.y / mh * 68, v = xtAt(tb, XT.part, XT.model, XT.T, gx, gy, XT.mapTeam), txt = isFinite(v) ? pct(v) : '–';
+      c2.strokeStyle = 'rgba(255,255,255,.9)'; c2.lineWidth = 1; c2.beginPath(); c2.moveTo(hm.x - 7, hm.y); c2.lineTo(hm.x + 7, hm.y); c2.moveTo(hm.x, hm.y - 7); c2.lineTo(hm.x, hm.y + 7); c2.stroke();
+      c2.font = '800 12px "Saira Condensed","Arial Narrow",sans-serif'; c2.textBaseline = 'middle'; const tw = c2.measureText(txt).width + 10, lx = hm.x + 12 + tw > mw ? hm.x - 12 - tw : hm.x + 12, ly = Math.min(mh - 10, Math.max(10, hm.y - 12));
+      c2.fillStyle = 'rgba(9,17,27,.9)'; c2.fillRect(lx, ly - 9, tw, 18); c2.fillStyle = '#fff'; c2.textAlign = 'left'; c2.fillText(txt, lx + 5, ly + 1);
+    }
     c2.font = '700 11px "Saira Condensed","Arial Narrow",sans-serif'; c2.textBaseline = 'bottom'; c2.fillStyle = 'rgba(255,255,255,.95)'; c2.textAlign = XT.mapTeam === 0 ? 'right' : 'left';
     c2.fillText(XT.mapTeam === 0 ? `${codes[0]} 공격 →` : `← ${codes[1]} 공격`, XT.mapTeam === 0 ? mw - 5 : 5, mh - 3);
   }

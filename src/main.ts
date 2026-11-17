@@ -345,6 +345,10 @@ function fillXtResult() {
 }
 { const o = opts.xt; if ((PARTS as string[]).includes(o.part)) XT.part = o.part as Part; if ((MODELS as string[]).includes(o.model)) XT.model = o.model as Model; if ((TKEYS as string[]).includes(o.T)) XT.T = o.T as TKey; }
 $('xtBtn').addEventListener('click', () => toggleXt()); $('xtClose').addEventListener('click', () => toggleXt(false));
+for (const [id, key] of [['xtGraph', 'hover'], ['xtMap', 'hoverMap']] as const) { // 그래프·지도에 커서(폰은 손가락)를 올리면 그 지점의 값
+  const el = $(id), mv = (e: PointerEvent) => { const r = el.getBoundingClientRect(); XT[key] = { x: e.clientX - r.left, y: e.clientY - r.top }; xtFrame = 0; };
+  el.addEventListener('pointermove', mv); el.addEventListener('pointerdown', mv); el.addEventListener('pointerleave', () => { XT[key] = null; xtFrame = 0; }); el.addEventListener('pointercancel', () => { XT[key] = null; });
+}
 bindSeg('segXtView', 'one', v => setXtAll(v === 'all'));
 bindSeg('segXtPart', XT.part, v => { XT.part = v as Part; xtChanged(); });
 bindSeg('segXtModel', XT.model, v => { XT.model = v as Model; xtChanged(); });

@@ -27,7 +27,7 @@ export function createMatch(cfg: MatchCfg, inp?: [Inp, Inp]): Sim {
       teams: [a, b], kit: [kitFor(a, false), kitFor(b, kitsClash(a, b))], score: [0, 0], time: 0, len: cfg.len, diff: cfg.diff, half: 1,
       phase: 'kickoff', phaseT: 0, protect: 0, stats: { shots: [0, 0], onT: [0, 0], poss: [0.001, 0.001], fouls: [0, 0], offs: [0, 0], yel: [0, 0], red: [0, 0], passA: [0, 0], passC: [0, 0] },
       firstKick: cfg.firstKick, nextKick: 0, twoP: !!cfg.humans[1], net: cfg.net, tick: 0, slow: 0, scorer: null, tempo: cfg.tempo, spType: null, react: [0, 0],
-      dead: null, deadT: 0, deadR: 9.15, wall: [], setAim: false, aimX: 0, aimY: 0, aimMan: null, setTaker: null, setT: 0, setX: 0, setY: 0, throwIn: null, throwT: 0, lastAtt: -1, autoRun: [1.5, 1.5], tac: [cfg.tactics?.[0] ?? defaultTactics(cfg.squads?.[0]?.formation), cfg.tactics?.[1] ?? defaultTactics(cfg.squads?.[1]?.formation)],
+      overT: 0, dead: null, deadT: 0, deadR: 9.15, wall: [], setAim: false, aimX: 0, aimY: 0, aimMan: null, setTaker: null, setT: 0, setX: 0, setY: 0, throwIn: null, throwT: 0, lastAtt: -1, autoRun: [1.5, 1.5], tac: [cfg.tactics?.[0] ?? defaultTactics(cfg.squads?.[0]?.formation), cfg.tactics?.[1] ?? defaultTactics(cfg.squads?.[1]?.formation)],
       bench: [[], []], subs: [0, 0], stops: 0, added: [0, 0, 0, 0], adv: null, knockout: !!cfg.knockout, so: null,
     },
     ball: { x: CX, y: CY, z: 0, vx: 0, vy: 0, vz: 0, owner: null, lastTouch: 0, passTarget: null, kicker: null, thru: false, shotT: 0, shot: 0, isShot: false, spin: 0, knock: null, curl: 0, setp: false },
@@ -85,7 +85,7 @@ export function kickoff(s: Sim, kt: number) {
   for (const p of players) { if (p.off) continue; let x = p.bx; if (p.role !== 'GK') x = Math.min(x, p.t === kt ? 46 : 41); p.x = wx(x, p.t); p.y = p.by; p.vx = p.vy = 0; p.dir = p.t === 0 ? 0 : Math.PI; p.kickCD = 0; p.stun = 0; p.holdT = 0; p.forcePass = false; p.dive = 0; p.cele = false; }
   const fw = team[kt].filter(p => p.role !== 'GK' && !p.off), tk = fw[fw.length - 2] ?? fw[0], mate = fw[fw.length - 1] ?? fw[0];
   tk.x = wx(51.7, kt); tk.y = CY; mate.x = wx(50.5, kt); mate.y = CY + 6; tk.dir = kt === 0 ? Math.PI : 0; mate.dir = tk.dir; // 킥오프 두 선수는 자기 진영을 본다
-  placeBall(s, CX, CY); ball.owner = tk; ball.lastTouch = kt; M.setTaker = null; M.dead = null; M.wall = [];
+  placeBall(s, CX, CY); ball.owner = tk; ball.lastTouch = kt; M.setTaker = null; M.dead = null; M.wall = []; M.overT = 0;
   xtEv(s, 'out', kt, 0, CX, CY);
   if (!HU[kt]) { tk.forcePass = true; tk.decT = 0.25; }
   M.phase = 'kickoff'; M.phaseT = 1.3; M.protect = 0; M.adv = null;
@@ -160,6 +160,16 @@ function celebrate(s: Sim, dt: number) {
     else steer(p, 0, 0, dt);
   }
 }
+/** 마지막 공격이 진행 중인가 (FC 온라인처럼 종료 시각이 지나도 이 동안은 휘슬을 불지 않는다): 공을 가진(마지막으로 찬) 팀이 상대 골에서 45m 안에 있거나,
+    그쪽 코너킥·프리킥·스로인을 아직 안 찼거나, 슛이 날아가는 중. 수비가 공을 잡거나 걷어 내면·공이 뒤로 빠지면·키퍼가 잡으면 끝 */
+function attackOn(s: Sim) {
+  const { ball, M } = s, o = ball.owner, t = o ? o.t : ball.kicker ? ball.kicker.t : -1; if (t < 0 || M.so) return false;
+  if (!o && ball.lastTouch !== t) return false; // 수비 발에 맞고 나온 공
+  if (o && o.role === 'GK') return false;
+  if (!o && ball.isShot) return true;
+  return wx(ball.x, t) > 60 && !(M.dead && M.spType === 'goalkick');
+}
+const OVER_MAX = 10; // 마지막 공격을 지켜보는 최대 시간 (실제 초)
 /** 한 틱. dt는 시뮬 시간(초). 경기 시계는 dt/tempo로 실제 시간을 따른다 */
 export function step(s: Sim, dt: number) {
   const { M, players, ball, HU, INP } = s;
@@ -171,10 +181,11 @@ export function step(s: Sim, dt: number) {
     else {
     M.time += dt / M.tempo; const minute = M.time / M.len * 90, hi = M.half - 1, end = M.half === 1 ? 45 : M.half === 2 ? 90 : M.half === 3 ? 105 : 120;
     if (minute >= end && M.added[hi] === 0) { M.added[hi] = addedMinutes(s); banner(s, '', `추가시간 +${M.added[hi]}분`, 1400); s.ev.push({ k: 'hud' }); }
-    if (M.half === 1 && minute >= 45 + M.added[0]) { M.time = M.len / 2; M.phase = 'halftime'; M.phaseT = 2.8; banner(s, 'HALF TIME', `${M.teams[0].code} ${M.score[0]} - ${M.score[1]} ${M.teams[1].code}`, 2600); sfx(s, 'long'); }
-    else if (M.half === 2 && minute >= 90 + M.added[1]) { M.time = M.len; if (M.knockout && M.score[0] === M.score[1]) { M.half = 3; M.phase = 'halftime'; M.phaseT = 2.8; banner(s, 'EXTRA TIME', '연장전 · 전반', 2400); sfx(s, 'long'); } else { M.phase = 'full'; s.ev.push({ k: 'full' }); return; } }
-    else if (M.half === 3 && minute >= 105 + M.added[2]) { M.time = M.len * 105 / 90; M.half = 4; M.phase = 'halftime'; M.phaseT = 2.0; banner(s, '', '연장전 · 후반', 1800); }
-    else if (M.half === 4 && minute >= 120 + M.added[3]) { M.time = M.len * 120 / 90; if (M.score[0] === M.score[1]) { startShootout(s); } else { M.phase = 'full'; s.ev.push({ k: 'full' }); return; } }
+    const up = (lim: number) => { if (minute < lim) return false; if (M.overT < OVER_MAX && attackOn(s)) { M.overT += dt / M.tempo; return false; } return true; }; // 시간이 다 됐어도 마지막 공격은 끝까지 본다
+    if (M.half === 1 && up(45 + M.added[0])) { M.time = M.len / 2; M.phase = 'halftime'; M.phaseT = 2.8; banner(s, 'HALF TIME', `${M.teams[0].code} ${M.score[0]} - ${M.score[1]} ${M.teams[1].code}`, 2600); sfx(s, 'long'); }
+    else if (M.half === 2 && up(90 + M.added[1])) { M.time = M.len; if (M.knockout && M.score[0] === M.score[1]) { M.half = 3; M.phase = 'halftime'; M.phaseT = 2.8; banner(s, 'EXTRA TIME', '연장전 · 전반', 2400); sfx(s, 'long'); } else { M.phase = 'full'; s.ev.push({ k: 'full' }); return; } }
+    else if (M.half === 3 && up(105 + M.added[2])) { M.time = M.len * 105 / 90; M.half = 4; M.phase = 'halftime'; M.phaseT = 2.0; banner(s, '', '연장전 · 후반', 1800); }
+    else if (M.half === 4 && up(120 + M.added[3])) { M.time = M.len * 120 / 90; if (M.score[0] === M.score[1]) { startShootout(s); } else { M.phase = 'full'; s.ev.push({ k: 'full' }); return; } }
     }
   }
   else if (ph === 'kickoff' || ph === 'setpiece') { M.phaseT -= dt; if (M.phaseT <= 0) { M.phase = 'live'; M.protect = Math.max(M.protect, 1.2); } }

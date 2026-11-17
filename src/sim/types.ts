@@ -44,6 +44,7 @@ export interface MatchInfo {
   /** AI 반응 지연: 상대가 공을 찬 뒤 이 시간 동안은 루즈볼을 쫓지 않는다 (난이도별) */
   react: [number, number];
   /** Phase 5: 전술, 벤치·교체 수, 중단 횟수(추가시간 계산), 추가시간(분, 전/후반), 어드밴티지 */
+  overT: number; /* 종료 시각을 넘겨 마지막 공격을 지켜본 시간(실제 초) */
   dead: Player | null; deadT: number; deadR: number; wall: Player[]; /* 아직 차지 않은 세트피스(어느 팀이든)의 키커·지난 시간·상대가 떨어져 있어야 하는 거리·벽 */
   setAim: boolean; aimX: number; aimY: number; aimMan: Player | null; /* aimMan: 조준점으로 들어가 받을 동료 */ /* 사람 팀 코너킥·프리킥·골킥의 조준점 (방향키로 옮긴다) */
   setTaker: Player | null; setT: number; setX: number; setY: number; /* 사람 팀 코너킥·프리킥·골킥·페널티의 키커와 공을 놓고 선 시간: 찰 때까지 제자리 (몰고 나갈 수 없다) */

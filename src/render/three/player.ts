@@ -1,12 +1,14 @@
-/* 로우폴리 휴머노이드 선수 모델 + 코드로 만든 애니메이션(절차적 포즈).
+/* 선수 모델(회전체로 만든 둥근 몸: 가슴·허리 굴곡이 있는 몸통, 근육 굴곡이 있는 팔다리, 얼굴 텍스처, 축구화) + 코드로 만든 애니메이션(절차적 포즈).
    로컬 좌표: 선수는 +X를 바라본다(그룹을 -dir 만큼 Y축 회전). 팔다리 스윙은 Z축 회전(+ = 앞으로), 옆 동작은 X축 회전.
-   본 구조: root → hips → (thighL/R → shinL/R → footL/R), torso → (head, armL/R → foreL/R → handL/R) */
+   본 구조: root → hips → (thighL/R → shinL/R → footL/R), torso → (head, armL/R → foreL/R)
+   키는 선수 데이터의 height, 체격(몸통·팔다리 굵기)은 몸싸움 능력치(str)를 따른다. 본마다 메시 하나(색은 정점 색)라 선수당 메시 16개 */
 import * as THREE from 'three';
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import type { Player } from '../../sim/types';
 /** 포즈에 필요한 상태. 경기 중엔 Player 그대로, 리플레이 땐 버퍼에서 채운 객체 */
 export interface PoseState { x: number; y: number; dir: number; vx: number; vy: number; run: number; kickCD: number; slide: number; dive: number; diveDir: number; stun: number; cele: boolean; role: string; i: number; kickWind: number; spin: number; feint: number; }
 import type { Kit } from '../../data/teams';
-import { kitTextures } from './textures';
+import { kitTextures, faceTexture } from './textures';
 import { clamp } from '../../sim/util';
 
 const geoCache = new Map<string, THREE.BufferGeometry>();
@@ -14,15 +16,23 @@ const matCache = new Map<string, THREE.Material>();
 function geo(key: string, mk: () => THREE.BufferGeometry) { let g = geoCache.get(key); if (!g) { g = mk(); geoCache.set(key, g); } return g; }
 function mat(key: string, mk: () => THREE.Material) { let m = matCache.get(key); if (!m) { m = mk(); matCache.set(key, m); } return m; }
 const lam = (color: string) => mat('l' + color, () => new THREE.MeshLambertMaterial({ color }));
-/** 위쪽이 관절(피벗)이 되도록 아래로 내린 원기둥 */
-function limbGeo(key: string, r0: number, r1: number, len: number) { return geo(key, () => { const g = new THREE.CylinderGeometry(r1, r0, len, 8); g.translate(0, -len / 2, 0); return g; }); }
-function boxGeo(key: string, w: number, h: number, d: number) { return geo(key, () => new THREE.BoxGeometry(w, h, d)); }
+const vcMat = () => mat('vc', () => new THREE.MeshLambertMaterial({ vertexColors: true }));
+/** 지오메트리 전체를 한 색으로 칠한다 (정점 색) — 여러 색 조각을 한 메시로 합치려고 */
+function tint<T extends THREE.BufferGeometry>(g: T, color: string): T { const c = new THREE.Color(color), n = g.attributes.position.count, a = new Float32Array(n * 3); for (let k = 0; k < n; k++) { a[k * 3] = c.r; a[k * 3 + 1] = c.g; a[k * 3 + 2] = c.b; } g.setAttribute('color', new THREE.BufferAttribute(a, 3)); return g; }
+/** 회전체: [반지름, y] 점들(아래→위)을 Y축으로 돌린다. 끝은 뚫려 있으므로 관절 구로 막는다 */
+function lathe(pts: [number, number][], seg = 10, phi0 = 0, phiLen = Math.PI * 2) { return new THREE.LatheGeometry(pts.map(([r, y]) => new THREE.Vector2(r, y)), seg, phi0, phiLen); }
+/** 타원체 */
+function blobGeo(rx: number, ry: number, rz: number, x = 0, y = 0, z = 0, ws = 8, hs = 6) { const g = new THREE.SphereGeometry(1, ws, hs); g.scale(rx, ry, rz); g.translate(x, y, z); return g; }
+function merged(key: string, mk: () => THREE.BufferGeometry[]) { return geo(key, () => mergeGeometries(mk())!); }
 
 const kitTexCache = new Map<string, { front: THREE.Texture; back: THREE.Texture }>();
 function kitTex(kit: Kit, gk: boolean, num: number, name?: string) {
   const key = JSON.stringify([kit, gk, num, name ?? '']); let t = kitTexCache.get(key); if (!t) { t = kitTextures(kit, gk, num, name); kitTexCache.set(key, t); } return t;
 }
-const THIGH = 0.44, SHIN = 0.42, UARM = 0.28, FARM = 0.26, HIP_Y = 0.9;
+const THIGH = 0.44, SHIN = 0.42, UARM = 0.28, FARM = 0.26, HIP_Y = 0.9, HEAD_Y = 0.66, STAND = HIP_Y + 0.12 + HEAD_Y + 0.125; // STAND: 배율 1일 때 선 키(m)
+const BOOTS = ['#16181c', '#f1f1f1', '#e2452f', '#2a6fd6', '#d6e23c', '#16181c', '#ff7a1a', '#16181c'];
+// 몸통 옆모습: [반너비(z), 높이]. 엉덩이 → 허리(잘록) → 가슴 → 어깨 → 목. 앞뒤 두께는 0.6배
+const TORSO: [number, number][] = [[0.156, -0.04], [0.152, 0.05], [0.146, 0.14], [0.156, 0.22], [0.174, 0.3], [0.186, 0.38], [0.184, 0.44], [0.135, 0.495], [0.058, 0.535]];
 
 export class PlayerModel {
   root = new THREE.Group();
@@ -33,43 +43,49 @@ export class PlayerModel {
   private hScale: number;
   private blob: THREE.Mesh;
   constructor(public p: Player, kit: Kit, blobTex: THREE.Texture, backName?: string) {
-    const gk = p.role === 'GK', skin = lam(p.skin), hair = lam(p.hair);
-    const shirt = gk ? kit.gk : kit.c1, shorts = gk ? '#1b1b1b' : kit.sh, sock = gk ? '#1b1b1b' : '#f4f4f4';
-    this.hScale = 0.95 + ((p.i * 7 + p.t * 3) % 5) * 0.03; // 선수마다 키 차이 (1.66~1.86m)
+    const gk = p.role === 'GK', skin = p.skin, vc = vcMat();
+    const shirt = gk ? kit.gk : kit.c1, shorts = gk ? '#1b1b1b' : kit.sh, sock = gk ? '#1b1b1b' : '#f4f4f4', band = gk ? kit.gk : kit.c1, boot = BOOTS[(p.i * 3 + p.t * 5 + p.num) % BOOTS.length];
+    const cm = clamp(p.def?.height ?? 176 + ((p.i * 7 + p.t * 3) % 5) * 4, 160, 204); // 키: 선수 데이터, 없으면 번호로 조금씩 다르게
+    this.hScale = cm / 100 / STAND;
+    const bulk = clamp(1 + ((p.attrs?.str ?? 62) - 62) * 0.0042 + (gk ? 0.02 : 0), 0.93, 1.12), bq = Math.round(bulk * 50) / 50, B = (m: THREE.Mesh, k = 1.14) => { m.scale.set(bq * k, 1, bq * k); m.castShadow = true; return m; }; // k: 부위별 굵기 보정 (팔다리 1.14, 몸통 1.06) // 체격: 몸싸움 50 → 0.95배, 90 → 1.12배 (2% 단위)
     this.root.scale.setScalar(this.hScale);
     this.root.add(this.body); this.body.add(this.hips); this.hips.position.y = HIP_Y;
-    // 골반
-    const pelvis = new THREE.Mesh(boxGeo('pelvis', 0.22, 0.2, 0.34), lam(shorts)); pelvis.position.y = 0.04; pelvis.castShadow = true; this.hips.add(pelvis);
-    // 몸통 (앞/뒤 텍스처)
+    // 골반 (바지 윗부분)
+    this.hips.add(B(new THREE.Mesh(geo('pelvis', () => blobGeo(0.1, 0.135, 0.158, 0, 0.015, 0, 10, 7)), lam(shorts)), 1.08));
+    // 몸통: 앞·뒤 반쪽 회전체에 유니폼 앞/뒤 텍스처 (등번호는 뒤)
     const kt = kitTex(kit, gk, p.num, backName);
-    const tgeo = boxGeo('torso', 0.26, 0.5, 0.4);
-    const side = lam(shirt);
-    const tmats = [mat('kf' + JSON.stringify([kit, gk, p.num]), () => new THREE.MeshLambertMaterial({ map: kt.front })), mat('kb' + JSON.stringify([kit, gk, p.num, backName ?? '']), () => new THREE.MeshLambertMaterial({ map: kt.back })), side, lam(shorts), side, side];
-    const torsoM = new THREE.Mesh(tgeo, tmats); torsoM.position.y = 0.25; torsoM.castShadow = true;
-    this.torso.position.y = 0.12; this.hips.add(this.torso); this.torso.add(torsoM);
-    // 머리
-    const headM = new THREE.Mesh(geo('head', () => new THREE.SphereGeometry(0.115, 10, 8)), skin); headM.castShadow = true;
-    const hairM = new THREE.Mesh(geo('hair', () => { const g = new THREE.SphereGeometry(0.122, 10, 8, 0, Math.PI * 2, 0, Math.PI * 0.55); return g; }), hair); hairM.position.y = 0.01; hairM.rotation.z = -0.25;
-    const neck = new THREE.Mesh(limbGeo('neck', 0.045, 0.045, 0.08), skin); neck.position.y = 0.1;
-    this.head.position.y = 0.62; this.head.add(headM, hairM, neck); this.torso.add(this.head);
-    // 팔
+    const half = (back: boolean) => geo(back ? 'torsoB' : 'torsoF', () => { const g = lathe(TORSO, 9, back ? Math.PI : 0, Math.PI); g.scale(0.6, 1, 1); g.computeVertexNormals(); return g; });
+    const tf = B(new THREE.Mesh(half(false), mat('kf' + JSON.stringify([kit, gk, p.num]), () => new THREE.MeshLambertMaterial({ map: kt.front }))), 1.06);
+    const tb = B(new THREE.Mesh(half(true), mat('kb' + JSON.stringify([kit, gk, p.num, backName ?? '']), () => new THREE.MeshLambertMaterial({ map: kt.back }))), 1.06);
+    this.torso.position.y = 0.12; this.hips.add(this.torso); this.torso.add(tf, tb);
+    // 머리: 얼굴 텍스처(눈·눈썹·코·입·머리선) + 머리카락 + 목·귀
+    const style = (p.i * 5 + p.t * 3 + p.num) % 7; // 0~3 짧은 머리, 4·5 조금 긴 머리, 6 삭발
+    const headM = new THREE.Mesh(geo('head', () => blobGeo(0.1, 0.125, 0.094, 0, 0, 0, 16, 12)), mat('face' + skin + p.hair + (style === 6), () => new THREE.MeshLambertMaterial({ map: faceTexture(skin, p.hair, style === 6) }))); headM.castShadow = true;
+    const neck = new THREE.Mesh(merged('neck' + skin, () => [tint(lathe([[0.05, -0.2], [0.046, -0.13], [0.047, -0.06]], 8), skin), tint(blobGeo(0.016, 0.028, 0.013, -0.004, -0.004, 0.093, 5, 4), skin), tint(blobGeo(0.016, 0.028, 0.013, -0.004, -0.004, -0.093, 5, 4), skin)]), vc);
+    this.head.position.y = HEAD_Y; this.head.add(headM, neck); this.torso.add(this.head);
+    if (style !== 6) { const long = style >= 4; const hairM = new THREE.Mesh(geo('hair' + long, () => { const g = new THREE.SphereGeometry(1, 14, 7, 0, Math.PI * 2, 0, Math.PI * (long ? 0.56 : 0.47)); g.scale(0.106, long ? 0.137 : 0.132, 0.1); g.rotateZ(0.42); g.translate(-0.006, 0.004, 0); return g; }), lam(p.hair)); this.head.add(hairM); }
+    // 팔: 어깨(소매) → 위팔 → 팔꿈치 / 아래팔 → 손 (키퍼는 긴소매 + 장갑)
     for (const s of [-1, 1]) {
-      const a = new THREE.Group(); a.position.set(0, 0.47, s * 0.235);
-      const ua = new THREE.Mesh(limbGeo('uarm', 0.055, 0.045, UARM), lam(shirt)); ua.castShadow = true; a.add(ua);
+      const a = new THREE.Group(); a.position.set(0, 0.452, s * 0.214 * bq);
+      a.add(B(new THREE.Mesh(merged('uarm' + shirt + skin + gk, () => [
+        tint(lathe([[0.038, -UARM], [0.043, -0.2], [0.049, -0.1], [0.05, -0.02]], 8), gk ? shirt : skin),
+        tint(lathe([[0.05, -0.15], [0.052, -0.08], [0.052, -0.01]], 8), shirt), tint(blobGeo(0.052, 0.056, 0.052, 0, -0.012, 0, 8, 6), shirt), tint(blobGeo(0.039, 0.039, 0.039, 0, -UARM, 0, 7, 5), gk ? shirt : skin)]), vc)));
       const f = new THREE.Group(); f.position.y = -UARM;
-      const fa = new THREE.Mesh(limbGeo('farm', 0.045, 0.035, FARM), skin); fa.castShadow = true; f.add(fa);
-      const hand = new THREE.Mesh(geo('hand', () => new THREE.SphereGeometry(0.045, 6, 5)), gk ? lam('#e8e8e8') : skin); hand.position.y = -FARM; f.add(hand);
+      f.add(B(new THREE.Mesh(merged('farm' + shirt + skin + gk, () => [
+        tint(lathe([[0.029, -FARM], [0.036, -0.17], [0.042, -0.07], [0.039, 0]], 8), gk ? shirt : skin),
+        gk ? tint(blobGeo(0.05, 0.068, 0.036, 0.01, -FARM - 0.05, 0, 7, 5), '#ececec') : tint(blobGeo(0.033, 0.05, 0.022, 0.006, -FARM - 0.04, 0, 6, 5), skin)]), vc)));
       a.add(f); this.torso.add(a); this.arm.push(a); this.fore.push(f);
     }
-    // 다리
+    // 다리: 허벅지(바지 자락 + 맨살 + 무릎) / 종아리(스타킹, 위에 유니폼 색 띠) / 축구화
     for (const s of [-1, 1]) {
-      const t = new THREE.Group(); t.position.set(0, 0, s * 0.1);
-      const th = new THREE.Mesh(limbGeo('thigh', 0.08, 0.065, THIGH), lam(shorts)); th.castShadow = true; t.add(th);
-      const shortsCover = new THREE.Mesh(limbGeo('thighS', 0.085, 0.08, 0.2), lam(shorts)); t.add(shortsCover);
-      const skinPart = new THREE.Mesh(limbGeo('thighK', 0.066, 0.06, 0.14), skin); skinPart.position.y = -0.31; t.add(skinPart);
+      const t = new THREE.Group(); t.position.set(0, 0, s * 0.098 * bq);
+      t.add(B(new THREE.Mesh(merged('thigh' + shorts + skin, () => [
+        tint(lathe([[0.05, -THIGH], [0.056, -0.36], [0.07, -0.22], [0.082, -0.08], [0.08, 0]], 9), skin), tint(blobGeo(0.054, 0.058, 0.054, 0.006, -THIGH, 0, 8, 6), skin),
+        tint(lathe([[0.097, -0.25], [0.098, -0.14], [0.094, -0.02], [0.08, 0.04]], 9), shorts)]), vc)));
       const sh = new THREE.Group(); sh.position.y = -THIGH;
-      const shM = new THREE.Mesh(limbGeo('shin', 0.06, 0.045, SHIN), lam(sock)); shM.castShadow = true; sh.add(shM);
-      const ft = new THREE.Mesh(boxGeo('foot', 0.26, 0.08, 0.11), lam('#141414')); ft.position.set(0.07, -SHIN + 0.04, 0); ft.castShadow = true; sh.add(ft);
+      sh.add(B(new THREE.Mesh(merged('shin' + sock + band, () => { const c = lathe([[0.034, -SHIN], [0.039, -0.33], [0.055, -0.19], [0.059, -0.12], [0.052, -0.045]], 9); c.translate(-0.008, 0, 0); return [tint(c, sock), tint(lathe([[0.054, -0.085], [0.055, -0.04]], 9).translate(-0.006, 0, 0), band)]; }), vc)));
+      const ft = new THREE.Mesh(merged('boot' + boot, () => [tint(blobGeo(0.128, 0.05, 0.05, 0.012, 0, 0, 10, 6), boot), tint(blobGeo(0.05, 0.062, 0.046, -0.072, 0.02, 0, 7, 5), boot), tint(new THREE.BoxGeometry(0.235, 0.018, 0.082).translate(0.008, -0.042, 0), '#0b0b0d')]), vc);
+      ft.position.set(0.062, -SHIN + 0.048, 0); ft.castShadow = true; sh.add(ft);
       t.add(sh); this.hips.add(t); this.thigh.push(t); this.shin.push(sh); this.foot.push(ft);
     }
     // 그림자 없는 품질용 둥근 그림자
