@@ -279,6 +279,15 @@ export function shoot(s: Sim, p: Player, power: number, aimY: number, finesseIn 
   const t = p.t, A = p.attrs, gx = t === 0 ? W + 0.3 : -0.3;
   const dist = Math.hypot(gx - p.x, CY - p.y);
   const kp = team[1 - t][0];
+  if (dist > 45 && !M.so) { // 슛 사거리 밖(골에서 45m 넘게 — 자기 진영): 슛이 아니라 앞으로 걷어 낸다, 누른 세기에 따라 22~34m 지점에 떨어지게 높이 띄운다(낮게 차면 떨어진 뒤 20m 넘게 더 굴러간다).
+    // 전엔 골라인 높이에 맞춰 역산한 슛이 그대로 나가 탭만 해도 최고 35m 높이로 80m를 날아 매번 상대 키퍼에게 갔다
+    const pw = clamp((power - 0.5) / 0.5, 0, 1), q = 22 + pw * 12, ang = Math.atan2((CY - p.y) * 0.35, gx - p.x) + (Math.abs(aimY) > 0.2 ? Math.sign(aimY) * 0.45 : 0) + (s.rnd() - 0.5) * 0.12;
+    const k = loftKick(q, loftTime(q, 0) * 1.2), lx = p.x + Math.cos(ang) * q, ly = p.y + Math.sin(ang) * q;
+    p.dir = ang; kick(s, p, Math.cos(ang) * k.v, Math.sin(ang) * k.v, k.vz);
+    let m: Player | null = null, md = 14; for (const o of team[t]) { if (o === p || o.off || o.role === 'GK') continue; const dd = Math.hypot(o.x - lx, o.y - ly); if (dd < md) { md = dd; m = o; } } // 떨어질 자리 14m 안의 동료가 받으러 간다
+    if (m) { ball.passTarget = m; const h = HU[t]; if (h) { h.ctrl = m; h.lock = 0.5; } }
+    return;
+  }
   let ty = CY + (Math.abs(aimY) > 0.2 ? Math.sign(aimY) * 2.7 : (kp.y < CY ? 1 : -1) * 2.4); // 조준 없으면 키퍼 반대쪽 포스트 안쪽
   const volley = ball.z > 0.4;
   if (M.spType === 'freekick' && M.protect > 0.3) finesse = true; // 프리킥은 감아찬다
