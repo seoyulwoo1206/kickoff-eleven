@@ -1,7 +1,8 @@
 import { W, H, CX, CY, GH, GZ } from './consts';
 import { clamp, d, wx } from './util';
 import { mulberry32 } from './rng';
-import { DIFF, FORM, NUMS, HAIR, SKIN, kitFor, kitsClash } from '../data/teams';
+import { DIFF, FORM, NUMS, kitFor, kitsClash } from '../data/teams';
+import { lookOf } from '../data/looks';
 import { lineupOf, slotsOf, overall, detailOf } from '../data/squads';
 import { defaultTactics } from './tactics';
 import { updateAdvantage, addedMinutes, buildWall, cornerSetup, alive } from './rules';
@@ -55,10 +56,11 @@ function makePlayers(s: Sim, squads: [import('../data/squad').SquadDef | null, i
       const det = detailOf(d ?? { name: '', nameEn: '', num: NUMS[i], pos: f.pos, foot: 'R', weak: 3, skill: 2, height: 180,
         r: f.role === 'GK' ? { pac: 58, sho: 60, pas: 62, dri: 55, def: T.def, phy: T.def } : { pac: T.spd, sho: f.role === 'FW' ? T.atk : f.role === 'MF' ? T.atk - 8 : T.atk - 25, pas: f.role === 'MF' ? T.atk : T.atk - 8, dri: f.role === 'DF' ? T.atk - 15 : T.atk - 3, def: f.role === 'DF' ? T.def : f.role === 'MF' ? T.def - 12 : T.def - 35, phy: (T.def + T.spd) / 2 },
         gk: f.role === 'GK' ? { div: T.def, han: T.def - 2, kic: 65, ref: T.def + 2, pos: T.def } : undefined });
+      const lk = lookOf(T.code, d ? d.nameEn : 'p' + i, d ? d.num : NUMS[i]);
       const p: Player = {
         t, i, role: f.role, bx: f.x, by: f.y, num: d ? d.num : NUMS[i], x: 0, y: 0, vx: 0, vy: 0, dir: t === 0 ? 0 : Math.PI, speed: 0,
         kickCD: 0, stun: 0, tackleCD: 0, bodyCD: 0, reactT: 0, shield: 0, lagVx: 0, lagVy: 0, cutCD: 0, beatT: 0, runT: 0, runDir: 0, offs: false, slide: 0, decT: 0, holdT: 0, lastSave: -1, dive: 0, diveDir: 0, run: s.rnd() * 10,
-        forcePass: false, forceShot: false, cele: false, hair: HAIR[(i * 7 + t * 3) % HAIR.length], skin: SKIN[(i * 5 + t * 2) % SKIN.length],
+        forcePass: false, forceShot: false, cele: false, hair: lk.hair, skin: lk.skin, look: lk.seed, tone: lk.tone,
         name: d ? d.name : `${T.code} ${NUMS[i]}`, nameEn: d ? d.nameEn : `${T.code} ${NUMS[i]}`, pos: d ? d.pos : f.pos, ovr: d ? overall(d) : Math.round((T.atk + T.def + T.spd) / 3),
         foot: d ? d.foot : 'R', skill: d ? d.skill : 2, attrs: det, def: d,
         speed0: 0, sta: 1, kickWind: 0, pending: null, feint: 0, burst: 0, spin: 0, spinDir: 1, off: false, yellow: 0,

@@ -96,7 +96,9 @@ export class ThreeRenderer implements IRenderer {
     }
   }
   private syncModels(sim: Sim) {
-    if (this.modelSim === sim && this.namesMode === opts.names) return;
+    if (this.modelSim === sim && this.namesMode === opts.names) { // 교체로 선수가 바뀌었으면 그 모델만 다시 만든다 (전엔 나간 선수의 등번호·모습 그대로였다)
+      for (const p of sim.players) { const m = this.models.get(p); if (m && m.key !== PlayerModel.keyOf(p)) { this.scene.remove(m.root); const n = new PlayerModel(p, sim.M.kit[p.t], this.blobTex, shirtName(p, opts.names)); n.setBlob(this.quality === 'low'); this.scene.add(n.root); this.models.set(p, n); } }
+      return; }
     for (const m of this.models.values()) this.scene.remove(m.root); this.models.clear();
     for (const p of sim.players) { const m = new PlayerModel(p, sim.M.kit[p.t], this.blobTex, shirtName(p, opts.names)); m.setBlob(this.quality === 'low'); this.scene.add(m.root); this.models.set(p, m); }
     this.modelSim = sim; this.namesMode = opts.names; tintCrowd(this.stadium, sim.M.kit[0].c1, sim.M.kit[1].c1);
@@ -179,7 +181,7 @@ export class ThreeRenderer implements IRenderer {
     if (sim) this.syncModels(sim); else if (this.modelSim) { for (const m of this.models.values()) this.scene.remove(m.root); this.models.clear(); this.modelSim = null; }
     this.updateCamera(sim, dtR, perf);
     { const hide = !this.replay && (this.mode === 'tv' || this.mode === 'top' || this.mode === 'intro'); for (const o of this.stadium.near) o.visible = !hide; } // 입장 카메라도 가까운 쪽 관중석 자리(지붕 높이)에 있다 // 중계 카메라는 가까운 쪽 관중석 자리까지 내려가므로 그 관중석을 그리지 않는다
-    if (!paused) { this.updatePuffs(dtR); updateNets(this.stadium.nets, dtR); this.updateCrowd(sim, dtR); }
+    if (!paused) { this.updatePuffs(dtR); updateNets(this.stadium.nets, dtR); this.updateCrowd(sim, dtR); this.stadium.wind.value = perf % 3600; }
     if (sim) {
       const { HU, M } = sim;
       if (M.phase === 'goal' && this.lastPhase !== 'goal') { const n = this.stadium.nets[sim.ball.x > CX ? 1 : 0]; n.shake = 1.4; this.goalAt = perf; }

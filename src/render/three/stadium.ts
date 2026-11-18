@@ -6,7 +6,7 @@ import { grassTexture, grassDetail, netTexture, adTexture, ADS, skyTexture, seat
 import type { Quality } from '../types';
 
 export interface Net { mesh: THREE.Mesh; base: Float32Array; side: number; shake: number; }
-export interface Stadium { group: THREE.Group; nets: Net[]; crowd: THREE.InstancedMesh[]; crowdBase: Float32Array[]; near: THREE.Object3D[]; bodies: { inst: THREE.InstancedMesh; kind: Uint8Array }[]; } // near: 카메라 쪽(큰 y) 관중석 — 중계 카메라에선 숨긴다
+export interface Stadium { group: THREE.Group; nets: Net[]; crowd: THREE.InstancedMesh[]; crowdBase: Float32Array[]; near: THREE.Object3D[]; bodies: { inst: THREE.InstancedMesh; kind: Uint8Array }[]; /** 잔디 바람 시간(초) — scene이 매 프레임 넣는다 */ wind: { value: number }; } // near: 카메라 쪽(큰 y) 관중석 — 중계 카메라에선 숨긴다
 
 const rnd = Math.random;
 const LINE = 0.12;
@@ -35,14 +35,27 @@ function buildLines() {
   for (const c of [[0, 0, 0], [W, 0, Math.PI / 2], [W, H, Math.PI], [0, H, Math.PI * 1.5]]) arc(c[0], c[1], 1, c[2], c[2] + Math.PI / 2, 6);
   const m = new THREE.Mesh(mergeGeometries(geos), mat); m.position.y = 0.012; m.receiveShadow = true; return m;
 }
-function buildPitch() {
+/** 잔디 바닥. 깎은 띠는 셰이더에서 그린다 — 잎이 누운 방향에 따라 보는 쪽에서 밝기가 달라지므로(중계 카메라에선 세로 띠가 또렷, 골 뒤에선 가로 띠가, 반대편에선 밝기가 뒤집힌다) 텍스처에 구워 두면 가짜처럼 보인다.
+    바람: 큰 얼룩이 천천히 흘러가며 밝기가 ±3% 바뀌고 잎 결이 2~3cm 눕는다 (uTime). 비스듬히 볼수록 조금 밝고 누렇다(잎 옆면이 빛을 받는다) */
+function buildPitch(wind: { value: number }) {
   const gt = grassTexture(), det = grassDetail();
   const geo = new THREE.PlaneGeometry(gt.TW, gt.TH); geo.rotateX(-Math.PI / 2); geo.translate(CX, 0, CY);
   const mat = new THREE.MeshStandardMaterial({ map: gt.tex, roughness: 0.95, metalness: 0 });
-  // 가까이서 보일 결: 디테일 노이즈를 곱한다
   mat.onBeforeCompile = sh => {
-    sh.uniforms.detailMap = { value: det }; sh.uniforms.detailRep = { value: new THREE.Vector2(gt.TW / 0.9, gt.TH / 0.9) };
-    sh.fragmentShader = sh.fragmentShader.replace('#include <map_fragment>', `#include <map_fragment>\n vec3 dA = texture2D(detailMap, vMapUv * detailRep).rgb, dB = texture2D(detailMap, vMapUv * detailRep * 0.113 + 0.37).rgb; diffuseColor.rgb *= dA * 2.0 * (0.86 + dB.g * 0.28);`).replace('uniform vec3 diffuse;', 'uniform vec3 diffuse; uniform sampler2D detailMap; uniform vec2 detailRep;');
+    sh.uniforms.detailMap = { value: det }; sh.uniforms.detailRep = { value: new THREE.Vector2(gt.TW / 0.9, gt.TH / 0.9) }; sh.uniforms.uTime = wind;
+    sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\n varying vec3 vWPos;').replace('#include <begin_vertex>', '#include <begin_vertex>\n vWPos = (modelMatrix * vec4(position, 1.0)).xyz;');
+    sh.fragmentShader = sh.fragmentShader.replace('uniform vec3 diffuse;', 'uniform vec3 diffuse; uniform sampler2D detailMap; uniform vec2 detailRep; uniform float uTime; varying vec3 vWPos;').replace('#include <map_fragment>', `#include <map_fragment>
+      vec2 gp = vWPos.xz; vec3 gV = normalize(cameraPosition - vWPos);
+      float w1 = sin(gp.x * 0.21 + gp.y * 0.13 + uTime * 0.9), w2 = sin(gp.x * 0.07 - gp.y * 0.17 - uTime * 0.55 + 1.7);
+      float gust = texture2D(detailMap, gp * 0.011 + vec2(uTime * 0.011, uTime * 0.006)).g - 0.5;
+      float wnd = w1 * w2 * 0.8 + gust * 2.2;
+      vec2 duv = vMapUv * detailRep + vec2(wnd * 0.022, w1 * 0.012);
+      vec3 dA = texture2D(detailMap, duv).rgb, dB = texture2D(detailMap, vMapUv * detailRep * 0.113 + 0.37).rgb;
+      float inX = step(0.0, gp.x) * step(gp.x, ${W.toFixed(1)}), inY = step(0.0, gp.y) * step(gp.y, ${H.toFixed(1)});
+      float mX = (smoothstep(-0.1, 0.1, sin(gp.x * ${(Math.PI / (W / 18)).toFixed(5)})) - 0.5) * 2.0, mY = (smoothstep(-0.1, 0.1, sin(gp.y * ${(Math.PI / (H / 12)).toFixed(5)})) - 0.5) * 2.0;
+      float band = mX * (0.3 + 0.7 * clamp(gV.z * 1.7, -1.0, 1.0)) * 0.105 * inY + mY * (0.25 + 0.6 * clamp(gV.x * 1.7, -1.0, 1.0)) * 0.05 * inX;
+      diffuseColor.rgb *= dA * 2.0 * (0.88 + dB.g * 0.24) * (1.0 + band) * (1.0 + wnd * 0.045);
+      float graze = pow(1.0 - clamp(gV.y, 0.0, 1.0), 3.0); diffuseColor.rgb = mix(diffuseColor.rgb, diffuseColor.rgb * 1.1 + vec3(0.022, 0.03, 0.0), graze * 0.55);`);
   };
   const m = new THREE.Mesh(geo, mat); m.receiveShadow = true; return m;
 }
@@ -212,11 +225,11 @@ function buildSky() {
   m.position.set(CX, -60, CY); return m;
 }
 export function buildStadium(q: Quality): Stadium {
-  const group = new THREE.Group();
-  group.add(buildGround(), buildTrack(), buildPitch(), buildLines(), buildBoards(), buildFloodlights(), buildSky());
+  const group = new THREE.Group(), wind = { value: 0 };
+  group.add(buildGround(), buildTrack(), buildPitch(wind), buildLines(), buildBoards(), buildFloodlights(), buildSky());
   const goals = buildGoals(); group.add(goals.group);
   const stands = buildStands(q); group.add(stands.group);
-  return { group, nets: goals.nets, crowd: stands.crowd, crowdBase: stands.crowdBase, near: stands.near, bodies: stands.bodies };
+  return { group, nets: goals.nets, crowd: stands.crowd, crowdBase: stands.crowdBase, near: stands.near, bodies: stands.bodies, wind };
 }
 /** 그물 흔들림: 골 직후 뒤 그물이 출렁인다 */
 export function updateNets(nets: Net[], dt: number) {

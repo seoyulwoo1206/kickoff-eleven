@@ -40,8 +40,6 @@ export const DIFF: Record<DiffKey, DiffDef> = {
 /** 4-4-2 기본 위치 (팀 0 기준, 팀 1은 wx로 뒤집음) */
 export const FORM: [Role, number, number][] = [['GK', 4, 34], ['DF', 17, 10], ['DF', 15, 26], ['DF', 15, 42], ['DF', 17, 58], ['MF', 33, 12], ['MF', 30, 28], ['MF', 30, 40], ['MF', 33, 56], ['FW', 46, 28], ['FW', 46, 40]];
 export const NUMS = [1, 2, 4, 5, 3, 7, 8, 6, 11, 9, 10];
-export const HAIR = ['#1b120c', '#3a2416', '#0e0e0e', '#5a3a1e', '#b88a4f', '#2a2018', '#6b4a2a'];
-export const SKIN = ['#f1c7a3', '#d9a173', '#b57a4e', '#8b5a35', '#f3d4b8', '#6c4327'];
 
 export function hexRgb(h: string): [number, number, number] { const n = parseInt(h.slice(1), 16); return [(n >> 16) & 255, (n >> 8) & 255, n & 255]; }
 export function colDist(a: string, b: string) { const x = hexRgb(a), y = hexRgb(b); return Math.hypot(x[0] - y[0], x[1] - y[1], x[2] - y[2]); }

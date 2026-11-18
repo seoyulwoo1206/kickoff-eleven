@@ -10,6 +10,7 @@ export interface PoseState { x: number; y: number; dir: number; vx: number; vy: 
 import type { Kit } from '../../data/teams';
 import { kitTextures, faceTexture } from './textures';
 import { clamp } from '../../sim/util';
+import { lookBit } from '../../data/looks';
 
 const geoCache = new Map<string, THREE.BufferGeometry>();
 const matCache = new Map<string, THREE.Material>();
@@ -42,6 +43,11 @@ export class PlayerModel {
   private body = new THREE.Group(); // hips+torso를 함께 기울이거나 눕힐 때
   private hScale: number;
   private blob: THREE.Mesh;
+  /** 이 모델을 만든 선수(교체되면 달라진다 → scene이 다시 만든다) */
+  key: string;
+  // 움직임 상태: 가속·회전 속도(기울기), 서 있음↔달리기 섞기, 자세가 바뀔 때 0.1초쯤 섞어 넘기기
+  private L = { t: -1, sp: 0, dir: 0, acc: 0, turn: 0, a: 0, cr: 0, look: 0, mode: -1, mix: 1, dur: 0.12 };
+  private bones: THREE.Object3D[] = []; private cur = new Float32Array(45); private snap = new Float32Array(45);
   constructor(public p: Player, kit: Kit, blobTex: THREE.Texture, backName?: string) {
     const gk = p.role === 'GK', skin = p.skin, vc = vcMat();
     const shirt = gk ? kit.gk : kit.c1, shorts = gk ? '#1b1b1b' : kit.sh, sock = gk ? '#1b1b1b' : '#f4f4f4', band = gk ? kit.gk : kit.c1, boot = BOOTS[(p.i * 3 + p.t * 5 + p.num) % BOOTS.length];
@@ -58,12 +64,30 @@ export class PlayerModel {
     const tf = B(new THREE.Mesh(half(false), mat('kf' + JSON.stringify([kit, gk, p.num]), () => new THREE.MeshLambertMaterial({ map: kt.front }))), 1.06);
     const tb = B(new THREE.Mesh(half(true), mat('kb' + JSON.stringify([kit, gk, p.num, backName ?? '']), () => new THREE.MeshLambertMaterial({ map: kt.back }))), 1.06);
     this.torso.position.y = 0.12; this.hips.add(this.torso); this.torso.add(tf, tb);
-    // 머리: 얼굴 텍스처(눈·눈썹·코·입·머리선) + 머리카락 + 목·귀
-    const style = (p.i * 5 + p.t * 3 + p.num) % 7; // 0~3 짧은 머리, 4·5 조금 긴 머리, 6 삭발
-    const headM = new THREE.Mesh(geo('head', () => blobGeo(0.1, 0.125, 0.094, 0, 0, 0, 16, 12)), mat('face' + skin + p.hair + (style === 6), () => new THREE.MeshLambertMaterial({ map: faceTexture(skin, p.hair, style === 6) }))); headM.castShadow = true;
-    const neck = new THREE.Mesh(merged('neck' + skin, () => [tint(lathe([[0.05, -0.2], [0.046, -0.13], [0.047, -0.06]], 8), skin), tint(blobGeo(0.016, 0.028, 0.013, -0.004, -0.004, 0.093, 5, 4), skin), tint(blobGeo(0.016, 0.028, 0.013, -0.004, -0.004, -0.093, 5, 4), skin)]), vc);
+    // 머리: 턱이 좁아지는 머리통 + 얼굴 텍스처(선수마다 다른 생김새) + 코·귀·목 + 머리 모양 7가지
+    // 머리 모양: 0 삭발 · 1 짧게 깎음 · 2 짧은 머리 · 3 앞을 세운 머리 · 4 긴 머리 · 5 곱슬(크게) · 6 묶은 머리
+    const r3 = lookBit(p.look, 3), r2 = lookBit(p.look, 2);
+    const style = r3 < 0.04 ? 0 : p.tone >= 3 && r2 < 0.34 ? 5 : p.tone >= 3 && r2 < 0.62 ? 1 : r3 < 0.16 ? 1 : r3 < 0.55 ? 2 : r3 < 0.8 ? 3 : r3 < 0.93 ? 4 : 6;
+    const hairline = style === 0 ? 3 : style === 1 ? 2 : lookBit(p.look, 4) < 0.2 ? 1 : 0;
+    const headG = geo('head3', () => { const g = new THREE.SphereGeometry(1, 20, 16), A = g.attributes.position;
+      for (let k = 0; k < A.count; k++) { let x = A.getX(k); const y = A.getY(k); let z = A.getZ(k); const t = Math.pow(clamp((-y - 0.05) / 0.95, 0, 1), 1.4); z *= 1 - 0.3 * t; x = x * (1 - 0.16 * t) + 0.1 * t * (x > 0 ? 1 : 0.3); x *= x > 0 ? 0.97 : 1.06; A.setXYZ(k, x, y, z); }
+      g.scale(0.1, 0.128, 0.092); g.computeVertexNormals(); return g; });
+    const headM = new THREE.Mesh(headG, mat('face' + [skin, p.hair, p.look, hairline].join(), () => new THREE.MeshLambertMaterial({ map: faceTexture(skin, p.hair, p.look, p.tone, hairline) }))); headM.castShadow = true;
+    const nw = 0.012 + lookBit(p.look, 23) * 0.005;
+    const neck = new THREE.Mesh(merged('neck2' + skin + nw.toFixed(3), () => [tint(lathe([[0.052, -0.2], [0.047, -0.13], [0.048, -0.06]], 8), skin),
+      tint(blobGeo(0.016, 0.028, 0.012, -0.004, -0.004, 0.09, 5, 4), skin), tint(blobGeo(0.016, 0.028, 0.012, -0.004, -0.004, -0.09, 5, 4), skin),
+      tint(blobGeo(0.012, 0.017, nw * 0.85, 0.09, -0.022, 0, 6, 5), skin)]), vc);
     this.head.position.y = HEAD_Y; this.head.add(headM, neck); this.torso.add(this.head);
-    if (style !== 6) { const long = style >= 4; const hairM = new THREE.Mesh(geo('hair' + long, () => { const g = new THREE.SphereGeometry(1, 14, 7, 0, Math.PI * 2, 0, Math.PI * (long ? 0.56 : 0.47)); g.scale(0.106, long ? 0.137 : 0.132, 0.1); g.rotateZ(0.42); g.translate(-0.006, 0.004, 0); return g; }), lam(p.hair)); this.head.add(hairM); }
+    if (style !== 0) {
+      const cap = (rx: number, ry: number, rz: number, th: number, tilt = 0.52, dx = -0.006, dy = 0.004) => { const g = new THREE.SphereGeometry(1, 16, 8, 0, Math.PI * 2, 0, Math.PI * th); g.scale(rx, ry, rz); g.rotateZ(tilt); g.translate(dx, dy, 0); return g; };
+      const hairM = new THREE.Mesh(merged('hair3' + style, () => style === 1 ? [cap(0.1045, 0.1315, 0.096, 0.425, 0.5, -0.004, 0.002)]
+        : style === 2 ? [cap(0.108, 0.136, 0.0995, 0.43, 0.5)]
+        : style === 3 ? [cap(0.108, 0.136, 0.0995, 0.43, 0.5), blobGeo(0.058, 0.032, 0.072, 0.042, 0.118, 0, 8, 5)]
+        : style === 4 ? [cap(0.108, 0.137, 0.1, 0.45), blobGeo(0.05, 0.085, 0.086, -0.068, -0.06, 0, 8, 6)]
+        : style === 5 ? [(() => { const g = cap(0.119, 0.147, 0.112, 0.44, 0.46, -0.008, 0.008), A = g.attributes.position; for (let k = 0; k < A.count; k++) { const x = A.getX(k), y = A.getY(k), z = A.getZ(k), w = 1 + 0.045 * Math.sin(x * 190 + y * 130) * Math.cos(z * 170 + y * 90); A.setXYZ(k, x * w, y * w, z * w); } g.computeVertexNormals(); return g; })()]
+        : [cap(0.108, 0.136, 0.0995, 0.43, 0.5), blobGeo(0.036, 0.036, 0.036, -0.088, 0.088, 0, 7, 5)]), lam(p.hair));
+      hairM.castShadow = true; this.head.add(hairM);
+    }
     // 팔: 어깨(소매) → 위팔 → 팔꿈치 / 아래팔 → 손 (키퍼는 긴소매 + 장갑)
     for (const s of [-1, 1]) {
       const a = new THREE.Group(); a.position.set(0, 0.452, s * 0.214 * bq);
@@ -91,72 +115,124 @@ export class PlayerModel {
     // 그림자 없는 품질용 둥근 그림자
     this.blob = new THREE.Mesh(geo('blob', () => { const g = new THREE.CircleGeometry(0.42, 12); g.rotateX(-Math.PI / 2); return g; }), mat('blob', () => new THREE.MeshBasicMaterial({ map: blobTex, transparent: true, opacity: 0.35, depthWrite: false })));
     this.blob.position.y = 0.01; this.root.add(this.blob);
+    this.bones = [this.body, this.hips, this.torso, this.head, this.thigh[0], this.thigh[1], this.shin[0], this.shin[1], this.foot[0], this.foot[1], this.arm[0], this.arm[1], this.fore[0], this.fore[1]];
+    this.key = PlayerModel.keyOf(p);
   }
+  static keyOf(p: Player) { return p.num + '|' + p.nameEn; }
   setBlob(on: boolean) { this.blob.visible = on; }
-  /** 상태로 포즈를 만든다. tGlobal은 연출용 시간 */
+  /** 상태로 포즈를 만든다. tGlobal은 연출용 시간(초).
+      달리기: 허벅지 스윙 + 넘어오는 다리의 무릎 접기 + 디딤발 무릎 완충, 골반·어깨가 서로 반대로 돌고, 가속하면 앞으로·멈추면 뒤로·돌면 안쪽으로 기운다.
+      골반 높이는 디딘 발이 땅에 닿게 다리 자세에서 역산한다(달릴 땐 뜨는 구간만큼 더). 자세가 바뀌는 순간(킥·점프·슬라이딩…)은 0.04~0.2초 섞어 넘긴다 */
   update(p: PoseState, ball: { x: number; y: number; z?: number; vx?: number; vy?: number; owner?: Player | null; passTarget?: unknown; kicker?: unknown }, tGlobal: number) {
-    const r = this.root;
+    const r = this.root, L = this.L, TAU = Math.PI * 2;
     r.position.set(p.x, 0, p.y); r.rotation.set(0, -p.dir, 0);
-    const sp = Math.hypot(p.vx, p.vy), moving = sp > 0.6, stride = moving ? clamp(sp / 8, 0.45, 1.25) : 0;
-    const ph = p.run * 2.6, sw = Math.sin(ph) * stride;
-    const own = !!ball.owner && (ball.owner as PoseState) === p;
+    const sp = Math.hypot(p.vx, p.vy), aT = clamp((sp - 0.3) / 1.3, 0, 1);
+    let dt = L.t < 0 ? 0 : tGlobal - L.t; const cut = L.t < 0 || dt < 0 || dt > 0.25; if (cut) dt = 0; L.t = tGlobal;
+    if (cut) { L.acc = 0; L.turn = 0; L.a = aT; L.cr = 0; }
+    else if (dt > 0) { const k = 1 - Math.exp(-dt * 7); L.acc += (clamp((sp - L.sp) / dt, -14, 14) - L.acc) * k; let dd = p.dir - L.dir; dd = ((dd % TAU) + TAU * 1.5) % TAU - Math.PI; L.turn += (clamp(dd / dt, -8, 8) - L.turn) * k; L.a += (aT - L.a) * (1 - Math.exp(-dt * 9)); }
+    L.sp = sp; L.dir = p.dir;
+    const a = L.a, idle = 1 - a, u = clamp((sp - 3.6) / 3.8, 0, 1), stride = clamp(sp / 8, 0.22, 1.25) * a, ph = p.run * 2.6; // a: 0 서 있음 → 1 움직임, u: 0 조깅 → 1 질주
+    const own = !!ball.owner && (ball.owner as unknown as PoseState) === p;
     const kickA = p.kickCD > 0 ? (0.3 - p.kickCD) / 0.3 : -1; // 0→1 킥 진행
     const wind = p.kickWind > 0 ? Math.min(1, p.kickWind / 0.1) : 0; // 와인드업: 발을 뒤로
-    const body = this.body, hips = this.hips, torso = this.torso;
-    body.rotation.set(0, 0, 0); body.position.set(0, 0, 0); hips.position.y = HIP_Y; torso.rotation.set(0, 0, 0); this.head.rotation.set(0, 0, 0);
-    const legPose = (i: number, thighA: number, kneeA: number, footA = 0) => { this.thigh[i].rotation.set(0, 0, thighA); this.shin[i].rotation.set(0, 0, -kneeA); this.foot[i].rotation.set(0, 0, footA); };
-    const armPose = (i: number, swing: number, xrot: number, elbow: number) => { this.arm[i].rotation.set(xrot, 0, swing); this.fore[i].rotation.set(0, 0, elbow); };
-    const sideOf = (i: number) => (i === 0 ? 1 : -1); // X축 회전 부호: 양수면 왼팔(i=0)이 바깥으로
+    const gk = p.role === 'GK', K = this.p.foot === 'L' ? 0 : 1, S = 1 - K, sg = K === 1 ? 1 : -1; // K: 차는 발(1 = 오른발, 로컬 +Z쪽), S: 디딤발
+    const body = this.body, hips = this.hips, torso = this.torso, head = this.head, thigh = this.thigh, shin = this.shin;
+    body.rotation.set(0, 0, 0); body.position.set(0, 0, 0); hips.rotation.set(0, 0, 0); hips.position.y = HIP_Y; torso.rotation.set(0, 0, 0); head.rotation.set(0, 0, 0);
+    const side = (i: number) => (i === 0 ? 1 : -1); // X축 회전 부호: 양수면 왼쪽(i=0)이 바깥으로
+    const leg = (i: number, th: number, kn: number, fa = 0.08, ab = 0) => { thigh[i].rotation.set(ab * side(i), 0, th); shin[i].rotation.set(0, 0, -kn); this.foot[i].rotation.set(0, 0, fa); };
+    const arm = (i: number, sw: number, out: number, el: number) => { this.arm[i].rotation.set(out * side(i), 0, sw); this.fore[i].rotation.set(0, 0, el); };
     const ds = p.diveDir * (Math.cos(p.dir) >= 0 ? 1 : -1); // 다이브 방향을 로컬 z 부호로
+    const bz = ball.z ?? 0, outside = p.y < -0.2 || p.y > 68.2, bq = Math.hypot(ball.x - p.x, ball.y - p.y);
+    let mode = 0, fade = 0.12, hipAdd = 0, floorY = 0, manual = false;
     if (p.slide > 0) { // 슬라이딩: 뒤로 누워 한 발 앞으로
-      body.rotation.z = 1.2; hips.position.y = 0.35; body.position.x = -0.2;
-      legPose(0, 1.5, 0.1); legPose(1, 0.9, 1.4); armPose(0, 2.2, 0.6 * sideOf(0), 0.3); armPose(1, -0.6, 0.6 * sideOf(1), 0.5); torso.rotation.z = 0.2;
-    } else if (p.dive > 0) { // 키퍼 다이브: 옆으로 몸을 던짐
-      const k = Math.min(1, (0.5 - p.dive) / 0.18);
+      mode = 1; fade = 0.07; manual = true; body.rotation.z = 1.2; hips.position.y = 0.35; body.position.x = -0.2;
+      leg(K, 1.5, 0.1, -0.3); leg(S, 0.9, 1.4); arm(S, 2.2, 0.6, 0.3); arm(K, -0.6, 0.6, 0.5); torso.rotation.z = 0.2; torso.rotation.y = -sg * 0.25;
+    } else if (p.dive > 0) { // 키퍼 다이브: 옆으로 몸을 던지며 두 팔을 공 쪽으로 뻗는다
+      mode = 2; fade = 0.06; manual = true; const k = Math.min(1, (0.5 - p.dive) / 0.18);
       body.rotation.x = ds * 1.35 * k; hips.position.y = HIP_Y - 0.45 * k; body.position.z = ds * 0.4 * k;
-      legPose(0, 0.3, 0.3); legPose(1, -0.2, 0.6); armPose(0, 0.2, -ds * 2.0, 0.2); armPose(1, 0.2, -ds * 2.0, 0.2);
-    } else if (p.cele) { // 세리머니: 두 팔 들고 깡충
-      const j = Math.abs(Math.sin(tGlobal * 7)); hips.position.y = HIP_Y + j * 0.18;
-      legPose(0, sw * 0.6, 0.3 + j * 0.3); legPose(1, -sw * 0.6, 0.3 + j * 0.3); armPose(0, 0.2, 2.9 * sideOf(0), 0.4); armPose(1, 0.2, 2.9 * sideOf(1), 0.4);
+      const lo = ds > 0 ? 1 : 0, hi = 1 - lo; // lo: 땅 쪽 다리
+      leg(lo, 0.15, 0.25, -0.3); leg(hi, -0.25, 0.75, -0.2, 0.25 * k); arm(0, 0.25, -ds * 2.15, 0.12); arm(1, 0.25, -ds * 2.15, 0.12); torso.rotation.x = ds * 0.15 * k;
     } else {
-      // 달리기/걷기 사이클
-      const A = 0.75 * stride, lean = clamp(sp / 8, 0, 1) * 0.22;
-      const knee = (phase: number) => 0.18 + 1.0 * Math.max(0, Math.cos(phase)) * stride + (stride ? 0.15 : 0);
-      const bz = ball.z ?? 0, outside = p.y < -0.2 || p.y > 68.2;
+      // ── 걷기·달리기 ──
+      for (const i of [0, 1]) { const f = ph + i * Math.PI, s = Math.sin(f), c = Math.cos(f);
+        const th = (0.6 + 0.22 * u) * stride * s + 0.1 * u * stride;
+        const kn = 0.1 + (0.8 + 0.85 * u) * stride * Math.pow(Math.max(0, Math.cos(f + 0.3)), 1.25) + (0.18 + 0.2 * u) * stride * Math.max(0, -c) ** 2; // 넘어오는 다리는 뒤꿈치가 엉덩이 쪽으로, 디딘 다리는 살짝 굽혀 받는다
+        leg(i, th, kn, 0.08 - 0.5 * stride * Math.max(0, -s) ** 2 + 0.2 * stride * Math.max(0, s) * Math.max(0, c), 0.035 * idle); }
+      const near = bq < 22 ? 1 : 0.35, tap = tGlobal * 5.4 + p.i * 1.3; // 서 있을 땐 무릎을 풀고 제자리에서 발을 구른다 (공이 가까우면 더)
+      if (idle > 0.01) for (const i of [0, 1]) { const z = Math.max(0, Math.sin(tap + i * Math.PI)); thigh[i].rotation.z += idle * near * (0.07 + 0.05 * z); shin[i].rotation.z -= idle * near * (0.19 + 0.13 * z); }
+      const s0 = Math.sin(ph), lean = (0.05 + 0.17 * clamp(sp / 8, 0, 1)) * a + (own ? 0.1 : 0) + 0.03 * idle;
+      body.rotation.z = -clamp(L.acc * 0.02, -0.13, 0.2) * a; body.rotation.x = clamp(L.turn * sp * 0.011, -0.26, 0.26); // 가속하면 앞으로·멈추면 뒤로, 돌면 안쪽으로 기운다
+      hips.rotation.y = -0.13 * s0 * stride; hips.rotation.x = 0.045 * Math.cos(ph) * stride;
+      torso.rotation.set(-hips.rotation.x * 0.8, 0.36 * s0 * stride * (0.6 + 0.4 * u), -lean + Math.sin(tGlobal * 1.7 + p.i) * 0.012 * idle); // 어깨는 골반과 반대로 돈다
+      const el0 = 0.28 + 0.95 * clamp(sp / 4.2, 0, 1) + 0.25 * u, Aa = (0.3 + 0.6 * u) * stride + 0.12 * a;
+      for (const i of [0, 1]) { const s = -Math.sin(ph + i * Math.PI); arm(i, s * Aa - 0.08 * a + 0.03, 0.2 - 0.06 * u + (own ? 0.2 : 0) + 0.04 * idle, el0 + 0.3 * Math.max(0, s) * stride + 0.08 * idle * Math.sin(tGlobal * 1.3 + i * 2 + p.i)); }
+      // 수비 자세: 공 가진 상대가 가까우면 무릎을 굽히고 팔을 벌려 낮춘다
+      const o = ball.owner as Player | null | undefined, crT = !own && !gk && !!o && o.t !== this.p.t && bq < 5.5 && sp < 5.2 ? 1 : 0;
+      L.cr += (crT - L.cr) * (1 - Math.exp(-dt * 8)); if (cut) L.cr = crT;
+      if (L.cr > 0.01) { const c = L.cr; for (const i of [0, 1]) { thigh[i].rotation.z += 0.3 * c; shin[i].rotation.z -= 0.55 * c; thigh[i].rotation.x += 0.11 * c * side(i); this.arm[i].rotation.x += 0.42 * c * side(i); this.fore[i].rotation.z += (0.85 - this.fore[i].rotation.z) * c * 0.7; } torso.rotation.z -= 0.2 * c; }
+      // ── 덮어쓰는 동작들 ──
       const header = kickA >= 0 && kickA < 0.85 && ball.kicker === p && bz > 1.1 && !outside; // 방금 머리로 받아 넘긴 공이 아직 떠 있다 → 헤딩 뒤 내려오는 중
-      // 공중볼 맞이: 나한테 오는 뜬 공이 0.3초 안에 닿는다 → 미리 뛰어올라 닿는 순간이 꼭대기 (전엔 공이 떠난 뒤에야 뛰었다)
-      let pre = 0; if (ball.passTarget === p && !ball.owner && bz > 1.4 && bz < 3.6) { const q = Math.hypot(ball.x - p.x, ball.y - p.y), tA = Math.max(0, q - 0.7) / Math.max(6, Math.hypot(ball.vx ?? 0, ball.vy ?? 0)); if (tA < 0.3) pre = 1 - (tA / 0.3) ** 2; }
-      const drop = own && !outside && bz > 0.2 ? Math.min(1, bz / 2.2) : 0; // 머리·가슴으로 떨군 공이 발밑으로 내려오는 동안
-      let th0 = Math.sin(ph) * A, th1 = Math.sin(ph + Math.PI) * A, kn0 = knee(ph), kn1 = knee(ph + Math.PI);
-      if (wind > 0) { th1 = -0.9 * (1 - wind * 0.3); kn1 = 1.1; th0 = -0.2; kn0 = 0.3; body.rotation.z = -0.08; }
-      else if (p.feint > 0 && kickA < 0) { const f = Math.sin(tGlobal * 26); th0 = f * 0.5; th1 = -f * 0.5; kn0 = 0.6 + Math.max(0, f) * 0.5; kn1 = 0.6 + Math.max(0, -f) * 0.5; } // 헛다리
-      else if (kickA >= 0 && !header) { // 킥: 공이 떠나는 순간(kickA 0) 발은 이미 공에 닿아 있고, 그 뒤로 휘둘러 올린다. 뒤로 젖히는 건 와인드업(wind)에서 한다
-        const k = kickA, swing = k < 0.3 ? 0.2 + k / 0.3 * 1.1 : 1.3 - (k - 0.3) / 0.7 * 1.3;
-        th1 = swing; kn1 = k < 0.1 ? 0.45 : 0.25; th0 = -0.25; kn0 = 0.35; body.rotation.z = -0.1;
+      // 공중볼 맞이: 나한테 오는 뜬 공이 0.3초 안에 닿는다 → 미리 뛰어올라 닿는 순간이 꼭대기
+      let pre = 0; if (ball.passTarget === p && !ball.owner && bz > 1.4 && bz < 3.6) { const tA = Math.max(0, bq - 0.7) / Math.max(6, Math.hypot(ball.vx ?? 0, ball.vy ?? 0)); if (tA < 0.3) pre = 1 - (tA / 0.3) ** 2; }
+      const gkHold = gk && own && bz > 0.55 && !outside; // 키퍼가 손에 든 공
+      const drop = own && !gk && !outside && bz > 0.2 ? Math.min(1, bz / 2.2) : 0; // 머리·가슴으로 떨군 공이 발밑으로 내려오는 동안
+      const hold = own && bz > 1.6 && outside, thrown = !hold && kickA >= 0 && outside; // 스로인 (터치라인 밖에서만)
+      if (p.cele) { // 세리머니: 달리는 동안엔 두 팔을 들거나·비행기·주먹, 멈추면 제자리 뛰기
+        mode = 3; const v = this.p.i % 3;
+        if (a > 0.5) { if (v === 1) { arm(0, 0, 1.45, 0.05); arm(1, 0, 1.45, 0.05); body.rotation.x += Math.sin(tGlobal * 2.4) * 0.2; } else if (v === 2) { arm(K, 2.6 + Math.sin(tGlobal * 11) * 0.25, 0.3, 0.9 + Math.sin(tGlobal * 11) * 0.4); } else { for (const i of [0, 1]) arm(i, 0.2, 2.7 + Math.sin(tGlobal * 9 + i) * 0.18, 0.3); } torso.rotation.z = -0.04; }
+        else { const j = Math.abs(Math.sin(tGlobal * 7 + p.i)); hipAdd = j * 0.2; floorY = HIP_Y - 0.03; leg(0, 0.1, 0.3 + j * 0.35, -0.3 * j); leg(1, -0.05, 0.3 + j * 0.35, -0.3 * j); for (const i of [0, 1]) arm(i, 0.2, 2.9 - (v === 2 && i === S ? 2.4 : 0), 0.4); torso.rotation.z = 0.06; }
+      } else if (wind > 0) { // 와인드업: 차는 발을 뒤로 젖히고 어깨를 튼다, 반대쪽 팔은 앞으로
+        mode = 4; fade = 0.06;
+        leg(K, -0.95 * (1 - wind * 0.25), 1.25, -0.3); leg(S, 0.12, 0.42);
+        body.rotation.z = -0.07; hips.rotation.set(0, -sg * 0.18, 0); torso.rotation.set(0, -sg * 0.38, -0.14); arm(S, 0.75, 0.75, 0.55); arm(K, -0.85, 0.5, 0.5);
+      } else if (p.feint > 0 && kickA < 0) { // 헛다리
+        mode = 6; fade = 0.05; const f = Math.sin(tGlobal * 26);
+        leg(0, f * 0.5, 0.6 + Math.max(0, f) * 0.5); leg(1, -f * 0.5, 0.6 + Math.max(0, -f) * 0.5); torso.rotation.y = f * 0.25; arm(0, -f * 0.4, 0.5, 0.9); arm(1, f * 0.4, 0.5, 0.9);
+      } else if (kickA >= 0 && !header && !hold && !thrown) { // 킥: 공이 떠나는 순간(0) 발은 이미 공에 닿아 있고, 그 뒤로 휘둘러 올린다. 골반은 차는 쪽이 앞으로·어깨는 반대로, 반대쪽 팔이 앞으로 넘어온다
+        mode = 5; fade = 0.035; const k = kickA, sw = k < 0.3 ? 0.2 + k / 0.3 * 1.15 : 1.35 - (k - 0.3) / 0.7 * 1.35, bell = Math.sin(Math.PI * clamp(k / 0.75, 0, 1));
+        leg(K, sw, k < 0.1 ? 0.45 : 0.22, -0.4 * bell); leg(S, -0.28 - 0.12 * bell, 0.32 + 0.1 * bell);
+        hips.rotation.set(0, sg * 0.32 * bell, 0); torso.rotation.set(0, -sg * 0.55 * bell, 0.14 * bell - 0.1 * (1 - bell)); body.rotation.z = -0.08 * (1 - bell);
+        arm(S, 0.95 * bell - 0.15, 0.55, 0.75); arm(K, -0.75 * bell - 0.1, 0.25 + 0.85 * bell, 0.45); hipAdd = 0.04 * bell;
       }
-      legPose(0, th0, kn0, 0.1); legPose(1, th1, kn1, 0.1);
-      torso.rotation.z = -(lean + (own ? 0.12 : 0));
-      armPose(0, -Math.sin(ph) * A * 0.9, 0.25 * sideOf(0), 1.0 + 0.3 * stride); armPose(1, Math.sin(ph) * A * 0.9, 0.25 * sideOf(1), 1.0 + 0.3 * stride);
       if (header || pre > 0 || drop > 0) { // 뛰어오른 자세: 오르는 동안 몸을 뒤로 젖혔다가, 머리로 넘긴 뒤엔 앞으로 숙이며 내려온다
-        const j = header ? Math.cos(Math.min(1, kickA / 0.85) * Math.PI / 2) : Math.max(pre, drop), nod = header ? Math.min(1, kickA / 0.25) : 0;
-        hips.position.y += 0.42 * j; legPose(0, -0.25 * j, 0.25 + 0.5 * j, 0.3); legPose(1, 0.15 * j, 0.3 + 0.6 * j, 0.3);
-        torso.rotation.z = header ? 0.2 - 0.6 * nod : drop > 0 ? 0.22 * drop : 0.2 * pre; this.head.rotation.z = header ? 0.15 - 0.55 * nod : 0.12 * Math.max(pre, drop);
-        armPose(0, -0.5 * j, (0.3 + 0.5 * j) * sideOf(0), 0.9); armPose(1, -0.5 * j, (0.3 + 0.5 * j) * sideOf(1), 0.9);
+        mode = 7; fade = 0.07; const j = header ? Math.cos(Math.min(1, kickA / 0.85) * Math.PI / 2) : Math.max(pre, drop), nod = header ? Math.min(1, kickA / 0.25) : 0;
+        hipAdd = 0.42 * j; floorY = HIP_Y - 0.03; leg(0, -0.25 * j, 0.25 + 0.5 * j, -0.3); leg(1, 0.15 * j, 0.3 + 0.6 * j, -0.3);
+        torso.rotation.set(0, 0, header ? 0.2 - 0.6 * nod : drop > 0 ? 0.22 * drop : 0.2 * pre); head.rotation.z = header ? 0.15 - 0.55 * nod : 0.12 * Math.max(pre, drop);
+        arm(0, -0.5 * j, 0.3 + 0.5 * j, 0.9); arm(1, -0.5 * j, 0.3 + 0.5 * j, 0.9);
       }
-      // 스로인: 공을 머리 위로 든 자세(공 주인인데 공이 1.6m 위), 던진 직후엔 두 팔을 앞으로 뿌린다(터치라인 밖에서 찬 직후)
-      const hold = own && bz > 1.6 && outside, thrown = !hold && kickA >= 0 && outside; // 터치라인 밖에서만 (뜬 공을 떨궈 잡는 순간에도 공이 1.6m 위다)
-      if (hold || thrown) {
-        const k = hold ? 0 : Math.min(1, kickA / 0.35), sw2 = 3.35 - k * 2.1 + (hold ? Math.sin(tGlobal * 3) * 0.04 : 0);
-        armPose(0, sw2, 0.14 * sideOf(0), 0.35 - k * 0.2); armPose(1, sw2, 0.14 * sideOf(1), 0.35 - k * 0.2);
-        torso.rotation.z = 0.18 - k * 0.55; legPose(0, 0.22 + k * 0.1, 0.25, 0.1); legPose(1, -0.3 + k * 0.15, 0.35, 0.1); body.rotation.z = 0;
+      if (hold || thrown) { // 스로인: 공을 머리 위로 든 자세, 던진 직후엔 두 팔을 앞으로 뿌린다
+        mode = hold ? 8 : 9; fade = 0.06; const k = hold ? 0 : Math.min(1, kickA / 0.35), sw2 = 3.35 - k * 2.1 + (hold ? Math.sin(tGlobal * 3) * 0.04 : 0);
+        arm(0, sw2, 0.14, 0.35 - k * 0.2); arm(1, sw2, 0.14, 0.35 - k * 0.2);
+        torso.rotation.set(0, 0, 0.18 - k * 0.55); leg(0, 0.22 + k * 0.1, 0.25, 0.1); leg(1, -0.3 + k * 0.15, 0.35, 0.1); body.rotation.z = 0; hips.rotation.set(0, 0, 0); hipAdd = 0;
       }
-      if (p.role === 'GK' && !moving && !own) { legPose(0, 0.25, 0.6); legPose(1, 0.25, 0.6); armPose(0, 0.8, 0.9 * sideOf(0), 1.4); armPose(1, 0.8, 0.9 * sideOf(1), 1.4); torso.rotation.z = -0.35; hips.position.y = HIP_Y - 0.12; }
-      hips.position.y += moving ? Math.abs(Math.cos(ph)) * 0.045 * stride : Math.sin(tGlobal * 5.2 + p.i * 1.3) * 0.016; // 서 있을 때도 발을 구르듯 살짝 들썩인다
-      if (p.stun > 0) body.rotation.x = Math.sin(p.stun * 22) * 0.12;
-      // 머리: 공 쪽을 본다
-      const dx = ball.x - p.x, dy = ball.y - p.y, ang = Math.atan2(dy, dx) - p.dir; // 로컬 기준 각
-      let rel = ((ang + Math.PI * 3) % (Math.PI * 2)) - Math.PI; rel = clamp(rel, -1.1, 1.1);
-      this.head.rotation.y = -rel * 0.8;
+      if (gk && !p.cele) {
+        if (gkHold) { // 손에 든 공: 가슴 앞에 안는다 (높이 잡았으면 팔이 위에서 내려온다)
+          mode = 11; fade = 0.08; const up = clamp((bz - 1.16) * 1.5, 0, 2.3), w = Math.min(1, up);
+          for (const i of [0, 1]) arm(i, 0.3 + up * 1.15, -0.22 + 0.2 * w, 1.25 - 0.35 * w); torso.rotation.z = -0.06 + 0.12 * w; hipAdd = 0.3 * clamp((bz - 1.9) / 0.9, 0, 1); if (hipAdd > 0) floorY = HIP_Y - 0.03;
+        } else if (!own && !ball.owner && bz > 1.5 && bq < 3.2 && mode === 0) { // 뜬 공 잡으러: 두 팔을 뻗고 뛰어오른다
+          mode = 12; fade = 0.1; const rc = clamp(1 - (bq - 1.1) / 2.1, 0, 1), j = rc * clamp((bz - 1.8) / 0.8, 0, 1);
+          for (const i of [0, 1]) arm(i, 0.9 + 2.1 * rc, 0.12, 0.55 - 0.4 * rc); torso.rotation.z = 0.1 * rc; head.rotation.z = 0.25 * rc; hipAdd = 0.4 * j; if (j > 0) { floorY = HIP_Y - 0.03; leg(0, -0.2 * j, 0.3 + 0.4 * j, -0.3); leg(1, 0.2 * j, 0.3 + 0.5 * j, -0.3); }
+        } else if (a < 0.5 && !own && mode === 0) { // 준비 자세
+          mode = 10; leg(0, 0.25, 0.6, 0.08, 0.16); leg(1, 0.25, 0.6, 0.08, 0.16); arm(0, 0.8, 0.9, 1.4); arm(1, 0.8, 0.9, 1.4); torso.rotation.set(0, 0, -0.35); const z = Math.sin(tGlobal * 6 + p.i); shin[0].rotation.z -= 0.08 * Math.max(0, z); shin[1].rotation.z -= 0.08 * Math.max(0, -z);
+        }
+      }
+      if (p.stun > 0) { body.rotation.x += Math.sin(p.stun * 22) * 0.12; torso.rotation.z -= 0.22 * Math.min(1, p.stun / 0.25); }
+      // 골반 높이: 더 펴진 다리의 발이 땅에 닿게. 달릴 땐 두 발이 다 뜨는 구간만큼 올라간다
+      const dropOf = (i: number) => THIGH * Math.cos(thigh[i].rotation.z) * Math.cos(thigh[i].rotation.x) + SHIN * Math.cos(thigh[i].rotation.z + shin[i].rotation.z);
+      const gnd = Math.max(dropOf(0), dropOf(1)) + 0.014, fly = HIP_Y - 0.05 + (0.05 + 0.035 * u) * stride * (0.5 - 0.5 * Math.cos(2 * ph - 0.6));
+      hips.position.y = Math.max(gnd + Math.max(0, fly - gnd) * a, floorY) + hipAdd;
+      // 머리: 공 쪽을 본다 (몸이 숙인 만큼 고개를 든다)
+      const ang = Math.atan2(ball.y - p.y, ball.x - p.x) - p.dir; const rel = clamp(((ang + Math.PI * 3) % TAU) - Math.PI, -1.2, 1.2);
+      if (cut) L.look = rel; else L.look += (rel - L.look) * (1 - Math.exp(-dt * 9));
+      head.rotation.y = -L.look * 0.75 - torso.rotation.y - hips.rotation.y; head.rotation.z += -torso.rotation.z * 0.55; torso.rotation.y += -L.look * 0.22 * idle;
     }
+    void manual;
+    // 자세가 바뀌는 순간은 앞 자세에서 섞어 넘긴다 (전엔 한 프레임에 뚝 바뀌었다)
+    const B = this.bones, cur = this.cur, snap = this.snap, N = B.length;
+    if (mode !== L.mode) { if (L.mode >= 0 && !cut) { snap.set(cur); L.mix = 0; L.dur = L.mode === 1 || L.mode === 2 ? 0.2 : fade; } L.mode = mode; }
+    if (cut) L.mix = 1;
+    let e = 1; if (L.mix < 1) { L.mix = Math.min(1, L.mix + dt / L.dur); e = L.mix * L.mix * (3 - 2 * L.mix); }
+    for (let k = 0; k < N; k++) { const R = B[k].rotation, j = k * 3; let x = R.x, y = R.y, z = R.z; if (e < 1) { x = snap[j] + (x - snap[j]) * e; y = snap[j + 1] + (y - snap[j + 1]) * e; z = snap[j + 2] + (z - snap[j + 2]) * e; R.set(x, y, z); } cur[j] = x; cur[j + 1] = y; cur[j + 2] = z; }
+    { let hy = hips.position.y, bx = body.position.x, bzz = body.position.z; if (e < 1) { hy = snap[42] + (hy - snap[42]) * e; bx = snap[43] + (bx - snap[43]) * e; bzz = snap[44] + (bzz - snap[44]) * e; hips.position.y = hy; body.position.x = bx; body.position.z = bzz; } cur[42] = hy; cur[43] = bx; cur[44] = bzz; }
   }
 }

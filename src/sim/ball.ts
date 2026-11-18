@@ -468,7 +468,7 @@ export function updateBall(s: Sim, dt: number) {
     const h = HU[o.t], osp = Math.hypot(o.vx, o.vy), spr = h && h.ctrl === o && INP[o.t].down.sprint && osp > 4, ah = spr ? 1.1 : 0.75; // 질주 드리블은 공을 더 앞에
     if (M.setTaker === o) { ball.x = M.setX; ball.y = M.setY; ball.z = 0; ball.vx = ball.vy = ball.vz = 0; return; } // 세트피스: 공은 놓인 자리에 그대로 (키커가 돌아서도 공이 선 밖으로 끌려 나가지 않게)
     if (M.throwIn === o) { ball.x = o.x + Math.cos(o.dir) * 0.12; ball.y = o.y + Math.sin(o.dir) * 0.12; ball.z = 2.0; ball.vx = ball.vy = ball.vz = 0; return; } // 스로인: 머리 위로 들고 있다
-    if (gkHands(s, o)) { ball.x = o.x + Math.cos(o.dir) * 0.3; ball.y = o.y + Math.sin(o.dir) * 0.3; ball.z += clamp(1.12 - ball.z, -7 * dt, 7 * dt); ball.vx = o.vx; ball.vy = o.vy; ball.vz = 0; return; } // 키퍼가 자기 박스에서 잡은 공은 가슴 앞에 든다
+    if (gkHands(s, o)) { ball.x = o.x + Math.cos(o.dir) * 0.36; ball.y = o.y + Math.sin(o.dir) * 0.36; ball.z += clamp(1.16 - ball.z, -7 * dt, 7 * dt); ball.vx = o.vx; ball.vy = o.vy; ball.vz = 0; return; } // 키퍼가 자기 박스에서 잡은 공은 가슴 앞에 든다
     if (o.spin > 0) { const a = o.dir + Math.PI / 2 * (o.spinDir || 1); ball.x = o.x + Math.cos(a) * 0.55; ball.y = o.y + Math.sin(a) * 0.55; } // 룰렛: 공이 몸 옆에서 돈다
     else { ball.x = o.x + Math.cos(o.dir) * ah; ball.y = o.y + Math.sin(o.dir) * ah; }
     ball.z = Math.max(0, ball.z - 7 * dt); ball.vx = o.vx; ball.vy = o.vy; ball.vz = 0; ball.spin += osp * dt * 3; return; // z가 남아 있으면(뜬 공을 떨궈 잡은 직후) 초속 7m로 내려온다
