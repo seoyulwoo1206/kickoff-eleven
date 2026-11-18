@@ -2,7 +2,7 @@ import { W, CY } from '../consts';
 import { clamp, d, wx } from '../util';
 import { DIFF } from '../../data/teams';
 import type { Sim, Player } from '../types';
-import { sfx } from '../events';
+import { sfx, xtEv } from '../events';
 import { gain, kick, passTo, n } from '../ball';
 import { steer, moveTo } from '../move';
 import { bestAIPass } from './carrier';
@@ -59,6 +59,7 @@ export function gkAI(s: Sim, k: Player, dt: number) {
         const side = Math.abs(ball.y - CY) < 1 ? 0 : Math.sign(ball.y - CY);
         k.diveDir = guess || (Math.sign(ball.y - k.y) || 1); pr = guess === side ? 0.55 + n(G.div) * 0.3 : guess === 0 ? 0.15 : 0.06; }
       if (s.rnd() < pr) {
+        if (ball.isShot) xtEv(s, 'save', t, k.num, k.x, k.y);
         { const mv = clamp(ball.y - k.y, -1.8, 1.8) * 0.8; k.y += mv; k.vy = Math.sign(mv) * Math.min(8, Math.abs(mv) / 0.12); } // 막았으면 몸이 공에 가 있다 (닿지 않았는데 공이 튕기지 않게)
         if (sp < 11 + n(G.han) * 9 && ball.z < 1.8) gain(s, k); // 핸들링 좋으면 잡고, 아니면 쳐낸다
         else if (s.rnd() < 0.45 && !M.so) { const sd = ball.y > CY ? 1 : -1; ball.vx = Math.sign(ball.vx) * (7 + s.rnd() * 4); ball.vy = sd * (9 + s.rnd() * 5); ball.vz = 4 + s.rnd() * 4; ball.isShot = false; ball.lastTouch = t; ball.kicker = k; ball.shot++; k.lastSave = ball.shot; k.kickCD = 0.3; sfx(s, 'tackle'); } // 골라인 밖으로 쳐낸다 → 코너킥 (전엔 전부 경기장 안으로 쳐내 16경기에 코너킥이 0번이었다)

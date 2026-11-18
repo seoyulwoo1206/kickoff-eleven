@@ -206,3 +206,47 @@ body.touch button.touchonly{display:inline-block}
 .xtnote{margin:0;font-size:11px;line-height:1.5;color:var(--muted)}
 .xtnote b{color:var(--amber);font-weight:700}
 body.xto #result,body.xto #pause{justify-items:end}
+
+/* 경기장 라인업 그림 (교체 화면·경기 뒤 평점) */
+.pitch{position:relative;width:100%;border-radius:10px;overflow:hidden;border:1px solid var(--rule);background:repeating-linear-gradient(0deg,#2f6b2c 0 12.5%,#377733 12.5% 25%)}
+.pitch.half{aspect-ratio:68/52}
+.pitch.full{aspect-ratio:105/64;background:repeating-linear-gradient(90deg,#2f6b2c 0 8.333%,#377733 8.333% 16.666%)}
+.pitch svg{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}
+.tok{display:grid;justify-items:center;gap:1px;background:none;border:0;padding:2px 3px;color:var(--chalk);font:inherit;min-width:50px;border-radius:8px;cursor:pointer}
+.tok.abs{position:absolute;transform:translate(-50%,-50%)}
+.tok .fig{position:relative;width:32px;height:38px;display:block}
+.tok .hd{position:absolute;left:50%;top:0;width:14px;height:15px;margin-left:-7px;border-radius:50% 50% 46% 46%;background:linear-gradient(var(--hr) 0 36%,var(--sk) 36%);box-shadow:0 0 0 1px rgba(0,0,0,.35);z-index:1}
+.tok .sh{position:absolute;left:0;top:12px;width:32px;height:26px;clip-path:polygon(24% 0,40% 0,50% 14%,60% 0,76% 0,100% 24%,88% 44%,78% 36%,78% 100%,22% 100%,22% 36%,12% 44%,0 24%);display:grid;place-items:center;padding-top:5px;box-sizing:border-box;font-family:var(--f-num);font-weight:800;font-size:13px;line-height:1}
+.tok .bd{position:absolute;right:-15px;top:-4px;font-style:normal;font-family:var(--f-num);font-weight:800;font-size:12px;line-height:1;padding:2px 4px;border-radius:5px;background:#5b6672;color:#fff;z-index:2;font-variant-numeric:tabular-nums}
+.tok .bd.r9{background:#1c9a52}.tok .bd.r7{background:#5a9f2e}.tok .bd.r6{background:#a87d1a}.tok .bd.r5{background:#bd4337}
+.tok .nm{font-size:11px;font-weight:700;line-height:1.15;white-space:nowrap;max-width:74px;overflow:hidden;text-overflow:ellipsis;text-shadow:0 1px 2px rgba(0,0,0,.9)}
+.tok .sb{font-family:var(--f-num);font-weight:700;font-size:10px;line-height:1;color:rgba(255,255,255,.78);letter-spacing:.04em}
+.tok .st{display:block;width:30px;height:3px;border-radius:2px;background:rgba(0,0,0,.45);overflow:hidden;margin-top:1px}
+.tok .st i{display:block;height:100%;background:#7bd66b}.tok .st.low i{background:#ef6a4c}
+.tok:hover{background:rgba(255,255,255,.1)}
+.tok.on{background:rgba(255,182,39,.3);box-shadow:0 0 0 2px var(--amber)}
+.tok.yel .fig::after{content:'';position:absolute;left:-6px;top:14px;width:6px;height:9px;background:#f5d020;border-radius:1px}
+.tok.dim{opacity:.45}
+.tok.mvp .fig{filter:drop-shadow(0 0 5px #ffd34d)}.tok.mvp .nm{color:#ffd34d}.tok.mvp .bd{box-shadow:0 0 0 2px #ffd34d}
+.tok.stat{cursor:default}.tok.stat:hover{background:none}
+.benchrow{display:flex;flex-wrap:wrap;gap:4px 2px}
+.benchrow .tok{background:rgba(255,255,255,.05)}
+.benchrow .tok.on{background:rgba(255,182,39,.3)}
+.card.pausecard{max-width:900px}
+.pausegrid{display:grid;grid-template-columns:minmax(0,1.2fr) minmax(0,1fr);gap:18px;align-items:start}
+.pausegrid .pcol{display:grid;gap:14px;min-width:0}
+.pausegrid:has(#pauseTac[hidden]){grid-template-columns:1fr;max-width:420px;margin-inline:auto;width:100%}
+@media (max-width:760px){.pausegrid{grid-template-columns:1fr}}
+.card.rescard{max-width:760px}
+.rescard .final,.rescard .rstats,.rescard .lede{max-width:420px;margin-inline:auto;width:100%}
+#rRate{display:grid;gap:10px}
+.mvpline{display:flex;flex-wrap:wrap;align-items:baseline;justify-content:center;gap:6px 10px;font-size:14px;color:var(--muted)}
+.mvpline b{font-family:var(--f-display);font-weight:400;font-size:22px;color:#ffd34d}
+.mvpline em{font-style:normal;font-family:var(--f-num);font-weight:800;letter-spacing:.14em;color:var(--amber);font-size:13px}
+.ratenote{margin:0;font-size:12px;line-height:1.5;color:var(--muted)}
+@media (max-width:620px){.pitch.full .tok{min-width:38px}.pitch.full .tok .nm{font-size:9px;max-width:50px}.pitch.full .tok .fig{transform:scale(.82)}}
+/* 해설 자막 */
+#cmt{position:fixed;left:50%;bottom:max(16px,env(safe-area-inset-bottom,0px));transform:translateX(-50%);z-index:6;max-width:min(88vw,560px);padding:6px 16px;border-radius:999px;background:rgba(9,17,27,.74);border:1px solid var(--rule);font-size:14px;font-weight:500;line-height:1.3;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;pointer-events:none}
+#cmt.hot{border-color:var(--amber);color:#ffe7a8;font-weight:700}
+#cmt::before{content:'해설';font-family:var(--f-num);font-weight:800;letter-spacing:.12em;font-size:11px;color:var(--amber);margin-right:8px}
+@media (pointer:coarse){#cmt{bottom:auto;top:max(46px,calc(env(safe-area-inset-top,0px) + 46px));font-size:12px}}

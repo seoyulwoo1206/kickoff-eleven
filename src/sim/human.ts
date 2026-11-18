@@ -1,7 +1,7 @@
 import { clamp, d, angDiff, wx } from './util';
 import { W, H, CY } from './consts';
 import type { Sim, Human, Player } from './types';
-import { sfx } from './events';
+import { sfx, banner } from './events';
 import { gkHands, headSpot, passTo, kick, throwTo, throwPick, offsideLine, gain, knockOn, bigKnock, setKick, setShotAim, shortPass, longPass, throughPass, chipShot, shoot, slideTackle, slideCheck, standTackle, intercept, interceptT, queueKick, n } from './ball';
 import { steer, chase, moveTo, gapY } from './move';
 import { bestAIPass } from './ai/carrier';
@@ -122,6 +122,7 @@ export function humanUpdate(s: Sim, h: Human, dt: number) {
   const hands = own && gkHands(s, p);
   if (hands) {
     p.holdT += dt;
+    if (p.holdT <= dt * 1.5 && h.gkTips < 2) { h.gkTips++; banner(s, '', '골키퍼가 잡았습니다 · 패스 = 짧게 · 롱패스 = 길게 · 슛 = 멀리 차기', 2200); }
     if (p.holdT < 0.5) { steer(p, 0, 0, dt); h.armP = h.armL = false; h.charging = false; return; }
     if (p.holdT > 6 && !h.charging && p.kickWind <= 0 && !I.down.pass && !I.down.lob) { const m = bestAIPass(s, p); if (m) passTo(s, p, m.p, m.loft); else kick(s, p, (p.t === 0 ? 1 : -1) * 22, (s.rnd() - 0.5) * 8, 7); return; }
   }

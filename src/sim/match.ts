@@ -18,7 +18,7 @@ import { autoCursor, humanUpdate, oursBall } from './human';
 import { teamAI } from './ai/team';
 
 function makeHuman(t: number, c: HumanCfg | null): Human | null {
-  return c ? { t, ctrl: null, lock: 0, charge: 0, charging: false, second: false, gkRush: false, pressT: 0, lostT: 0, swSeen: [], swT: 0, swHold: false, armP: false, armL: false, mod: 0, zUsed: false, lockA: 0, lockT: 0, col: c.col, tag: c.tag, cursor: c.cursor, had: false } : null;
+  return c ? { t, ctrl: null, lock: 0, charge: 0, charging: false, second: false, gkRush: false, pressT: 0, lostT: 0, swSeen: [], swT: 0, swHold: false, armP: false, armL: false, mod: 0, zUsed: false, gkTips: 0, lockA: 0, lockT: 0, col: c.col, tag: c.tag, cursor: c.cursor, had: false } : null;
 }
 /** 경기 생성. inp를 주면 그 입력 객체를 그대로 읽는다 (앱의 키보드/터치/네트워크 입력). */
 export function createMatch(cfg: MatchCfg, inp?: [Inp, Inp]): Sim {
@@ -144,7 +144,7 @@ export function goal(s: Sim, t: number) {
   for (const q of s.players) { q.pending = null; q.kickWind = 0; }
   M.stops++; M.adv = null;
   if (ball.kicker && ball.kicker.t === t) M.stats.onT[t]++;
-  xtEv(s, 'goal', t, ball.kicker ? ball.kicker.num : 0, ball.x, ball.y);
+  xtEv(s, 'goal', t, ball.kicker && ball.kicker.t === t ? ball.kicker.num : 0, ball.x, ball.y); // 자책골은 번호 0 (두 팀에 같은 등번호가 있어 상대 선수의 골로 적혔다)
   if (M.so) { M.phase = 'goal'; M.phaseT = 2.0; M.nextKick = 1 - t; M.scorer = ball.kicker; banner(s, 'GOAL!', '', 1500, true); sfx(s, 'goal'); crowdSwell(s, 0.18, 1.5); return; }
   M.score[t]++; M.phase = 'goal'; M.phaseT = 7.4; /* 세리머니 1.3초 + 리플레이 ~5.6초 */
   M.nextKick = 1 - t; ball.owner = null; shake(s, 0.6); M.slow = 1.1; // 골을 먹은 팀이 킥오프 (이 줄이 위 주석에 먹혀 늘 팀 0이 킥오프하던 적이 있다)
