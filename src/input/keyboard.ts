@@ -1,8 +1,8 @@
 import { keyDown, keyUp, ACTS, type Act, type Dir, type Inp } from './actions';
 
 export type Key = Act | Dir;
-/* P1: 방향키 + S/A/W/D/Z/Q/X/E/Shift/C (FC 온라인 배치 — 뜻은 actions.ts 맨 위). P2: IJKL + B/V/N/M/./U/,/Space/H/O */
-const K1_DEFAULT: Record<string, Key> = { ArrowLeft: 'left', ArrowRight: 'right', ArrowUp: 'up', ArrowDown: 'down', KeyS: 'pass', KeyA: 'lob', KeyW: 'through', KeyD: 'shoot', KeyZ: 'chip', KeyQ: 'run', KeyX: 'gkRush', KeyE: 'sprint', ShiftLeft: 'switch', KeyC: 'jockey' };
+/* P1: 방향키 + S/A/W/D/Z/Q/X/E/Shift/C/Space (FC 온라인 배치 — 뜻은 actions.ts 맨 위). P2: IJKL + B/V/N/M/./U/,/오른쪽 Shift/H/O/슬래시 */
+const K1_DEFAULT: Record<string, Key> = { ArrowLeft: 'left', ArrowRight: 'right', ArrowUp: 'up', ArrowDown: 'down', KeyS: 'pass', KeyA: 'lob', KeyW: 'through', KeyD: 'shoot', KeyZ: 'chip', KeyQ: 'run', KeyX: 'gkRush', KeyE: 'sprint', ShiftLeft: 'switch', KeyC: 'jockey', Space: 'tackle' };
 export let K1: Record<string, Key> = { ...K1_DEFAULT };
 /** 키 설정 변경 (null이면 기본으로). 저장된 설정에 없는 새 액션은 기본 키를 붙인다 (그 키를 쓰던 액션은 자기 기본 키로 옮김) */
 export function setK1(m: Record<string, Key> | null) {
@@ -19,7 +19,7 @@ export function setK1(m: Record<string, Key> | null) {
     }
   }
 }
-export const K2: Record<string, Key> = { KeyJ: 'left', KeyL: 'right', KeyI: 'up', KeyK: 'down', KeyB: 'pass', KeyV: 'lob', KeyN: 'through', KeyM: 'shoot', Period: 'chip', KeyU: 'run', Comma: 'gkRush', Space: 'sprint', ShiftRight: 'sprint', KeyH: 'switch', KeyO: 'jockey' };
+export const K2: Record<string, Key> = { KeyJ: 'left', KeyL: 'right', KeyI: 'up', KeyK: 'down', KeyB: 'pass', KeyV: 'lob', KeyN: 'through', KeyM: 'shoot', Period: 'chip', KeyU: 'run', Comma: 'gkRush', ShiftRight: 'sprint', KeyH: 'switch', KeyO: 'jockey', Slash: 'tackle' }; // Space는 P1의 스탠딩 태클이라 P2 질주는 오른쪽 Shift만
 
 export interface KeyboardHooks {
   inp: [Inp, Inp];

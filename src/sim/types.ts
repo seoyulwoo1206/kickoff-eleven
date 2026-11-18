@@ -14,6 +14,7 @@ export interface Player {
   kickCD: number; stun: number; tackleCD: number; bodyCD: number; reactT: number; shield: number; lagVx: number; lagVy: number; cutCD: number; beatT: number; /* beatT: 드리블에 제쳐진 뒤 따라가기 급급한 시간 */ runT: number; runDir: number; // runT: 침투 지시 남은 시간, runDir 방향 // shield: 사람이 패스·슛 키를 누른 직후 .16초는 뺏기지 않는다 (탭이 떼는 순간 실행되므로)
   offs: boolean; slide: number; decT: number; holdT: number; lastSave: number;
   dive: number; diveDir: number; run: number; forcePass: boolean; forceShot: boolean; cele: boolean;
+  /** 스탠딩 태클로 발을 뻗는 동작·다이빙 헤딩 동작의 남은 시간 (렌더·역동작 판정용) */ lunge: number; head: number;
   hair: string; skin: string; /** 얼굴·머리 모양 씨앗과 피부 단계(0 밝은 ~ 5 어두운) — data/looks.ts */ look: number; tone: number;
   /** 선수단 데이터 (없으면 팀 능력치만으로 만든 익명 선수) */
   name: string; nameEn: string; pos: Pos; ovr: number; foot: 'L' | 'R'; skill: number; attrs: Detail; def: PlayerDef | null;

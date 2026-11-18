@@ -15,7 +15,8 @@ import { setPreview } from '../../sim/ball';
 import { XT, drawMap } from '../../xt/view';
 
 interface Puff { sp: THREE.Sprite; vx: number; vz: number; life: number; t: number; }
-const PF = 15, BF = 6; // 리플레이 프레임: 선수당 15값, 공 6값
+const PF = 17, BF = 6; // 리플레이 프레임: 선수당 17값, 공 6값
+const CELE_T = 2.7; // 골 뒤 세리머니 클로즈업 길이(초). 그 뒤 리플레이 — match.ts goal()의 phaseT와 맞출 것
 interface Frame { t: number; P: Float32Array; B: Float32Array; }
 const ELEV = 0.5; // 중계 카메라 올려다보는 각 (rad)
 export class ThreeRenderer implements IRenderer {
@@ -30,6 +31,7 @@ export class ThreeRenderer implements IRenderer {
   private ov: CanvasRenderingContext2D; private view = 1.35; private lead = 0; private wide = 0; private spB = 0; private lastPhase = ''; private camPos = new THREE.Vector3(); private camLook = new THREE.Vector3(CX, 0, CY);
   private tmpV = new THREE.Vector3(); private shk = { x: 0, y: 0 }; private crowdT = 0;
   // 골 리플레이: 최근 4초를 링버퍼에 담아두고 골 1.3초 뒤부터 0.55배속으로 보여준다
+  private celeCam = false; // 세리머니 클로즈업 중
   private frames: Frame[] = []; private goalAt = -1; private replay = false; private replayT = 0; private pose: PoseState[] = []; private rBall = { x: 0, y: 0, z: 0, vx: 0, vy: 0, owner: null as Player | null };
   constructor(public cv: HTMLCanvasElement, private insetEl: HTMLElement, private ovCv: HTMLCanvasElement, quality: Quality) {
     this.gl = new THREE.WebGLRenderer({ canvas: cv, antialias: true, powerPreference: 'high-performance' });
@@ -73,7 +75,7 @@ export class ThreeRenderer implements IRenderer {
   private pushFrame(sim: Sim, perf: number) {
     const n = sim.players.length; let f = this.frames.length > 260 ? this.frames.shift()! : { t: 0, P: new Float32Array(n * PF), B: new Float32Array(BF) };
     if (f.P.length !== n * PF) f = { t: 0, P: new Float32Array(n * PF), B: new Float32Array(BF) };
-    f.t = perf; sim.players.forEach((p, i) => { const k = i * PF; f.P[k] = p.x; f.P[k + 1] = p.y; f.P[k + 2] = p.dir; f.P[k + 3] = p.vx; f.P[k + 4] = p.vy; f.P[k + 5] = p.run; f.P[k + 6] = p.kickCD; f.P[k + 7] = p.slide; f.P[k + 8] = p.dive; f.P[k + 9] = p.diveDir; f.P[k + 10] = p.stun; f.P[k + 11] = p.cele ? 1 : 0; f.P[k + 12] = p.kickWind; f.P[k + 13] = p.spin; f.P[k + 14] = p.feint; });
+    f.t = perf; sim.players.forEach((p, i) => { const k = i * PF; f.P[k] = p.x; f.P[k + 1] = p.y; f.P[k + 2] = p.dir; f.P[k + 3] = p.vx; f.P[k + 4] = p.vy; f.P[k + 5] = p.run; f.P[k + 6] = p.kickCD; f.P[k + 7] = p.slide; f.P[k + 8] = p.dive; f.P[k + 9] = p.diveDir; f.P[k + 10] = p.stun; f.P[k + 11] = p.cele ? 1 : 0; f.P[k + 12] = p.kickWind; f.P[k + 13] = p.spin; f.P[k + 14] = p.feint; f.P[k + 15] = p.lunge; f.P[k + 16] = p.head; });
     const b = sim.ball; f.B[0] = b.x; f.B[1] = b.y; f.B[2] = b.z; f.B[3] = b.vx; f.B[4] = b.vy; f.B[5] = b.owner ? sim.players.indexOf(b.owner) : -1;
     this.frames.push(f);
   }
@@ -82,9 +84,9 @@ export class ThreeRenderer implements IRenderer {
     const fr = this.frames; if (!fr.length) return false;
     let j = fr.length - 1; while (j > 0 && fr[j - 1].t > t) j--; const b = fr[j], a = fr[Math.max(0, j - 1)];
     const f = b.t > a.t ? clamp((t - a.t) / (b.t - a.t), 0, 1) : 1;
-    if (this.pose.length !== sim.players.length) this.pose = sim.players.map(p => ({ x: 0, y: 0, dir: 0, vx: 0, vy: 0, run: 0, kickCD: 0, slide: 0, dive: 0, diveDir: 0, stun: 0, cele: false, role: p.role, i: p.i, kickWind: 0, spin: 0, feint: 0 }));
+    if (this.pose.length !== sim.players.length) this.pose = sim.players.map(p => ({ x: 0, y: 0, dir: 0, vx: 0, vy: 0, run: 0, kickCD: 0, slide: 0, dive: 0, diveDir: 0, stun: 0, cele: false, role: p.role, i: p.i, kickWind: 0, spin: 0, feint: 0, lunge: 0, head: 0 }));
     const L = (i: number) => a.P[i] + (b.P[i] - a.P[i]) * f;
-    this.pose.forEach((q, i) => { const k = i * PF; q.x = L(k); q.y = L(k + 1); let da = b.P[k + 2] - a.P[k + 2]; da = ((da % (Math.PI * 2)) + Math.PI * 3) % (Math.PI * 2) - Math.PI; q.dir = a.P[k + 2] + da * f; q.vx = b.P[k + 3]; q.vy = b.P[k + 4]; q.run = L(k + 5); q.kickCD = b.P[k + 6]; q.slide = b.P[k + 7]; q.dive = b.P[k + 8]; q.diveDir = b.P[k + 9]; q.stun = b.P[k + 10]; q.cele = b.P[k + 11] > 0; q.kickWind = b.P[k + 12]; q.spin = b.P[k + 13]; q.feint = b.P[k + 14]; });
+    this.pose.forEach((q, i) => { const k = i * PF; q.x = L(k); q.y = L(k + 1); let da = b.P[k + 2] - a.P[k + 2]; da = ((da % (Math.PI * 2)) + Math.PI * 3) % (Math.PI * 2) - Math.PI; q.dir = a.P[k + 2] + da * f; q.vx = b.P[k + 3]; q.vy = b.P[k + 4]; q.run = L(k + 5); q.kickCD = b.P[k + 6]; q.slide = b.P[k + 7]; q.dive = b.P[k + 8]; q.diveDir = b.P[k + 9]; q.stun = b.P[k + 10]; q.cele = b.P[k + 11] > 0; q.kickWind = b.P[k + 12]; q.spin = b.P[k + 13]; q.feint = b.P[k + 14]; q.lunge = b.P[k + 15]; q.head = b.P[k + 16]; });
     const rb = this.rBall; rb.x = a.B[0] + (b.B[0] - a.B[0]) * f; rb.y = a.B[1] + (b.B[1] - a.B[1]) * f; rb.z = a.B[2] + (b.B[2] - a.B[2]) * f; rb.vx = b.B[3]; rb.vy = b.B[4]; rb.owner = b.B[5] >= 0 ? sim.players[b.B[5]] : null;
     return true;
   }
@@ -140,7 +142,12 @@ export class ThreeRenderer implements IRenderer {
     const k = 1 - Math.pow(0.004, dtR); cam.x += (tx - cam.x) * k; cam.y += (ty - cam.y) * k;
     let px: number, py: number, pz: number, lx = cam.x, ly = 0, lz = cam.y;
     const h = sim?.HU[0]?.ctrl ?? null;
-    if (this.replay) { // 리플레이 카메라: 공 옆 낮은 곳에서
+    const sc = sim && !sim.M.so ? sim.M.scorer : null;
+    this.celeCam = !!sim && !!sc && sim.M.phase === 'goal' && !this.replay && this.goalAt >= 0 && perf - this.goalAt > 0.45 && perf - this.goalAt < CELE_T;
+    if (this.celeCam && sc) { // 세리머니 클로즈업: 득점자 앞 4.8m, 눈높이에서 천천히 돌며 따라간다
+      const a = sc.dir + 0.5 + (perf - this.goalAt) * 0.22, lx2 = sc.x + sc.vx * 0.12, ly2 = sc.y + sc.vy * 0.12, pos = new THREE.Vector3(clamp(lx2 + Math.cos(a) * 4.8, -6, W + 6), 1.55, clamp(ly2 + Math.sin(a) * 4.8, -6, H + 6));
+      this.camPos.lerp(pos, 1 - Math.pow(1e-4, dtR)); this.camLook.set(lx2, 1.15, ly2); // 조준점은 바로 따라간다 (늦게 따라가면 달리는 득점자가 화면 구석으로 밀린다)
+    } else if (this.replay) { // 리플레이 카메라: 공 옆 낮은 곳에서
       const rb = this.rBall, gx = rb.x > CX ? W : 0, side = rb.y < CY ? -1 : 1;
       const tgt = new THREE.Vector3(rb.x, 0.9, rb.y), pos = new THREE.Vector3(rb.x + (gx > CX ? -12 : 12), 4.2, rb.y + side * 16);
       this.camPos.lerp(pos, 1 - Math.pow(0.05, dtR)); this.camLook.lerp(tgt, 1 - Math.pow(0.02, dtR));
@@ -180,15 +187,15 @@ export class ThreeRenderer implements IRenderer {
     this.fps += (1 / Math.max(1e-3, dtR) - this.fps) * 0.05;
     if (sim) this.syncModels(sim); else if (this.modelSim) { for (const m of this.models.values()) this.scene.remove(m.root); this.models.clear(); this.modelSim = null; }
     this.updateCamera(sim, dtR, perf);
-    { const hide = !this.replay && (this.mode === 'tv' || this.mode === 'top' || this.mode === 'intro'); for (const o of this.stadium.near) o.visible = !hide; } // 입장 카메라도 가까운 쪽 관중석 자리(지붕 높이)에 있다 // 중계 카메라는 가까운 쪽 관중석 자리까지 내려가므로 그 관중석을 그리지 않는다
+    { const hide = !this.replay && !this.celeCam && (this.mode === 'tv' || this.mode === 'top' || this.mode === 'intro'); for (const o of this.stadium.near) o.visible = !hide; } // 입장 카메라도 가까운 쪽 관중석 자리(지붕 높이)에 있다 // 중계 카메라는 가까운 쪽 관중석 자리까지 내려가므로 그 관중석을 그리지 않는다
     if (!paused) { this.updatePuffs(dtR); updateNets(this.stadium.nets, dtR); this.updateCrowd(sim, dtR); this.stadium.wind.value = perf % 3600; }
     if (sim) {
       const { HU, M } = sim;
       if (M.phase === 'goal' && this.lastPhase !== 'goal') { const n = this.stadium.nets[sim.ball.x > CX ? 1 : 0]; n.shake = 1.4; this.goalAt = perf; }
       this.lastPhase = M.phase;
-      // 리플레이 진행: 골 1.3초 뒤 시작, 골 2.6초 전부터 0.4초 후까지를 0.55배속으로
+      // 리플레이 진행: 세리머니 클로즈업(CELE_T초) 뒤 시작, 골 2.6초 전부터 0.4초 후까지를 0.55배속으로
       if (M.phase !== 'goal') { this.replay = false; this.goalAt = -1; }
-      else if (this.goalAt >= 0 && perf - this.goalAt > 1.3) { this.replayT = this.goalAt - 2.6 + (perf - this.goalAt - 1.3) * 0.55; this.replay = this.replayT < this.goalAt + 0.4 && this.frames.length > 10; }
+      else if (this.goalAt >= 0 && perf - this.goalAt > CELE_T) { this.replayT = this.goalAt - 2.6 + (perf - this.goalAt - CELE_T) * 0.55; this.replay = this.replayT < this.goalAt + 0.4 && this.frames.length > 10; }
       if (!this.replay && !paused) this.pushFrame(sim, perf);
       let ball: { x: number; y: number; z: number; vx: number; vy: number; owner: Player | null };
       if (this.replay && this.loadFrame(sim, this.replayT)) { ball = this.rBall; sim.players.forEach((p, i) => this.models.get(p)!.update(this.pose[i], ball, perf)); }
@@ -196,7 +203,7 @@ export class ThreeRenderer implements IRenderer {
       this.ball.position.set(ball.x, 0.11 + ball.z, ball.y);
       if (!paused) { const sp = Math.hypot(ball.vx, ball.vy); if (sp > 0.05) { const axis = this.tmpV.set(-ball.vy, 0, ball.vx).normalize(); this.ball.rotateOnWorldAxis(axis, -sp * dtR * (this.replay ? 0.55 : 1) / 0.11); } }
       this.ballShadow.position.set(ball.x + ball.z * 0.12, 0.012, ball.y); const ss = 1 / (1 + ball.z * 0.35); this.ballShadow.scale.set(ss, ss, ss); this.ballShadow.visible = this.quality === 'low' || ball.z > 0.3;
-      HU.forEach((h, i) => { const r = this.rings[i]; if (h && h.ctrl && !this.replay) { r.visible = true; r.position.x = h.ctrl.x; r.position.z = h.ctrl.y; } else r.visible = false; });
+      HU.forEach((h, i) => { const r = this.rings[i]; if (h && h.ctrl && !this.replay && !this.celeCam) { r.visible = true; r.position.x = h.ctrl.x; r.position.z = h.ctrl.y; } else r.visible = false; });
       this.ball.visible = true;
     } else { this.ball.visible = false; this.ballShadow.visible = false; for (const r of this.rings) r.visible = false; }
     this.gl.render(this.scene, this.camera);

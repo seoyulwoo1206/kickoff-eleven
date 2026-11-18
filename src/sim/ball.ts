@@ -420,12 +420,12 @@ export function foul(s: Sim, by: Player, on: Player) { foulCommitted(s, by, on, 
 export function standTackle(s: Sim, p: Player) {
   const { ball, M } = s;
   const o = ball.owner; if (!o || o.t === p.t || o.role === 'GK' || p.tackleCD > 0 || M.protect > 0 || o.shield > 0) return;
-  const q = d(p, o); if (q > 2.4) return; p.tackleCD = 0.5;
+  const q = d(p, o); if (q > 2.4) return; p.tackleCD = 0.5; p.lunge = 0.34;
   const ux = (o.x - p.x) / (q || 1), uy = (o.y - p.y) / (q || 1); p.vx = ux * p.speed * 1.3; p.vy = uy * p.speed * 1.3; p.dir = Math.atan2(uy, ux); // 발을 뻗는 런지
   const front = Math.cos(o.dir) * (p.x - o.x) + Math.sin(o.dir) * (p.y - o.y) > 0;
   const loose = o.kickCD > 0 || Math.hypot(o.vx, o.vy) > 6.5; // 질주 중·터치 직후엔 공이 발에서 떨어져 있다
   const pr = (front ? 0.6 : 0.42) + n(p.attrs.stk) * 0.25 - n(o.attrs.bal) * 0.12 + (loose ? 0.18 : 0) - (o.feint > 0 ? 0.4 : 0) - (o.spin > 0 ? 0.5 : 0);
-  if (s.rnd() < pr) { gain(s, p); o.stun = 0.45; o.kickCD = 0.5; sfx(s, 'tackle'); } else p.stun = 0.3;
+  if (s.rnd() < pr) { gain(s, p); o.stun = 0.45; o.kickCD = 0.5; sfx(s, 'tackle'); } else p.stun = 0.4; // 헛디디면 뻗은 방향으로 쓸려 가며(humanUpdate) 0.4초 중심을 잃는다 — 역동작
 }
 
 /* ---------- 공 물리 ---------- */
@@ -559,7 +559,7 @@ export function ballControl(s: Sim) {
       }
     }
     if (dG < 13.5 && sp > 8 && (!mine || ball.z > 1.5)) { /* 골문 13.5m 안에서만 헤딩슛 (18m 밖 헤딩은 느리게 떠서 키퍼가 다 잡았다 — 그 밖에선 떨궈 잡는다) */ const kp = s.team[1 - t][0], dx = gx - ball.x, dy = CY + (kp.y < CY ? 2.2 : -2.2) + (s.rnd() - 0.5) * (5.5 - n(best.attrs.hea) * 3) - ball.y, q = Math.hypot(dx, dy); const hv = 17 + n(best.attrs.hea) * 6; /* 키퍼 반대쪽 구석을 노린다 */ { const T = q / hv, zt = 0.2 + s.rnd() * 1.5; ball.vz = (zt - ball.z + G * SG * T * T / 2) / T; } /* 골라인에서 0.2~1.7m 높이로 (예전엔 vz −1로 바로 땅에 떨어져 굴러갔다) */
-      ball.vx = dx / q * hv; ball.vy = dy / q * hv; best.dir = Math.atan2(dy, dx); ball.lastTouch = t; ball.kicker = best; ball.shot++; ball.isShot = true; xtEv(s, 'shot', best.t, best.num, best.x, best.y); ball.shotT = Math.min(0.45, q / hv); best.kickCD = 0.3; M.stats.shots[t]++; sfx(s, 'kick'); }
+      ball.vx = dx / q * hv; ball.vy = dy / q * hv; best.dir = Math.atan2(dy, dx); ball.lastTouch = t; ball.kicker = best; ball.shot++; ball.isShot = true; xtEv(s, 'shot', best.t, best.num, best.x, best.y); ball.shotT = Math.min(0.45, q / hv); best.kickCD = 0.3; best.head = 0.7; M.stats.shots[t]++; sfx(s, 'kick'); }
     else { const z0 = ball.z; ball.vx *= 0.2; ball.vy *= 0.2; ball.vz = 0; ball.z = 0; gain(s, best); if (ball.owner === best) ball.z = z0; } // 머리·가슴으로 떨군다: 공은 받은 높이에서 발밑으로 내려온다 (updateBall, 0.3초쯤). 그 사이 차면 발리
     return;
   }

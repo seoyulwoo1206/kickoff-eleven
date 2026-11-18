@@ -59,7 +59,7 @@ function makePlayers(s: Sim, squads: [import('../data/squad').SquadDef | null, i
       const lk = lookOf(T.code, d ? d.nameEn : 'p' + i, d ? d.num : NUMS[i]);
       const p: Player = {
         t, i, role: f.role, bx: f.x, by: f.y, num: d ? d.num : NUMS[i], x: 0, y: 0, vx: 0, vy: 0, dir: t === 0 ? 0 : Math.PI, speed: 0,
-        kickCD: 0, stun: 0, tackleCD: 0, bodyCD: 0, reactT: 0, shield: 0, lagVx: 0, lagVy: 0, cutCD: 0, beatT: 0, runT: 0, runDir: 0, offs: false, slide: 0, decT: 0, holdT: 0, lastSave: -1, dive: 0, diveDir: 0, run: s.rnd() * 10,
+        kickCD: 0, stun: 0, tackleCD: 0, bodyCD: 0, reactT: 0, shield: 0, lagVx: 0, lagVy: 0, cutCD: 0, beatT: 0, runT: 0, runDir: 0, offs: false, slide: 0, decT: 0, holdT: 0, lastSave: -1, dive: 0, diveDir: 0, lunge: 0, head: 0, run: s.rnd() * 10,
         forcePass: false, forceShot: false, cele: false, hair: lk.hair, skin: lk.skin, look: lk.seed, tone: lk.tone,
         name: d ? d.name : `${T.code} ${NUMS[i]}`, nameEn: d ? d.nameEn : `${T.code} ${NUMS[i]}`, pos: d ? d.pos : f.pos, ovr: d ? overall(d) : Math.round((T.atk + T.def + T.spd) / 3),
         foot: d ? d.foot : 'R', skill: d ? d.skill : 2, attrs: det, def: d,
@@ -84,7 +84,7 @@ export function placeBall(s: Sim, x: number, y: number) {
 export function kickoff(s: Sim, kt: number) {
   const { M, players, team, ball, HU } = s;
   M.scorer = null;
-  for (const p of players) { if (p.off) continue; let x = p.bx; if (p.role !== 'GK') x = Math.min(x, p.t === kt ? 46 : 41); p.x = wx(x, p.t); p.y = p.by; p.vx = p.vy = 0; p.dir = p.t === 0 ? 0 : Math.PI; p.kickCD = 0; p.stun = 0; p.holdT = 0; p.forcePass = false; p.dive = 0; p.cele = false; }
+  for (const p of players) { if (p.off) continue; let x = p.bx; if (p.role !== 'GK') x = Math.min(x, p.t === kt ? 46 : 41); p.x = wx(x, p.t); p.y = p.by; p.vx = p.vy = 0; p.dir = p.t === 0 ? 0 : Math.PI; p.kickCD = 0; p.stun = 0; p.holdT = 0; p.forcePass = false; p.dive = 0; p.lunge = 0; p.head = 0; p.cele = false; }
   const fw = team[kt].filter(p => p.role !== 'GK' && !p.off), tk = fw[fw.length - 2] ?? fw[0], mate = fw[fw.length - 1] ?? fw[0];
   tk.x = wx(51.7, kt); tk.y = CY; mate.x = wx(50.5, kt); mate.y = CY + 6; tk.dir = kt === 0 ? Math.PI : 0; mate.dir = tk.dir; // 킥오프 두 선수는 자기 진영을 본다
   placeBall(s, CX, CY); ball.owner = tk; ball.lastTouch = kt; M.setTaker = null; M.dead = null; M.wall = []; M.overT = 0;
@@ -146,7 +146,7 @@ export function goal(s: Sim, t: number) {
   if (ball.kicker && ball.kicker.t === t) M.stats.onT[t]++;
   xtEv(s, 'goal', t, ball.kicker && ball.kicker.t === t ? ball.kicker.num : 0, ball.x, ball.y); // 자책골은 번호 0 (두 팀에 같은 등번호가 있어 상대 선수의 골로 적혔다)
   if (M.so) { M.phase = 'goal'; M.phaseT = 2.0; M.nextKick = 1 - t; M.scorer = ball.kicker; banner(s, 'GOAL!', '', 1500, true); sfx(s, 'goal'); crowdSwell(s, 0.18, 1.5); return; }
-  M.score[t]++; M.phase = 'goal'; M.phaseT = 7.4; /* 세리머니 1.3초 + 리플레이 ~5.6초 */
+  M.score[t]++; M.phase = 'goal'; M.phaseT = 9.0; /* 세리머니 클로즈업 2.7초 + 리플레이 ~5.5초 (scene.ts CELE_T와 맞출 것) */
   M.nextKick = 1 - t; ball.owner = null; shake(s, 0.6); M.slow = 1.1; // 골을 먹은 팀이 킥오프 (이 줄이 위 주석에 먹혀 늘 팀 0이 킥오프하던 적이 있다)
   const k = ball.kicker, own = !(k && k.t === t), who = !own && k ? `${M.teams[t].name} ${k.num}번` : `${M.teams[1 - t].name} 자책골`;
   M.scorer = own ? null : k;
@@ -200,7 +200,7 @@ export function step(s: Sim, dt: number) {
   if (M.throwIn) { if (ball.owner !== M.throwIn || M.throwIn.off) M.throwIn = null; else { M.protect = Math.max(M.protect, 0.5); if (M.phase === 'live') M.throwT += dt; } } // 던지기 전엔 뺏을 수 없다
   M.protect = Math.max(0, M.protect - dt); M.react[0] = Math.max(0, M.react[0] - dt); M.react[1] = Math.max(0, M.react[1] - dt);
   for (const p of players) {
-    p.kickCD = Math.max(0, p.kickCD - dt); p.stun = Math.max(0, p.stun - dt); p.tackleCD = Math.max(0, p.tackleCD - dt); p.bodyCD = Math.max(0, p.bodyCD - dt); p.shield = Math.max(0, p.shield - dt); p.runT = Math.max(0, p.runT - dt); p.cutCD = Math.max(0, p.cutCD - dt); p.beatT = Math.max(0, p.beatT - dt); p.reactT = Math.max(0, p.reactT - dt); p.dive = Math.max(0, p.dive - dt);
+    p.kickCD = Math.max(0, p.kickCD - dt); p.stun = Math.max(0, p.stun - dt); p.tackleCD = Math.max(0, p.tackleCD - dt); p.bodyCD = Math.max(0, p.bodyCD - dt); p.shield = Math.max(0, p.shield - dt); p.runT = Math.max(0, p.runT - dt); p.cutCD = Math.max(0, p.cutCD - dt); p.beatT = Math.max(0, p.beatT - dt); p.reactT = Math.max(0, p.reactT - dt); p.dive = Math.max(0, p.dive - dt); p.lunge = Math.max(0, p.lunge - dt); p.head = Math.max(0, p.head - dt);
     p.feint = Math.max(0, p.feint - dt); p.burst = Math.max(0, p.burst - dt); if (p.spin > 0) { p.spin -= dt; p.dir += p.spinDir * Math.PI * 2 / 0.5 * dt; if (p.spin <= 0) p.spin = 0; }
     if (p.slide > 0) { p.slide -= dt; p.vx *= 1 - 2.5 * dt; p.vy *= 1 - 2.5 * dt; if (p.slide <= 0) { p.slide = 0; p.stun = Math.max(p.stun, 0.45); } }
     // 체력: 질주하면 빠르게, 달리면 천천히 닳고 걸으면 회복. 한 경기 내내 질주하면 다 닳는 정도 (스태미나 능력치로 보정)

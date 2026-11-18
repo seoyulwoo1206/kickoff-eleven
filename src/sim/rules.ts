@@ -77,7 +77,7 @@ export function substitute(s: Sim, t: number, out: Player, inDef: PlayerDef): bo
   const det = detailOf(inDef);
   out.def = inDef; out.name = inDef.name; out.nameEn = inDef.nameEn; out.num = inDef.num; out.pos = inDef.pos; out.foot = inDef.foot; out.skill = inDef.skill; out.attrs = det; out.ovr = overall(inDef);
   { const lk = lookOf(M.teams[t].code, inDef.nameEn, inDef.num); out.hair = lk.hair; out.skin = lk.skin; out.look = lk.seed; out.tone = lk.tone; }
-  out.speed0 = (6.0 + (det.spd - 60) / 40 * 1.7) * (out.role === 'GK' ? 0.92 : 1); out.sta = 1; out.yellow = 0; out.stun = 0; out.pending = null; out.kickWind = 0;
+  out.speed0 = (6.0 + (det.spd - 60) / 40 * 1.7) * (out.role === 'GK' ? 0.92 : 1); out.sta = 1; out.yellow = 0; out.stun = 0; out.pending = null; out.kickWind = 0; out.lunge = 0; out.head = 0;
   banner(s, '', `교체 IN ${inDef.name}`, 1400); s.ev.push({ k: 'sub', t, num: inDef.num });
   return true;
 }

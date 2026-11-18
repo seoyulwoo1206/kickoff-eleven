@@ -141,6 +141,7 @@ export function humanUpdate(s: Sim, h: Human, dt: number) {
     p.x = clamp(M.setX - Math.cos(p.dir) * 0.75, -1.2, W + 1.2); p.y = clamp(M.setY - Math.sin(p.dir) * 0.75, -1.2, H + 1.2);
   }
   else if (p.spin > 0) { const sp0 = p.speed * 0.6; steer(p, Math.cos(p.dir) * sp0, Math.sin(p.dir) * sp0, dt); } // 룰렛 중엔 돌면서 전진
+  else if (p.lunge > 0 && p.stun > 0 && !own) { const v = p.speed * 0.95 * (p.lunge / 0.34); steer(p, Math.cos(p.dir) * v, Math.sin(p.dir) * v, dt); } // 헛디딘 태클: 방향키와 상관없이 발을 뻗은 쪽으로 쓸려 간다 (역동작)
   else if (mag > 0.15) {
     const [ux, uy] = own ? [mx / mag, my / mag] : assistDir(s, p, mx / mag, my / mag);
     const toMe = !own && !ball.owner && (ball.passTarget === p || (ball.knock === p && d(p, ball) > 2.5) || !!headSpot(s, p)); // 공중볼 경합도 전속 // 나한테 오는 패스·치달로 멀리 차 놓은 공은 질주 키 없이도 전속으로
@@ -200,11 +201,12 @@ export function humanUpdate(s: Sim, h: Human, dt: number) {
     if (h.charging) { h.charging = false; h.charge = 0; }
     const o0 = ball.owner, theirs = !!o0 && o0.t !== p.t, inbound = (!!o0 && o0.t === p.t) || (!o0 && !!ball.passTarget && ball.passTarget.t === p.t); // inbound: 우리 편이 갖고 있거나 우리 편에게 가는 패스 — 그동안 누른 패스·롱패스는 미리 누른 것이지 전환·슬라이딩이 아니다
     // 수비 (FC 온라인): 슛 키 = 태클(탭)·압박(누른 채), 롱패스 키 = 슬라이딩, 패스 키 = 커서 전환, 스루 키 = 골키퍼 나오기, Q = 동료 압박
-    if (I.press.shoot && !ball.owner && ball.z < 1.3 && d(p, ball) < 1.7 && p.kickCD <= 0 && !(ball.passTarget === p)) { // 가로채기 런지: 지나가는 공에 발을 뻗는다
+    const tk = I.press.shoot || I.press.tackle; // 태클: 슛 키 탭 또는 태클 키(Space)
+    if (tk && !ball.owner && ball.z < 1.3 && d(p, ball) < 1.7 && p.kickCD <= 0 && !(ball.passTarget === p)) { p.lunge = 0.3; // 가로채기 런지: 지나가는 공에 발을 뻗는다
       const sp = Math.hypot(ball.vx, ball.vy), dx = ball.x - p.x, dy = ball.y - p.y, q = Math.hypot(dx, dy) || 1; p.vx = dx / q * p.speed * 1.2; p.vy = dy / q * p.speed * 1.2; p.dir = Math.atan2(dy, dx);
       if (s.rnd() < clamp(1.4 - sp / 30, 0.4, 1) * (0.9 + n(p.attrs.int) * 0.2)) { gain(s, p); sfx(s, 'tackle'); } else p.kickCD = 0.3;
     }
-    else if (I.press.shoot) standTackle(s, p);
+    else if (tk) standTackle(s, p);
     else if (I.down.shoot && I.holdT.shoot > 0.25 && theirs && d(p, o0!) < 1.8 && p.tackleCD <= 0 && (o0!.kickCD > 0 || Math.hypot(o0!.vx, o0!.vy) > 6)) standTackle(s, p); // 압박 중 공이 발에서 떨어지면 알아서 태클
     if (I.press.lob && !inbound) slideTackle(s, p, aim);
     if (I.press.pass && !inbound) switchPlayer(s, h); // 공에 가장 가까운 선수 (연달아 누르면 그다음 가까운 선수)

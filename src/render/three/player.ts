@@ -6,7 +6,7 @@ import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import type { Player } from '../../sim/types';
 /** 포즈에 필요한 상태. 경기 중엔 Player 그대로, 리플레이 땐 버퍼에서 채운 객체 */
-export interface PoseState { x: number; y: number; dir: number; vx: number; vy: number; run: number; kickCD: number; slide: number; dive: number; diveDir: number; stun: number; cele: boolean; role: string; i: number; kickWind: number; spin: number; feint: number; }
+export interface PoseState { x: number; y: number; dir: number; vx: number; vy: number; run: number; kickCD: number; slide: number; dive: number; diveDir: number; stun: number; cele: boolean; role: string; i: number; kickWind: number; spin: number; feint: number; lunge: number; head: number; }
 import type { Kit } from '../../data/teams';
 import { kitTextures, faceTexture } from './textures';
 import { clamp } from '../../sim/util';
@@ -194,11 +194,25 @@ export class PlayerModel {
         hips.rotation.set(0, sg * 0.32 * bell, 0); torso.rotation.set(0, -sg * 0.55 * bell, 0.14 * bell - 0.1 * (1 - bell)); body.rotation.z = -0.08 * (1 - bell);
         arm(S, 0.95 * bell - 0.15, 0.55, 0.75); arm(K, -0.75 * bell - 0.1, 0.25 + 0.85 * bell, 0.45); hipAdd = 0.04 * bell;
       }
-      if (header || pre > 0 || drop > 0) { // 뛰어오른 자세: 오르는 동안 몸을 뒤로 젖혔다가, 머리로 넘긴 뒤엔 앞으로 숙이며 내려온다
+      if ((header || pre > 0 || drop > 0) && !(p.head > 0)) { // 뛰어오른 자세: 오르는 동안 몸을 뒤로 젖혔다가, 머리로 넘긴 뒤엔 앞으로 숙이며 내려온다
         mode = 7; fade = 0.07; const j = header ? Math.cos(Math.min(1, kickA / 0.85) * Math.PI / 2) : Math.max(pre, drop), nod = header ? Math.min(1, kickA / 0.25) : 0;
         hipAdd = 0.42 * j; floorY = HIP_Y - 0.03; leg(0, -0.25 * j, 0.25 + 0.5 * j, -0.3); leg(1, 0.15 * j, 0.3 + 0.6 * j, -0.3);
         torso.rotation.set(0, 0, header ? 0.2 - 0.6 * nod : drop > 0 ? 0.22 * drop : 0.2 * pre); head.rotation.z = header ? 0.15 - 0.55 * nod : 0.12 * Math.max(pre, drop);
         arm(0, -0.5 * j, 0.3 + 0.5 * j, 0.9); arm(1, -0.5 * j, 0.3 + 0.5 * j, 0.9);
+      }
+      if (p.lunge > 0 && kickA < 0 && !p.cele) { // 스탠딩 태클: 차는 발을 낮게 쭉 뻗고 디딤발을 깊이 굽힌다. 헛디뎠으면(stun) 그대로 앞으로 쏠린다
+        mode = 13; fade = 0.05; const k = 1 - Math.min(1, p.lunge / 0.34), e = Math.sin(Math.PI * Math.min(1, 0.25 + k * 0.85)), miss = p.stun > 0 ? 1 : 0;
+        leg(K, 1.2 * e, 0.06, 0.4 * e); leg(S, -0.4 * e, 0.25 + 0.8 * e, -0.25 * e);
+        body.rotation.z = -0.1 * e - 0.16 * miss * e; hips.rotation.set(0, sg * 0.3 * e, 0); torso.rotation.set(0, -sg * 0.25 * e, 0.12 * e - 0.3 * miss * e);
+        arm(S, 0.7 * e, 0.75, 0.6); arm(K, -0.75 * e, 0.85, 0.4);
+      }
+      if (p.head > 0 && !p.cele) { // 다이빙 헤딩: 몸을 앞으로 던져 수평으로 날고(0~0.3초) 가슴으로 떨어진 뒤 일어난다
+        mode = 14; fade = 0.06; manual = true; const k = 1 - Math.min(1, p.head / 0.7), sm = (x: number) => { const c = clamp(x, 0, 1); return c * c * (3 - 2 * c); };
+        const fly = sm(k / 0.14), up = sm((k - 0.66) / 0.34), pitch = -1.3 * fly * (1 - up);
+        hips.rotation.set(0, 0, pitch); hips.position.y = k < 0.66 ? 1.22 - 0.9 * Math.pow(k / 0.66, 1.7) : 0.32 + (HIP_Y - 0.32) * up; body.rotation.z = 0; body.position.x = 0.45 * Math.sin(Math.PI * Math.min(1, k / 0.9));
+        torso.rotation.set(0, 0, 0.1 * fly * (1 - up)); head.rotation.z = 0.75 * fly * (1 - up);
+        leg(0, -0.25 + 1.0 * up * (1 - up) * 4 * 0.3, 0.3 + 0.9 * up * (1 - up) * 4 * 0.5, -0.5); leg(1, 0.1 + 0.9 * up * (1 - up) * 4 * 0.3, 0.45 + 0.8 * up * (1 - up) * 4 * 0.5, -0.5);
+        for (const i of [0, 1]) arm(i, 2.0 * fly * (1 - up) + 0.2, 0.55, 0.25 + 0.5 * up);
       }
       if (hold || thrown) { // 스로인: 공을 머리 위로 든 자세, 던진 직후엔 두 팔을 앞으로 뿌린다
         mode = hold ? 8 : 9; fade = 0.06; const k = hold ? 0 : Math.min(1, kickA / 0.35), sw2 = 3.35 - k * 2.1 + (hold ? Math.sin(tGlobal * 3) * 0.04 : 0);
@@ -220,13 +234,12 @@ export class PlayerModel {
       // 골반 높이: 더 펴진 다리의 발이 땅에 닿게. 달릴 땐 두 발이 다 뜨는 구간만큼 올라간다
       const dropOf = (i: number) => THIGH * Math.cos(thigh[i].rotation.z) * Math.cos(thigh[i].rotation.x) + SHIN * Math.cos(thigh[i].rotation.z + shin[i].rotation.z);
       const gnd = Math.max(dropOf(0), dropOf(1)) + 0.014, fly = HIP_Y - 0.05 + (0.05 + 0.035 * u) * stride * (0.5 - 0.5 * Math.cos(2 * ph - 0.6));
-      hips.position.y = Math.max(gnd + Math.max(0, fly - gnd) * a, floorY) + hipAdd;
+      if (!manual) hips.position.y = Math.max(gnd + Math.max(0, fly - gnd) * a, floorY) + hipAdd;
       // 머리: 공 쪽을 본다 (몸이 숙인 만큼 고개를 든다)
       const ang = Math.atan2(ball.y - p.y, ball.x - p.x) - p.dir; const rel = clamp(((ang + Math.PI * 3) % TAU) - Math.PI, -1.2, 1.2);
       if (cut) L.look = rel; else L.look += (rel - L.look) * (1 - Math.exp(-dt * 9));
-      head.rotation.y = -L.look * 0.75 - torso.rotation.y - hips.rotation.y; head.rotation.z += -torso.rotation.z * 0.55; torso.rotation.y += -L.look * 0.22 * idle;
+      head.rotation.y = -L.look * 0.75 - torso.rotation.y - hips.rotation.y; if (mode !== 14) head.rotation.z += -torso.rotation.z * 0.55; torso.rotation.y += -L.look * 0.22 * idle;
     }
-    void manual;
     // 자세가 바뀌는 순간은 앞 자세에서 섞어 넘긴다 (전엔 한 프레임에 뚝 바뀌었다)
     const B = this.bones, cur = this.cur, snap = this.snap, N = B.length;
     if (mode !== L.mode) { if (L.mode >= 0 && !cut) { snap.set(cur); L.mix = 0; L.dur = L.mode === 1 || L.mode === 2 ? 0.2 : fade; } L.mode = mode; }

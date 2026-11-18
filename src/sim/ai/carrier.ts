@@ -35,8 +35,9 @@ export function tryTackle(s: Sim, p: Player, own: Player | null, rate: number) {
     const h = HU[own.t]; if (h && h.ctrl === own && INP[h.t].down.sprint) r *= 0.85;
     if (own.feint > 0) r *= 0.5; if (own.spin > 0) r *= 0.3; if (rush) r *= 0.7;
     if (soft && !loose && s.rnd() < 0.5) return; // 공이 발에 붙어 있으면 절반은 지켜본다 (덤비지 않고 기다림)
+    p.lunge = 0.3;
     if (s.rnd() < r * (hc ? 1.35 : 1)) { gain(s, p); own.stun = 0.45; own.kickCD = 0.5; sfx(s, 'tackle'); }
-    else if (hc && (!HU[p.t] || HU[p.t]!.ctrl !== p)) p.stun = Math.max(p.stun, rush ? 0.26 : 0.14); // 발을 뻗었다 실패하면 잠깐 중심을 잃는다 (제칠 틈)
+    else if (hc && (!HU[p.t] || HU[p.t]!.ctrl !== p)) { p.stun = Math.max(p.stun, rush ? 0.26 : 0.14); const os = Math.hypot(own.vx, own.vy); if (os > 2 && (own.vx * (p.x - own.x) + own.vy * (p.y - own.y)) / (os * (q || 1)) < 0.6) p.beatT = Math.max(p.beatT, 0.45); } // 발을 뻗었다 실패하면 잠깐 중심을 잃는다(제칠 틈). 드리블러가 수비 쪽이 아닌 방향(53° 넘게 비껴)으로 움직이고 있었으면 0.45초 역동작(추격 0.9배·다음 태클 절반) — 수비에게 곧장 달려드는 드리블엔 안 걸린다(걸면 직진 돌파 8 → 18%)
   }
   else if (q < 3.2 && !HU[p.t] && s.rnd() < rate * 0.02 && (own.kickCD > 0 || Math.hypot(own.vx, own.vy) > 6)) { // AI 슬라이딩: 공이 발에서 떨어졌을 때만, 앞에서
     const front = Math.cos(own.dir) * (p.x - own.x) + Math.sin(own.dir) * (p.y - own.y) > -0.3;
