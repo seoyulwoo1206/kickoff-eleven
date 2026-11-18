@@ -2,8 +2,9 @@ import { clamp, d, angDiff, wx } from './util';
 import { W, H, CY } from './consts';
 import type { Sim, Human, Player } from './types';
 import { sfx } from './events';
-import { throwTo, throwPick, offsideLine, gain, knockOn, bigKnock, setKick, setShotAim, shortPass, longPass, throughPass, chipShot, shoot, slideTackle, slideCheck, standTackle, intercept, interceptT, queueKick, n } from './ball';
+import { gkHands, headSpot, passTo, kick, throwTo, throwPick, offsideLine, gain, knockOn, bigKnock, setKick, setShotAim, shortPass, longPass, throughPass, chipShot, shoot, slideTackle, slideCheck, standTackle, intercept, interceptT, queueKick, n } from './ball';
 import { steer, chase, moveTo, gapY } from './move';
+import { bestAIPass } from './ai/carrier';
 
 export function autoCursor(s: Sim, h: Human, dt: number) {
   const { ball, team, INP } = s;
@@ -35,7 +36,8 @@ export function assistDir(s: Sim, p: Player, ux: number, uy: number): [number, n
   const { ball } = s;
   const o = ball.owner; let tx: number, ty: number, w: number;
   if (!o && ball.passTarget && ball.passTarget !== p && ball.passTarget.t === p.t) return [ux, uy]; // 동료에게 가는 패스는 쫓지 않는다
-  if (!o) { const q = intercept(s, p), L = Math.hypot(q.x - p.x, q.y - p.y); tx = q.x; ty = q.y;
+  if (!o) { const hs = headSpot(s, p); if (hs) { const L = Math.hypot(hs.x - p.x, hs.y - p.y); if (L < 0.4) return [0, 0]; if (L < 9) { const ua = Math.atan2(uy, ux), ra = ua + angDiff(ua, Math.atan2(hs.y - p.y, hs.x - p.x)) * 0.9; return [Math.cos(ra), Math.sin(ra)]; } } // 상대가 띄운 공: 머리 높이로 내려오는 자리로 (9m 안이면 방향키와 상관없이)
+    const q = intercept(s, p), L = Math.hypot(q.x - p.x, q.y - p.y); tx = q.x; ty = q.y;
     if (ball.passTarget === p && ball.z > 1.0) { if (L < 0.5) return [0, 0]; const dx = (tx - p.x) / L, dy = (ty - p.y) / L, ua = Math.atan2(uy, ux), ra = ua + angDiff(ua, Math.atan2(dy, dx)) * 0.97; return [Math.cos(ra), Math.sin(ra)]; } // 나한테 오는 뜬 공: 떨어질 자리로 가서 기다린다 (전엔 자리에 다 오면 누르고 있던 방향키대로 달려 나가 크로스를 놓쳤다 — 탭 크로스 첫 터치 92→77%)
     w = ball.passTarget === p ? (L > 2.5 ? 0.97 : 0.6) : ball.knock === p && L < 11 ? 0.95 : clamp(1 - L / 10, 0, 0.9); } // 내가 차 놓은 공은 스틱을 돌려도 먼저 줍는다
   else if (o.t !== p.t) { tx = o.x + o.vx * 0.25; ty = o.y + o.vy * 0.25; const h = s.HU[p.t], just = !!(h && h.ctrl === p && h.lostT > 0 && d(p, o) < 3.5); w = just ? 0.85 : clamp(0.7 - d(p, o) / 10, 0, 0.7); if (just) { const dx = tx - p.x, dy = ty - p.y, L = Math.hypot(dx, dy) || 1, ua = Math.atan2(uy, ux), ta = Math.atan2(dy / L, dx / L); const ra = ua + angDiff(ua, ta) * w; return [Math.cos(ra), Math.sin(ra)]; } } // 방금 뺏긴 공은 스틱이 앞을 향해도 돌아본다
@@ -116,6 +118,13 @@ export function humanUpdate(s: Sim, h: Human, dt: number) {
   if (!own && ball.knock === p && d(p, ball) < 2.0 && ball.z < 0.6 && (I.press.pass || I.press.shoot || I.press.lob || I.press.through || (I.press.switch && p.kickCD <= 0) || I.rel.chip || I.rel.pass || I.rel.lob)) { gain(s, p); own = ball.owner === p; } // 질주 드리블 중에도 바로 차거나 패스할 수 있다
   h.second = false; h.gkRush = false; h.pressT = Math.max(0, h.pressT - dt); h.lostT = Math.max(0, h.lostT - dt);
   if (p.slide > 0) { slideCheck(s, p); return; }
+  // 키퍼가 공을 잡았다: 0.5초는 잡는 동작(그동안 누른 키는 버린다 — 수비하며 누르던 태클·전환 키가 그대로 킥이 됐다), 그 뒤 천천히 걸으며 S 던지기·A 롱킥·D 멀리 차기. 6초를 넘기면 알아서 준다
+  const hands = own && gkHands(s, p);
+  if (hands) {
+    p.holdT += dt;
+    if (p.holdT < 0.5) { steer(p, 0, 0, dt); h.armP = h.armL = false; h.charging = false; return; }
+    if (p.holdT > 6 && !h.charging && p.kickWind <= 0 && !I.down.pass && !I.down.lob) { const m = bestAIPass(s, p); if (m) passTo(s, p, m.p, m.loft); else kick(s, p, (p.t === 0 ? 1 : -1) * 22, (s.rnd() - 0.5) * 8, 7); return; }
+  }
   const aim = mag > 0.15 ? Math.atan2(my, mx) : p.dir;
   if (I.press.run) { if (oursBall(s, h.t)) triggerRun(s, h, p, aim); else h.pressT = 2.5; } // Q: 우리 공이면 침투 요청, 아니면 동료 압박
   const kicking = p.kickWind > 0;
@@ -133,12 +142,12 @@ export function humanUpdate(s: Sim, h: Human, dt: number) {
   else if (p.spin > 0) { const sp0 = p.speed * 0.6; steer(p, Math.cos(p.dir) * sp0, Math.sin(p.dir) * sp0, dt); } // 룰렛 중엔 돌면서 전진
   else if (mag > 0.15) {
     const [ux, uy] = own ? [mx / mag, my / mag] : assistDir(s, p, mx / mag, my / mag);
-    const toMe = !own && !ball.owner && (ball.passTarget === p || (ball.knock === p && d(p, ball) > 2.5)); // 나한테 오는 패스·치달로 멀리 차 놓은 공은 질주 키 없이도 전속으로
-    let sp = p.speed * (sprint || toMe ? 1.24 : 1) * (own ? 0.93 : 1) * (p.stun > 0 ? 0.4 : 1) * clamp(mag / 0.7, 0.45, 1) * (p.burst > 0 ? 1.12 : 1) * (kicking ? 0.6 : 1); // 스틱을 살짝 밀면 걷는다
+    const toMe = !own && !ball.owner && (ball.passTarget === p || (ball.knock === p && d(p, ball) > 2.5) || !!headSpot(s, p)); // 공중볼 경합도 전속 // 나한테 오는 패스·치달로 멀리 차 놓은 공은 질주 키 없이도 전속으로
+    let sp = p.speed * (hands ? 0.5 : sprint || toMe ? 1.24 : 1) * (own ? 0.93 : 1) * (p.stun > 0 ? 0.4 : 1) * clamp(mag / 0.7, 0.45, 1) * (p.burst > 0 ? 1.12 : 1) * (kicking ? 0.6 : 1); // 스틱을 살짝 밀면 걷는다
     if (!own && !ball.owner && ball.knock !== p && d(p, ball) < 1.6 && ball.z < 1) sp *= 0.75; // 공 바로 앞에선 속도를 줄여 흘리지 않게 (내가 앞에 차 놓은 공은 전속으로 쫓는다)
     steer(p, ux * sp, uy * sp, dt);
   }
-  else if (!own && !ball.owner && (ball.passTarget === p || (!(ball.passTarget && ball.passTarget.t === p.t) && d(p, ball) < 10))) { const q = intercept(s, p); chase(p, q.x, q.y, ball.passTarget === p ? 1.24 : 1, dt); }
+  else if (!own && !ball.owner && (ball.passTarget === p || (!(ball.passTarget && ball.passTarget.t === p.t) && d(p, ball) < 10))) { const hs = headSpot(s, p), q = hs && Math.hypot(hs.x - p.x, hs.y - p.y) < 6 ? hs : intercept(s, p); chase(p, q.x, q.y, ball.passTarget === p ? 1.24 : 1, dt); }
   else if (!own && ball.owner && ball.owner.t !== p.t && (I.down.shoot || I.down.jockey)) { // 압박(슛 키를 누른 채)·자세 낮추기(C): 가까우면 공과 골 사이에서 거리를 유지하며 따라붙는다
     const o = ball.owner, q = d(p, o);
     if (q < 2.6) { const g = wx(0, p.t), ux = g - o.x, uy = CY - o.y, L = Math.hypot(ux, uy) || 1; moveTo(p, o.x + ux / L * 1.5 + o.vx * 0.15, o.y + uy / L * 1.5 + o.vy * 0.15, 1.0, dt); }
@@ -166,10 +175,10 @@ export function humanUpdate(s: Sim, h: Human, dt: number) {
     if (dead && M.setT > 8 && !h.charging) { queueKick(s, p, () => shortPass(s, p, p.dir, 0.3), 0.04); return; }
     const anyPress = I.press.pass || I.press.lob || I.press.through || I.press.shoot || I.press.switch || I.down.pass || I.down.lob || I.down.shoot || I.rel.pass || I.rel.lob || I.rel.shoot || I.rel.chip; // 떼는 틱(rel)도 입력 중: 빠지면 질주 중 패스가 노크온에 먹힌다
     // 치달 (Shift, 폰은 질주 중 앞으로 스와이프): 스틱 방향(없으면 보는 방향, 몸에서 100° 안)으로 공을 길게 차 놓고 달린다
-    if (I.press.switch && !dead && !h.charging && p.spin <= 0 && p.stun <= 0) { const sa = mag > 0.15 ? Math.atan2(my, mx) : p.dir; bigKnock(s, p, Math.abs(angDiff(p.dir, sa)) < 1.75 ? sa : p.dir); return; }
+    if (I.press.switch && !dead && !hands && !h.charging && p.spin <= 0 && p.stun <= 0) { const sa = mag > 0.15 ? Math.atan2(my, mx) : p.dir; bigKnock(s, p, Math.abs(angDiff(p.dir, sa)) < 1.75 ? sa : p.dir); return; }
     if (sprint && mag > 0.15 && Math.hypot(p.vx, p.vy) > 5.5 && !h.charging && !anyPress && p.spin <= 0 && Math.abs(angDiff(Math.atan2(p.vy, p.vx), Math.atan2(my, mx))) < 0.4 && !oppAhead(s, p) && !dead) { knockOn(s, p); return; } // 질주 드리블은 공을 앞에 차 놓고 달린다 (도는 중엔 발에 붙여 돈다)
     // 개인기: X 탭 (폰: 스와이프 → I.skill)
-    if (I.press.gkRush && !dead) {
+    if (I.press.gkRush && !dead && !hands) {
       const sw = I.skill, sv = sw ?? { x: mx, y: my }; I.skill = null;
       if (sw && sprint && Math.hypot(p.vx, p.vy) > 4 && (Math.cos(p.dir) * sv.x + Math.sin(p.dir) * sv.y) / (Math.hypot(sv.x, sv.y) || 1) > 0.5) { bigKnock(s, p, Math.atan2(sv.y, sv.x)); return; }
       if (skillMove(s, p, sv.x, sv.y)) return;

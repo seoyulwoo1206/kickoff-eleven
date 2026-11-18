@@ -2,7 +2,7 @@ import { W, H, CY } from '../consts';
 import { clamp, d, wx } from '../util';
 import { DIFF } from '../../data/teams';
 import type { Sim, Player } from '../types';
-import { slideCheck, intercept, interceptT, offsideLine } from '../ball';
+import { gkHands, slideCheck, intercept, interceptT, offsideLine } from '../ball';
 import { steer, chase, moveTo, targetFor, gapY, defLine } from '../move';
 import { tryTackle, aiCarrier } from './carrier';
 import { gkAI } from './gk';
@@ -63,7 +63,7 @@ export function teamAI(s: Sim, t: number, dt: number) {
     }
     if (carrier && !humanOn && wx(carrier.x, t) < 38) { const df = so.find(p => p !== chaser && p.role === 'DF' && d(p, carrier) < 14); if (df) cover = df; } // 수비 지역에선 가장 가까운 수비수가 마크를 버리고 드리블러 앞을 막는다
     if (h && h.second && so[2]) cover = so[2]; // 세컨드 디펜더: 둘째도 같이 압박
-    if (dd) { chaser = null; cover = null; }
+    if (dd || (own && gkHands(s, own))) { chaser = null; cover = null; } // 키퍼가 손에 든 공엔 달려들지 않는다 (뺏을 수 없다)
     // 마크: 공 없는 상대를 위협 순(우리 골에 가까운 순)으로, 가까운 수비·미드필더가 골 쪽에서 막는다
     const g = wx(0, t), threats = team[1 - t].filter(o => o !== carrier && o.role !== 'GK' && !o.off).sort((a, b) => Math.abs(a.x - g) - Math.abs(b.x - g)).slice(0, 6);
     const free = outs.filter(p => p !== chaser && p !== cover && p.role !== 'FW');
