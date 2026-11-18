@@ -5,8 +5,9 @@ import { W, H, CX, CY, GH, GZ } from '../../sim/consts';
 import { grassTexture, grassDetail, netTexture, adTexture, ADS, skyTexture, seatTexture } from './textures';
 import type { Quality } from '../types';
 
+export interface StandLod { cx: number; cz: number; rot: number; L: number; inst: THREE.Object3D[]; imp: THREE.Object3D[]; far: boolean; }
 export interface Net { mesh: THREE.Mesh; base: Float32Array; side: number; shake: number; }
-export interface Stadium { group: THREE.Group; nets: Net[]; crowd: THREE.InstancedMesh[]; crowdBase: Float32Array[]; near: THREE.Object3D[]; bodies: { inst: THREE.InstancedMesh; kind: Uint8Array }[]; /** 잔디 바람 시간(초) — scene이 매 프레임 넣는다 */ wind: { value: number }; } // near: 카메라 쪽(큰 y) 관중석 — 중계 카메라에선 숨긴다
+export interface Stadium { group: THREE.Group; nets: Net[]; crowd: THREE.InstancedMesh[]; crowdBase: Float32Array[]; near: THREE.Object3D[]; bodies: { inst: THREE.InstancedMesh; kind: Uint8Array }[]; /** 면별 관중: 가까우면 메시(inst), 멀면 그림(imp) — scene이 카메라 거리로 고른다 */ stands: StandLod[]; /** 먼 관중 그림을 두 팀 색으로 다시 칠한다 */ paintCrowd: (c0: string, c1: string) => void; /** 잔디 바람 시간(초) — scene이 매 프레임 넣는다 */ wind: { value: number }; } // near: 카메라 쪽(큰 y) 관중석 — 중계 카메라에선 숨긴다
 
 const rnd = Math.random;
 const LINE = 0.12;
@@ -135,6 +136,31 @@ const TIERS: Tier[] = [{ d0: 0, y0: 1.3, rows: 20, sd: 0.9, sh: 0.48, dens: 0.9 
 const D_BACK = 32.5, Y_ROOF_BACK = 27, D_ROOF_FRONT = 5, Y_ROOF_FRONT = 24.6;
 export const CROWD_NEUTRAL = [0xe9e9e6, 0xc9ccd2, 0x8d939c, 0x2a2e36, 0x1f3a66, 0x5a6b7d, 0xb8a58a, 0x3f4a3d, 0x6d2f2f, 0xd9d2c2];
 const SKINS = [0xf1cfae, 0xe2b48e, 0xc9966b, 0xa87850, 0x7a5236, 0x54382a], LIT = 1.55; // LIT: 관중은 조명탑 불빛을 받은 것처럼 밝게 (인스턴스 색은 선형 값이라 1을 넘어도 된다)
+/** 먼 관중석용 관중 그림: 좌석 32칸 × 16줄을 그린 캔버스 한 장을 층 경사면에 반복해 붙인다 (밉맵·비등방 필터).
+    사람을 메시로 그리면 중계 카메라에선 한 명이 4픽셀이라 카메라가 조금만 움직여도 관중석 픽셀의 10~15%가 튀었다(화면이 치직거림). 그림은 0.5% */
+const IMP_COLS = 32, IMP_ROWS = 16;
+function crowdImpostor(dens: number, seed: number) {
+  const c = document.createElement('canvas'); c.width = 1024; c.height = 1024; const g = c.getContext('2d')!, cw = c.width / IMP_COLS, ch = c.height / IMP_ROWS;
+  let sd = seed; const r = () => { sd = (sd * 1664525 + 1013904223) >>> 0; return sd / 4294967296; };
+  const cells: { on: boolean; kind: number; skin: number; dx: number; hg: number; lt: number }[] = [];
+  for (let i = 0; i < IMP_COLS * IMP_ROWS; i++) { const k = r(); cells.push({ on: r() < dens, kind: k < 0.3 ? 0 : k < 0.52 ? 1 : 2 + Math.floor(r() * CROWD_NEUTRAL.length), skin: Math.floor(r() * SKINS.length), dx: (r() - 0.5) * 4, hg: 0.9 + r() * 0.28, lt: (r() - 0.5) * 0.14 }); }
+  const css = (hex: number, lt = 0) => { const col = new THREE.Color(hex).offsetHSL(0, 0, lt); return '#' + col.getHexString(); };
+  const tex = new THREE.CanvasTexture(c); tex.colorSpace = THREE.SRGBColorSpace; tex.wrapS = tex.wrapT = THREE.RepeatWrapping; tex.generateMipmaps = true; tex.minFilter = THREE.LinearMipmapLinearFilter; tex.anisotropy = 16;
+  const paint = (c0: string, c1: string) => {
+    const team = [new THREE.Color(c0).getHex(), new THREE.Color(c1).getHex()];
+    for (let row = 0; row < IMP_ROWS; row++) { // 캔버스 위쪽이 뒷줄
+      const y0 = c.height - (row + 1) * ch; g.fillStyle = row % 2 ? '#1c3152' : '#223b61'; g.fillRect(0, y0, c.width, ch); g.fillStyle = '#4b515a'; g.fillRect(0, y0 + ch * 0.86, c.width, ch * 0.14); // 좌석 등받이 줄 + 디딤판
+      for (let col = 0; col < IMP_COLS; col++) {
+        const q = cells[row * IMP_COLS + col]; if (!q.on) continue; const x = col * cw + cw / 2 + q.dx, bh = ch * 0.5 * q.hg, by = y0 + ch * 0.92;
+        g.fillStyle = css(q.kind < 2 ? team[q.kind] : CROWD_NEUTRAL[(q.kind + col) % CROWD_NEUTRAL.length], q.lt); g.beginPath(); g.roundRect(x - cw * 0.37, by - bh, cw * 0.74, bh, cw * 0.2); g.fill();
+        g.fillStyle = css(SKINS[q.skin]); g.beginPath(); g.arc(x, by - bh - cw * 0.14, cw * 0.21, 0, Math.PI * 2); g.fill();
+        g.fillStyle = '#2a2320'; g.beginPath(); g.arc(x, by - bh - cw * 0.14, cw * 0.21, Math.PI * 1.08, Math.PI * 1.92); g.fill(); // 정수리 머리카락
+      }
+    }
+    tex.needsUpdate = true;
+  };
+  paint('#b33', '#36c'); return { tex, paint };
+}
 function buildStands(q: Quality) {
   const g = new THREE.Group(), crowd: THREE.InstancedMesh[] = [], crowdBase: Float32Array[] = [], near: THREE.Object3D[] = [], bodies: { inst: THREE.InstancedMesh; kind: Uint8Array }[] = [];
   const concrete = new THREE.MeshLambertMaterial({ color: 0x666c76 }), dark = new THREE.MeshLambertMaterial({ color: 0x2c313a, side: THREE.DoubleSide });
@@ -148,6 +174,7 @@ function buildStands(q: Quality) {
   { const p = head.attributes.position, c = new Float32Array(p.count * 3); for (let k = 0; k < p.count; k++) { const v = p.getY(k) > 0.71 || (p.getY(k) > 0.66 && p.getZ(k) < -0.02) ? 0.2 : 1; c[k * 3] = c[k * 3 + 1] = c[k * 3 + 2] = v; } head.setAttribute('color', new THREE.BufferAttribute(c, 3)); }
   const bodyMat = new THREE.MeshLambertMaterial({ color: 0xffffff }), headMat = new THREE.MeshLambertMaterial({ color: 0xffffff, vertexColors: true });
   const density = q === 'high' ? 1 : q === 'mid' ? 0.55 : 0.26;
+  const imps = TIERS.map((T, ti) => crowdImpostor(density * T.dens, 77 + ti * 131)), impMats = imps.map(m => new THREE.MeshLambertMaterial({ map: m.tex, color: new THREE.Color(1.0, 1.0, 1.0) })), stands: StandLod[] = [];
   const sides: { L: number; cx: number; cz: number; rot: number }[] = [
     { L: W + GAP * 2, cx: CX, cz: -GAP, rot: 0 }, // 먼 쪽 (카메라 반대편)
     { L: W + GAP * 2, cx: CX, cz: H + GAP, rot: Math.PI },
@@ -160,7 +187,7 @@ function buildStands(q: Quality) {
     const isAisle = (x: number) => Math.abs(((x + 600) % 15) - 7.5) > 6.85; // 15m마다 폭 1.3m 통로
     // 앞 벽
     steps.strip(L, 0, 0, 0, TIERS[0].y0); rail.strip(L, 0.05, TIERS[0].y0, 0.05, TIERS[0].y0 + 0.5);
-    const people: number[] = [];
+    const people: number[] = [], impMeshes: THREE.Object3D[] = [];
     TIERS.forEach((T, ti) => {
       for (let r = 0; r < T.rows; r++) {
         const d = T.d0 + r * T.sd, y = T.y0 + r * T.sh;
@@ -171,6 +198,11 @@ function buildStands(q: Quality) {
         for (let c = 0; c < n; c++) { const x = -half + (c + 0.5) * SEAT; if (isAisle(x) || rnd() > density * T.dens) continue; people.push(x + (rnd() - 0.5) * 0.12, y + 0.02, -(d + T.sd * 0.5), 0.9 + rnd() * 0.28); }
       }
       const dE = T.d0 + T.rows * T.sd, yE = T.y0 + T.rows * T.sh;
+      { // 먼 관중 그림: 층 경사면 위 0.2m에 얹은 사다리꼴 — 통로 띠(0.3m)는 그 위로 보인다 (uv는 위치의 1차식이라 늘어나지 않는다)
+        const a = L / 2 + T.d0 - 0.9, b = L / 2 + dE - 0.9, up = IMP_COLS * SEAT, iq = new Quads(), vv = T.rows / IMP_ROWS;
+        iq.pos.push(-a, T.y0 + 0.2, -T.d0, a, T.y0 + 0.2, -T.d0, b, yE + 0.2, -dE, -b, yE + 0.2, -dE); iq.uv.push(-a / up, 0, a / up, 0, b / up, vv, -b / up, vv); iq.idx.push(0, 1, 2, 0, 2, 3);
+        const im = new THREE.Mesh(iq.build(), impMats[ti]); im.visible = false; impMeshes.push(im);
+      }
       for (let x = -Math.floor(L / 2 / 15) * 15 - 7.5; x < L / 2 + T.d0; x += 15) { if (Math.abs(x) > L / 2 + T.d0 - 2) continue; aisles.quad([x - 0.6, T.y0 + 0.3, -T.d0], [x + 0.6, T.y0 + 0.3, -T.d0], [x + 0.6, yE + 0.3, -dE], [x - 0.6, yE + 0.3, -dE]); } // 통로 (계단 위에 얹은 경사 띠)
       if (ti === 0) { // 1층 뒤 통로와 2층 앞 벽(위쪽은 광고 띠)
         const U = TIERS[1]; steps.strip(L, dE, yE, U.d0, yE); steps.strip(L, U.d0, yE, U.d0, U.y0 - 1.25); ribbon.strip(L, U.d0 - 0.02, U.y0 - 1.25, U.d0 - 0.02, U.y0, 22); rail.strip(L, U.d0 + 0.05, U.y0, U.d0 + 0.05, U.y0 + 0.45);
@@ -195,13 +227,15 @@ function buildStands(q: Quality) {
     bi.count = hi.count = n; bi.instanceMatrix.needsUpdate = hi.instanceMatrix.needsUpdate = true; if (bi.instanceColor) bi.instanceColor.needsUpdate = true; if (hi.instanceColor) hi.instanceColor.needsUpdate = true;
     bi.computeBoundingSphere(); hi.computeBoundingSphere(); // 화면 밖 면의 관중은 그리지 않는다
     holder.add(bi, hi); crowd.push(bi, hi); crowdBase.push(base, base); bodies.push({ inst: bi, kind });
+    for (const im of impMeshes) holder.add(im); stands.push({ cx: sd.cx, cz: sd.cz, rot: sd.rot, L, inst: [bi, hi], imp: impMeshes, far: false });
     if (sd.cz > H) near.push(holder); // 카메라 쪽 관중석
     g.add(holder);
   });
-  return { group: g, crowd, crowdBase, near, bodies };
+  return { group: g, crowd, crowdBase, near, bodies, stands, paintCrowd: (c0: string, c1: string) => { for (const m of imps) m.paint(c0, c1); } };
 }
 /** 관중 옷 색: 두 팀 유니폼 색을 섞어 다시 칠한다 (경기 시작 때) */
 export function tintCrowd(st: Stadium, c0: string, c1: string) {
+  st.paintCrowd(c0, c1);
   const col = new THREE.Color(), a = new THREE.Color(c0), b = new THREE.Color(c1);
   for (const { inst, kind } of st.bodies) {
     for (let k = 0; k < kind.length; k++) { if (kind[k] > 1) continue; col.copy(kind[k] === 0 ? a : b).offsetHSL(0, -0.08, ((k * 37) % 11 - 5) * 0.012).multiplyScalar(LIT); inst.setColorAt(k, col); }
@@ -229,7 +263,7 @@ export function buildStadium(q: Quality): Stadium {
   group.add(buildGround(), buildTrack(), buildPitch(wind), buildLines(), buildBoards(), buildFloodlights(), buildSky());
   const goals = buildGoals(); group.add(goals.group);
   const stands = buildStands(q); group.add(stands.group);
-  return { group, nets: goals.nets, crowd: stands.crowd, crowdBase: stands.crowdBase, near: stands.near, bodies: stands.bodies, wind };
+  return { group, nets: goals.nets, crowd: stands.crowd, crowdBase: stands.crowdBase, near: stands.near, bodies: stands.bodies, stands: stands.stands, paintCrowd: stands.paintCrowd, wind };
 }
 /** 그물 흔들림: 골 직후 뒤 그물이 출렁인다 */
 export function updateNets(nets: Net[], dt: number) {

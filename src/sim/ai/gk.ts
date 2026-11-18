@@ -15,7 +15,8 @@ export function gkAI(s: Sim, k: Player, dt: number) {
   const skill = (0.5 + n(G.ref) * 0.3 + n(G.div) * 0.1) * (!HU[t] ? DIFF[M.diff].gk : 1);
   if (own === k) {
     k.holdT += dt; steer(k, 0, 0, dt); k.dir = t === 0 ? 0 : Math.PI;
-    if (k.holdT > 1.0 && M.phase === 'live') { const m = bestAIPass(s, k); if (m) passTo(s, k, m.p, m.loft); else kick(s, k, sg * (20 + n(G.kic) * 6), (s.rnd() - 0.5) * 8, 7); }
+    let hold = 1.0; if (k.atFeet) { let od = 99; for (const o of team[1 - t]) if (!o.off) od = Math.min(od, d(o, k)); hold = od < 9 ? 0.12 : 0.5; } // 발밑의 공(백패스)은 뺏길 수 있으니 오래 끌지 않는다
+    if (k.holdT > hold && M.phase === 'live') { const m = bestAIPass(s, k); if (m) passTo(s, k, m.p, m.loft); else kick(s, k, sg * (20 + n(G.kic) * 6), (s.rnd() - 0.5) * 8, 7); }
     return;
   }
   const lb = wx(ball.x, t), lk = wx(k.x, t), dG = Math.hypot(ball.x - gx, ball.y - CY);

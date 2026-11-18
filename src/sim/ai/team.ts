@@ -40,6 +40,7 @@ export function teamAI(s: Sim, t: number, dt: number) {
   const dd = !!(M.dead && M.dead.t !== t), keepOff = (x: number, y: number) => {
     if (!dd) return { x, y };
     if (M.spType === 'penalty' && wx(x, 1 - t) > W - 17 && Math.abs(y - CY) < 20.5) x = wx(W - 18, 1 - t);
+    if (M.spType === 'goalkick' && wx(x, 1 - t) < 17.5 && Math.abs(y - CY) < 21) x = wx(18.5, 1 - t); // 골킥: 찰 때까지 상대는 박스 밖
     const dx = x - M.setX, dy = y - M.setY, q = Math.hypot(dx, dy), R = M.deadR + 0.5; if (q >= R) return { x, y };
     const g = wx(0, t), ux = q > 0.01 ? dx / q : Math.sign(g - M.setX) || 1, uy = q > 0.01 ? dy / q : 0;
     return { x: clamp(M.setX + ux * R, 1, W - 1), y: clamp(M.setY + uy * R, 1, H - 1) };
@@ -135,6 +136,7 @@ export function teamAI(s: Sim, t: number, dt: number) {
     if (p.slide > 0) { slideCheck(s, p); continue; }
     if (p.role === 'GK') { gkAI(s, p, dt); continue; }
     if (own === p) { aiCarrier(s, p, dt); continue; }
+    if (M.spots && M.dead && p !== M.aimMan) { const sp = M.spots.get(p); if (sp) { moveTo(p, sp.x + Math.sin(M.time * 1.3 + p.i * 2.1) * 0.5, sp.y + Math.cos(M.time * 1.1 + p.i * 1.4) * 0.5, 0.8, dt); continue; } } // 골킥: 찰 때까지 배치 자리
     if (dd && M.wall.includes(p)) { steer(p, 0, 0, dt); p.dir = Math.atan2(M.setY - p.y, M.setX - p.x); continue; } // 벽은 찰 때까지 서 있는다
     if (p.runT > 0 && (att || (!own && ball.lastTouch === t))) { // 침투 지시: 지시 방향으로 질주하되 오프사이드 라인 안에서
       const line = offsideLine(s, t); let tx = p.x + Math.cos(p.runDir) * 12, ty = clamp(p.y + Math.sin(p.runDir) * 12, 2, H - 2);
@@ -172,6 +174,6 @@ export function teamAI(s: Sim, t: number, dt: number) {
     if (sp) { const line = offsideLine(s, t), lx = Math.min(wx(sp.x, t), line - 0.8), o = openLane(wx(lx, t), sp.y); moveTo(p, o.x, o.y, h && Math.hypot(o.x - p.x, o.y - p.y) > 6 ? 1.2 : 1.05, dt); continue; }
     let tg = targetFor(s, p, att, def); if (att && carrier && p.role !== 'DF') tg = openLane(tg.x, tg.y); tg = keepOff(tg.x, tg.y);
     const q = Math.hypot(tg.x - p.x, tg.y - p.y), ahead = wx(tg.x, t) - wx(p.x, t);
-    moveTo(p, tg.x, tg.y, h && att && ahead > 5 ? (p.role === 'DF' ? 1.1 : 1.2) : q > 7 ? 1.05 : 0.78, dt); // 공격 때 앞으로 멀리 가야 하면 질주로 따라붙는다
+    moveTo(p, tg.x, tg.y, h && att && ahead > 5 ? (p.role === 'DF' && Math.abs(p.by - CY) <= 14 ? 1.1 : 1.2) : h && !att && p.role === 'DF' && ahead < -9 ? 1.2 : q > 7 ? 1.05 : 0.78, dt); // 공격 때 앞으로 멀리 가야 하면 질주로 따라붙는다 (풀백도). 올라갔던 수비수는 공을 뺏기면 질주로 돌아온다
   }
 }

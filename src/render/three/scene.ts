@@ -15,6 +15,7 @@ import { setPreview } from '../../sim/ball';
 import { XT, drawMap } from '../../xt/view';
 
 interface Puff { sp: THREE.Sprite; vx: number; vz: number; life: number; t: number; }
+const SUN_L = Math.hypot(30, 95, 45); // 해 방향 벡터 길이
 const PF = 17, BF = 6; // 리플레이 프레임: 선수당 17값, 공 6값
 const CELE_T = 2.7; // 골 뒤 세리머니 클로즈업 길이(초). 그 뒤 리플레이 — match.ts goal()의 phaseT와 맞출 것
 interface Frame { t: number; P: Float32Array; B: Float32Array; }
@@ -167,7 +168,10 @@ export class ThreeRenderer implements IRenderer {
     this.camera.lookAt(this.camLook);
     // 햇빛은 카메라 조준점을 따라가며 그림자 범위를 유지
     { const sc = this.sun.shadow.camera, sw = Math.max(42, VW * 0.8); if (Math.abs(sc.right - sw) > 1) { sc.left = -sw; sc.right = sw; sc.top = sw * 0.72; sc.bottom = -sw * 0.72; sc.updateProjectionMatrix(); } } // 넓은 시야에선 그림자 범위도 넓힌다
-    this.sun.position.set(cam.x - 30, 95, cam.y + 45); this.sun.target.position.set(cam.x, 0, cam.y); this.sun.target.updateMatrixWorld();
+    { const sc = this.sun.shadow.camera, ms = this.sun.shadow.mapSize, tx = (sc.right - sc.left) / ms.x, ty = (sc.top - sc.bottom) / ms.y;
+      const zx = -30 / SUN_L, zy = 95 / SUN_L, zz = 45 / SUN_L, rl = Math.hypot(zz, zx), rx = zz / rl, rz = -zx / rl, ux = zy * rz, uy = zz * rx - zx * rz, uz = -zy * rx; // 그림자 카메라의 오른쪽(r)·위(u) 축
+      const u = cam.x * rx + cam.y * rz, v = cam.x * ux + cam.y * uz, du = Math.round(u / tx) * tx - u, dv = Math.round(v / ty) * ty - v, px = cam.x + rx * du + ux * dv, py = uy * dv, pz = cam.y + rz * du + uz * dv;
+      this.sun.position.set(px - 30, py + 95, pz + 45); this.sun.target.position.set(px, py, pz); this.sun.target.updateMatrixWorld(); }
   }
   private updatePuffs(dt: number) {
     for (const q of this.puffs) { if (!q.sp.visible) continue; q.t += dt; if (q.t >= q.life) { q.sp.visible = false; continue; } const f = q.t / q.life; q.sp.position.x += q.vx * dt; q.sp.position.z += q.vz * dt; q.vx *= 1 - 4 * dt; q.vz *= 1 - 4 * dt; const s = 0.4 + f * 1.1; q.sp.scale.set(s, s * 0.7, 1); (q.sp.material as THREE.SpriteMaterial).opacity = (1 - f) * 0.6; }
@@ -188,6 +192,10 @@ export class ThreeRenderer implements IRenderer {
     if (sim) this.syncModels(sim); else if (this.modelSim) { for (const m of this.models.values()) this.scene.remove(m.root); this.models.clear(); this.modelSim = null; }
     this.updateCamera(sim, dtR, perf);
     { const hide = !this.replay && !this.celeCam && (this.mode === 'tv' || this.mode === 'top' || this.mode === 'intro'); for (const o of this.stadium.near) o.visible = !hide; } // 입장 카메라도 가까운 쪽 관중석 자리(지붕 높이)에 있다 // 중계 카메라는 가까운 쪽 관중석 자리까지 내려가므로 그 관중석을 그리지 않는다
+    { // 관중: 카메라에서 먼 면(60m 밖, 다시 가까워지는 건 50m)은 그림, 가까운 면은 메시 — 먼 메시 관중은 픽셀이 튄다
+      const cp = this.camera.position;
+      for (const sd of this.stadium.stands) { const dx = cp.x - sd.cx, dz = cp.z - sd.cz, c = Math.cos(sd.rot), s = Math.sin(sd.rot), xl = dx * c - dz * s, zl = dx * s + dz * c, dist = Math.hypot(Math.max(0, Math.abs(xl) - sd.L / 2), zl, Math.max(0, cp.y - 14)); sd.far = sd.far ? dist > 50 : dist > 60; for (const o of sd.inst) o.visible = !sd.far; for (const o of sd.imp) o.visible = sd.far; }
+    }
     if (!paused) { this.updatePuffs(dtR); updateNets(this.stadium.nets, dtR); this.updateCrowd(sim, dtR); this.stadium.wind.value = perf % 3600; }
     if (sim) {
       const { HU, M } = sim;

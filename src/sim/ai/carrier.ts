@@ -8,7 +8,7 @@ import { steer } from '../move';
 
 export function tryTackle(s: Sim, p: Player, own: Player | null, rate: number) {
   const { M, HU, INP, ball } = s;
-  if (!own || own.t === p.t || own.role === 'GK' || M.protect > 0 || p.tackleCD > 0 || p.stun > 0 || p.slide > 0 || own.shield > 0) return;
+  if (!own || own.t === p.t || (own.role === 'GK' && !own.atFeet) || M.protect > 0 || p.tackleCD > 0 || p.stun > 0 || p.slide > 0 || own.shield > 0) return;
   const q = d(p, own);
   // 공 노출: 공이 수비 발에 닿는 거리(1.0m)면 그대로, 몸으로 가려 1.7m 밖이면 거의 못 뺏는다. 공을 간수하는 선수(ctl)는 더 잘 지킨다
   const db = d(p, ball), expo = clamp((1.7 - db) / 0.7, 0.12, 1) * (1 - n(own.attrs.ctl) * 0.3);

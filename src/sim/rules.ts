@@ -69,6 +69,23 @@ export function cornerSetup(s: Sim, t: number, y: number, tk: Player) {
   place(s.team[t].filter(q => q.role !== 'GK' && !q.off && q !== tk), A); place(s.team[1 - t].filter(q => q.role !== 'GK' && !q.off), D);
   const k = s.team[1 - t][0]; if (!k.off) { k.x = wx(W - 1, t); k.y = CY + sd * 0.8; k.vx = k.vy = 0; }
 }
+/** 골킥 배치 (코너킥처럼 양 팀을 자리에 세운다, 찰 때까지 `M.spots`를 지킨다 — teamAI): 차는 팀은 센터백이 박스 양옆(짧게 받을 자리)·풀백은 터치라인 쪽 24m·미드필더 30~44m·공격수 54~58m,
+    상대는 박스 밖에서 공격수 22~24m 앞·미드필더 40m·수비 58m(자기 진영 47m) 근처. 기본 대형(`bx`, `by`)을 늘려서 만든다 */
+export function goalKickSetup(s: Sim, t: number) {
+  const spots = new Map<Player, { x: number; y: number }>();
+  const put = (q: Player, x: number, dy: number, tt: number) => { const px = wx(clamp(x, 2, W - 2), tt), py = clamp(CY + dy, 2, H - 2); spots.set(q, { x: px, y: py }); q.x = px; q.y = py; q.vx = q.vy = 0; q.lagVx = q.lagVy = 0; q.runT = 0; q.dir = Math.atan2(s.ball.y - py, s.ball.x - px); };
+  for (const q of s.team[t]) {
+    if (q.role === 'GK' || q.off) continue; const dy = q.by - CY, sg = dy < 0 ? -1 : 1;
+    if (q.role === 'DF') { if (Math.abs(dy) > 16) put(q, 24, sg * 28, t); else if (Math.abs(dy) < 3) put(q, 16, 3, t); else put(q, 8.5, sg * 15, t); }
+    else if (q.role === 'MF') put(q, 30 + (q.bx - 27) * 1.3, dy * 1.2, t);
+    else put(q, 54 + (q.bx - 45) * 1.3, dy * 1.15, t);
+  }
+  for (const q of s.team[1 - t]) {
+    if (q.off) continue; if (q.role === 'GK') { q.x = wx(7, 1 - t); q.y = CY; q.vx = q.vy = 0; continue; }
+    put(q, 47 + (q.bx - 16) * 1.13, q.by - CY, 1 - t);
+  }
+  s.M.spots = spots;
+}
 /** 교체: 나가는 선수 객체에 들어오는 선수의 데이터를 덮어쓴다 (객체·인덱스 유지 → 스냅샷 안전). 최대 5명 */
 export function substitute(s: Sim, t: number, out: Player, inDef: PlayerDef): boolean {
   const { M } = s; if (M.subs[t] >= 5 || out.t !== t || out.off) return false;
@@ -77,7 +94,7 @@ export function substitute(s: Sim, t: number, out: Player, inDef: PlayerDef): bo
   const det = detailOf(inDef);
   out.def = inDef; out.name = inDef.name; out.nameEn = inDef.nameEn; out.num = inDef.num; out.pos = inDef.pos; out.foot = inDef.foot; out.skill = inDef.skill; out.attrs = det; out.ovr = overall(inDef);
   { const lk = lookOf(M.teams[t].code, inDef.nameEn, inDef.num); out.hair = lk.hair; out.skin = lk.skin; out.look = lk.seed; out.tone = lk.tone; }
-  out.speed0 = (6.0 + (det.spd - 60) / 40 * 1.7) * (out.role === 'GK' ? 0.92 : 1); out.sta = 1; out.yellow = 0; out.stun = 0; out.pending = null; out.kickWind = 0; out.lunge = 0; out.head = 0;
+  out.speed0 = (6.0 + (det.spd - 60) / 40 * 1.7) * (out.role === 'GK' ? 0.92 : 1); out.sta = 1; out.yellow = 0; out.stun = 0; out.pending = null; out.kickWind = 0; out.lunge = 0; out.head = 0; out.atFeet = false;
   banner(s, '', `교체 IN ${inDef.name}`, 1400); s.ev.push({ k: 'sub', t, num: inDef.num });
   return true;
 }

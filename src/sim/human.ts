@@ -11,6 +11,7 @@ export function autoCursor(s: Sim, h: Human, dt: number) {
   h.lock = Math.max(0, h.lock - dt);
   const own = ball.owner;
   if (own && own.t === h.t) { h.ctrl = own; h.had = true; return; } // 공을 가진 우리 선수가 커서 (키퍼 포함)
+  if (!own && ball.knock === h.ctrl) return; // 질주 드리블 중 (키퍼가 발로 몰고 나올 때도)
   if (h.ctrl && h.ctrl.role === 'GK') { const nn = nearestToBall(s, h); if (nn) { h.ctrl = nn; h.lock = 0.3; } } // 키퍼가 공을 잃으면 필드 선수로
   if (!own && ball.knock && ball.knock.t === h.t && ball.knock !== h.ctrl && ball.knock.role !== 'GK') { h.ctrl = ball.knock; return; } // 동료가 터치한 공은 그 선수가
   if (!own && ball.passTarget && ball.passTarget.t === h.t) { if (ball.passTarget.role !== 'GK') h.ctrl = ball.passTarget; return; } // 패스가 가는 동안엔 받는 선수에 고정
@@ -119,11 +120,12 @@ export function humanUpdate(s: Sim, h: Human, dt: number) {
   h.second = false; h.gkRush = false; h.pressT = Math.max(0, h.pressT - dt); h.lostT = Math.max(0, h.lostT - dt);
   if (p.slide > 0) { slideCheck(s, p); return; }
   // 키퍼가 공을 잡았다: 0.5초는 잡는 동작(그동안 누른 키는 버린다 — 수비하며 누르던 태클·전환 키가 그대로 킥이 됐다), 그 뒤 천천히 걸으며 S 던지기·A 롱킥·D 멀리 차기. 6초를 넘기면 알아서 준다
-  const hands = own && gkHands(s, p);
+  let hands = own && gkHands(s, p);
   if (hands) {
     p.holdT += dt;
-    if (p.holdT <= dt * 1.5 && h.gkTips < 2) { h.gkTips++; banner(s, '', '골키퍼가 잡았습니다 · 패스 = 짧게 · 롱패스 = 길게 · 슛 = 멀리 차기', 2200); }
+    if (p.holdT <= dt * 1.5 && h.gkTips < 2) { h.gkTips++; banner(s, '', '골키퍼가 잡았습니다 · 패스 = 짧게 · 롱패스 = 길게 · 슛 = 멀리 차기 · 스루 = 내려놓고 드리블', 2600); }
     if (p.holdT < 0.5) { steer(p, 0, 0, dt); h.armP = h.armL = false; h.charging = false; return; }
+    if (I.press.through && !h.charging && p.kickWind <= 0) { p.atFeet = true; hands = false; steer(p, 0, 0, dt); return; } // 스루 키: 공을 발밑에 내려놓는다 — 그 뒤로는 필드 선수처럼 드리블·패스·슛 (다시 손으로 못 잡고, 상대가 뺏을 수 있다)
     if (p.holdT > 6 && !h.charging && p.kickWind <= 0 && !I.down.pass && !I.down.lob) { const m = bestAIPass(s, p); if (m) passTo(s, p, m.p, m.loft); else kick(s, p, (p.t === 0 ? 1 : -1) * 22, (s.rnd() - 0.5) * 8, 7); return; }
   }
   const aim = mag > 0.15 ? Math.atan2(my, mx) : p.dir;
@@ -215,7 +217,7 @@ export function humanUpdate(s: Sim, h: Human, dt: number) {
     if (I.down.gkRush || (I.down.through && (!I.touch || I.holdT.through > 0.12))) h.gkRush = true;
     // 몸싸움: 공 가진 상대와 부딪히면 버튼 없이도 어깨 싸움으로 공을 뺏을 수 있다 (피지컬·밸런스 대결)
     const o = ball.owner;
-    if (o && o.t !== p.t && o.role !== 'GK' && M.protect <= 0 && p.stun <= 0 && o.spin <= 0 && o.shield <= 0) {
+    if (o && o.t !== p.t && !(o.role === 'GK' && !o.atFeet) && M.protect <= 0 && p.stun <= 0 && o.spin <= 0 && o.shield <= 0) {
       if (p.kickCD <= 0 && d(p, ball) < 0.7 && ball.z < 0.8) { // 발끝 포크
         p.kickCD = 0.3;
         if (s.rnd() < 0.55 + n(p.attrs.int) * 0.25 - (o.feint > 0 ? 0.3 : 0)) { gain(s, p); o.stun = 0.3; o.kickCD = 0.4; sfx(s, 'tackle'); }

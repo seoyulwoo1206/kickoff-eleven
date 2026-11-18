@@ -14,6 +14,7 @@ export interface Player {
   kickCD: number; stun: number; tackleCD: number; bodyCD: number; reactT: number; shield: number; lagVx: number; lagVy: number; cutCD: number; beatT: number; /* beatT: 드리블에 제쳐진 뒤 따라가기 급급한 시간 */ runT: number; runDir: number; // runT: 침투 지시 남은 시간, runDir 방향 // shield: 사람이 패스·슛 키를 누른 직후 .16초는 뺏기지 않는다 (탭이 떼는 순간 실행되므로)
   offs: boolean; slide: number; decT: number; holdT: number; lastSave: number;
   dive: number; diveDir: number; run: number; forcePass: boolean; forceShot: boolean; cele: boolean;
+  /** 키퍼가 공을 발밑에 두고 있다 (동료의 백패스를 받았거나 손에서 내려놓음) — 다른 선수가 건드릴 때까지 손으로 못 잡는다 */ atFeet: boolean;
   /** 스탠딩 태클로 발을 뻗는 동작·다이빙 헤딩 동작의 남은 시간 (렌더·역동작 판정용) */ lunge: number; head: number;
   hair: string; skin: string; /** 얼굴·머리 모양 씨앗과 피부 단계(0 밝은 ~ 5 어두운) — data/looks.ts */ look: number; tone: number;
   /** 선수단 데이터 (없으면 팀 능력치만으로 만든 익명 선수) */
@@ -47,6 +48,7 @@ export interface MatchInfo {
   /** Phase 5: 전술, 벤치·교체 수, 중단 횟수(추가시간 계산), 추가시간(분, 전/후반), 어드밴티지 */
   overT: number; /* 종료 시각을 넘겨 마지막 공격을 지켜본 시간(실제 초) */
   dead: Player | null; deadT: number; deadR: number; wall: Player[]; /* 아직 차지 않은 세트피스(어느 팀이든)의 키커·지난 시간·상대가 떨어져 있어야 하는 거리·벽 */
+  /** 골킥 배치: 찰 때까지 선수별로 서 있을 자리 */ spots: Map<Player, { x: number; y: number }> | null;
   setAim: boolean; aimX: number; aimY: number; aimMan: Player | null; /* aimMan: 조준점으로 들어가 받을 동료 */ /* 사람 팀 코너킥·프리킥·골킥의 조준점 (방향키로 옮긴다) */
   setTaker: Player | null; setT: number; setX: number; setY: number; /* 사람 팀 코너킥·프리킥·골킥·페널티의 키커와 공을 놓고 선 시간: 찰 때까지 제자리 (몰고 나갈 수 없다) */
   throwIn: Player | null; throwT: number; /* 스로인을 던질 선수(공을 손에 들고 서 있다)와 든 시간 */
