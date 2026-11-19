@@ -10,16 +10,19 @@ import { PlayerModel, type PoseState } from './player';
 import { ballTexture, puffTexture, ringTexture } from './textures';
 import { opts } from '../../options';
 import { displayName, shirtName } from '../../data/squads';
+import { lookOf } from '../../data/looks';
+import type { Kit } from '../../data/teams';
 import { backTarget } from '../../sim/human';
 import { setPreview } from '../../sim/ball';
 import { XT, drawMap } from '../../xt/view';
 
 interface Puff { sp: THREE.Sprite; vx: number; vz: number; life: number; t: number; }
 const SUN_L = Math.hypot(30, 95, 45); // 해 방향 벡터 길이
+const REF_KIT = { pat: 'solid', c1: '#17191c', c2: '#e8d21d', sh: '#17191c', gk: '#17191c' } as const;
+interface Ref { m: PlayerModel; st: PoseState; kind: number; item: THREE.Object3D; } // kind 0 주심, 1 먼 쪽 부심(오른쪽 절반), 2 가까운 쪽 부심(왼쪽 절반)
 const PF = 17, BF = 6; // 리플레이 프레임: 선수당 17값, 공 6값
 const CELE_T = 2.7; // 골 뒤 세리머니 클로즈업 길이(초). 그 뒤 리플레이 — match.ts goal()의 phaseT와 맞출 것
 interface Frame { t: number; P: Float32Array; B: Float32Array; }
-const ELEV = 0.5; // 중계 카메라 올려다보는 각 (rad)
 export class ThreeRenderer implements IRenderer {
   cam = { x: CX, y: CY, shake: 0, z: 1 };
   cw = 0; ch = 0; fps = 60;
@@ -33,6 +36,8 @@ export class ThreeRenderer implements IRenderer {
   private tmpV = new THREE.Vector3(); private shk = { x: 0, y: 0 }; private crowdT = 0;
   // 골 리플레이: 최근 4초를 링버퍼에 담아두고 골 1.3초 뒤부터 0.55배속으로 보여준다
   private celeCam = false; // 세리머니 클로즈업 중
+  private elev = 0.5; // 중계 카메라가 내려다보는 각 (rad) — `setElev`, opts.camH
+  private refs: Ref[] = []; private refCard = { t: 0, who: null as Player | null, x: 0, y: 0 }; /* 카드: 남은 시간·받는 선수·그 자리(퇴장이면 선수가 바로 빠지므로 마지막으로 그린 자리) */ private refFlag = [0, 0]; private cardMat = new THREE.MeshBasicMaterial({ color: 0xffd400, side: THREE.DoubleSide });
   private frames: Frame[] = []; private goalAt = -1; private replay = false; private replayT = 0; private pose: PoseState[] = []; private rBall = { x: 0, y: 0, z: 0, vx: 0, vy: 0, owner: null as Player | null };
   constructor(public cv: HTMLCanvasElement, private insetEl: HTMLElement, private ovCv: HTMLCanvasElement, quality: Quality) {
     this.gl = new THREE.WebGLRenderer({ canvas: cv, antialias: true, powerPreference: 'high-performance' });
@@ -45,7 +50,7 @@ export class ThreeRenderer implements IRenderer {
     const sc = this.sun.shadow.camera; sc.left = -42; sc.right = 42; sc.top = 30; sc.bottom = -30; sc.near = 20; sc.far = 220; this.sun.shadow.bias = -0.0008; this.sun.shadow.normalBias = 0.02;
     this.scene.add(this.sun, this.sun.target);
     this.ov = ovCv.getContext('2d')!;
-    this.puffTex = puffTexture(); this.blobTex = puffTexture();
+    this.puffTex = puffTexture(); this.blobTex = puffTexture(); this.buildRefs();
     this.ball = new THREE.Mesh(new THREE.SphereGeometry(0.11, 18, 12), new THREE.MeshStandardMaterial({ map: ballTexture(), roughness: 0.55 })); this.ball.castShadow = true; this.scene.add(this.ball);
     this.ballShadow = new THREE.Mesh(new THREE.CircleGeometry(0.16, 12).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ map: this.blobTex, transparent: true, opacity: 0.45, depthWrite: false })); this.scene.add(this.ballShadow);
     const ringTex = ringTexture();
@@ -64,6 +69,7 @@ export class ThreeRenderer implements IRenderer {
     this.scene.traverse(o => { const m = (o as THREE.Mesh).material as THREE.Material | undefined; if (m) m.needsUpdate = true; });
   }
   setView(v: number) { this.view = clamp(v, 1, 2.4); }
+  setElev(v: number) { this.elev = clamp(v, 0.3, 1.0); }
   setCamMode(m: CamMode) { this.mode = m; if (m === 'intro') { this.camPos.set(CX + 40, 36, CY + 88); this.camLook.set(CX, 1, CY); } }
   resize() {
     const r = this.cv.getBoundingClientRect(); this.cw = r.width; this.ch = r.height;
@@ -96,6 +102,55 @@ export class ThreeRenderer implements IRenderer {
       const q = this.puffs.find(q => !q.sp.visible); if (!q) return;
       const a = Math.random() * Math.PI * 2, v = Math.random() * sp;
       q.sp.position.set(x, 0.15, y); q.vx = Math.cos(a) * v; q.vz = Math.sin(a) * v; q.life = 0.45 + Math.random() * 0.4; q.t = 0; q.sp.visible = true;
+    }
+  }
+  /** 심판 셋(주심 + 부심 둘): 시뮬과 무관한 그림 — 위치는 공·수비 라인에서 매 프레임 정한다 */
+  private buildRefs() {
+    for (let k = 0; k < 3; k++) {
+      const lk = lookOf('REF', 'Referee ' + k, k + 3), fake = { role: 'MF', skin: lk.skin, hair: lk.hair, look: lk.seed, tone: lk.tone, i: 30 + k, t: 0, num: 0, foot: 'R', nameEn: 'ref' + k } as unknown as Player;
+      const m = new PlayerModel(fake, REF_KIT as unknown as Kit, this.blobTex); m.root.visible = false; this.scene.add(m.root);
+      let item: THREE.Object3D;
+      if (k === 0) { item = new THREE.Mesh(new THREE.PlaneGeometry(0.2, 0.27), this.cardMat); item.position.y = -0.14; const g = new THREE.Group(); g.add(item); item = g; } // 카드 (실제보다 크게 — 중계 화면에서 보이도록)
+      else { const g = new THREE.Group(), stick = new THREE.Mesh(new THREE.CylinderGeometry(0.012, 0.012, 0.55, 5), new THREE.MeshLambertMaterial({ color: 0x222222 })); stick.position.y = -0.27; const fl = new THREE.Mesh(new THREE.PlaneGeometry(0.34, 0.26), new THREE.MeshBasicMaterial({ color: k === 1 ? 0xffd400 : 0xff5a1f, side: THREE.DoubleSide })); fl.position.set(0.17, -0.41, 0); g.add(stick, fl); item = g; }
+      item.visible = k !== 0; m.hold(item, 1);
+      const st: PoseState = { x: k === 0 ? CX - 6 : k === 1 ? CX + 20 : CX - 20, y: k === 0 ? CY - 8 : k === 1 ? -1.4 : H + 1.4, dir: k === 2 ? -Math.PI / 2 : Math.PI / 2, vx: 0, vy: 0, run: k * 3, kickCD: 0, slide: 0, dive: 0, diveDir: 0, stun: 0, cele: false, role: 'MF', i: 30 + k, kickWind: 0, spin: 0, feint: 0, lunge: 0, head: 0, raise: 0 };
+      this.refs.push({ m, st, kind: k, item });
+    }
+  }
+  refEvent(k: 'card' | 'offside', t = 0, num = 0, kind: 'Y' | 'R' = 'Y') {
+    const sim = this.modelSim; if (!sim) return;
+    if (k === 'card') {
+      const w = sim.team[t]?.find(p => p.num === num) ?? null, mp = w ? this.models.get(w)?.root.position : null, cd = this.refCard; if (!w || !mp) return;
+      cd.who = w; cd.x = clamp(mp.x, 1, W - 1); cd.y = clamp(mp.z, 1, H - 1); cd.t = 3.2; this.cardMat.color.setHex(kind === 'R' ? 0xe11d2a : 0xffd400);
+      const r = this.refs[0]?.st; if (r) { const q = Math.hypot(r.x - cd.x, r.y - cd.y); if (q > 11) { r.x = cd.x + (r.x - cd.x) / q * 9; r.y = cd.y + (r.y - cd.y) / q * 9; } } // 너무 멀리 있었으면 9m 앞에서부터 뛰어온다 (1.2초 안에 닿게)
+    }
+    else this.refFlag[sim.ball.x > CX ? 0 : 1] = 2.0;
+  }
+  /** 주심은 공 뒤 9m·안쪽 대각선에서 따라가고(카드를 줄 땐 그 선수 앞 2.2m까지 뛰어가 오른팔로 든다), 부심은 터치라인 밖에서 뒤에서 둘째 수비수(또는 공) 줄에 선다 */
+  private updateRefs(sim: Sim | null, dt: number, perf: number, paused: boolean) {
+    const show = !!sim && !this.replay && !this.celeCam;
+    for (const r of this.refs) r.m.root.visible = show; if (!sim || !show) return;
+    const b = sim.ball, step = paused ? 0 : Math.min(dt, 0.05); this.refCard.t = Math.max(0, this.refCard.t - step); this.refFlag[0] = Math.max(0, this.refFlag[0] - step); this.refFlag[1] = Math.max(0, this.refFlag[1] - step);
+    const xs = [0, 1].map(t => sim.team[t].filter(p => !p.off).map(p => p.x).sort((a, c) => t === 0 ? a - c : c - a)); // 팀별 자기 골에 가까운 순
+    for (const r of this.refs) {
+      const s = r.st; let tx = s.x, ty = s.y, vmax = 6.6, face: number | null = null, hold = false;
+      if (r.kind === 0) {
+        const cd = this.refCard; if (cd.who && !cd.who.off && (s.raise ?? 0) < 0.05) { cd.x = cd.who.x; cd.y = cd.who.y; } // 카드를 들기 시작하면 그 자리를 향해 든다 (선수가 걸어가도 따라가지 않는다)
+        if (cd.t > 0 && cd.who) { const w = cd, a = Math.atan2(CY - w.y, CX - w.x); tx = w.x + Math.cos(a) * 2.2; ty = w.y + Math.sin(a) * 2.2; vmax = 8.6; face = Math.atan2(w.y - s.y, w.x - s.x); const near = Math.hypot(tx - s.x, ty - s.y) < 2.2 || cd.t < 2.0 || (s.raise ?? 0) > 0; s.raise = near ? clamp((2.0 - Math.min(cd.t, 2.0)) / 0.3 + (cd.t > 2.0 ? 0.01 : 0), 0, 1) * clamp(cd.t / 0.35, 0, 1) : 0; hold = s.raise! > 0.15; }
+        else { s.raise = 0; const ax = b.lastTouch === 0 ? 1 : -1; tx = clamp(b.x - ax * 9, 4, W - 4); ty = clamp(b.y - clamp((b.y - CY) / 8, -1, 1) * 7, 4, H - 4); const q = Math.hypot(tx - b.x, ty - b.y); if (q < 6.5) { const ux = q > 0.1 ? (tx - b.x) / q : -ax, uy = q > 0.1 ? (ty - b.y) / q : 0; tx = b.x + ux * 6.5; ty = b.y + uy * 6.5; } face = Math.atan2(b.y - s.y, b.x - s.x); }
+        r.item.visible = (s.raise ?? 0) > 0.05;
+      } else {
+        const i = r.kind - 1; ty = i === 0 ? -1.4 : H + 1.4; tx = i === 0 ? clamp(Math.max(xs[1][1] ?? CX, b.x), CX, W) : clamp(Math.min(xs[0][1] ?? CX, b.x), 0, CX); vmax = 7.4; face = i === 0 ? Math.PI / 2 : -Math.PI / 2;
+        s.raise = this.refFlag[i] > 0 ? clamp((2.0 - this.refFlag[i]) / 0.25, 0, 1) * clamp(this.refFlag[i] / 0.3, 0, 1) : 0; hold = s.raise > 0.15;
+      }
+      if (step > 0) {
+        let dx = tx - s.x, dy = ty - s.y; const q = Math.hypot(dx, dy), want = hold || q < 0.6 ? 0 : Math.min(vmax, q * 1.7); if (q > 0.01) { dx /= q; dy /= q; }
+        const ax2 = dx * want - s.vx, ay2 = dy * want - s.vy, al = Math.hypot(ax2, ay2), lim = 9 * step, k = al > lim ? lim / al : 1; s.vx += ax2 * k; s.vy += ay2 * k;
+        if (r.kind === 0) for (const p of sim.players) { if (p.off) continue; const ex = s.x - p.x, ey = s.y - p.y, e = Math.hypot(ex, ey); if (e < 1.5 && e > 0.01) { s.x += ex / e * (1.5 - e) * 0.3; s.y += ey / e * (1.5 - e) * 0.3; } } // 선수와 겹치지 않게 비켜 선다
+        s.x += s.vx * step; s.y += s.vy * step; const sp = Math.hypot(s.vx, s.vy); s.run += sp * step;
+        const fd = sp > 2 && !hold ? Math.atan2(s.vy, s.vx) : face ?? s.dir; let dd = fd - s.dir; dd = ((dd % (Math.PI * 2)) + Math.PI * 3) % (Math.PI * 2) - Math.PI; s.dir += clamp(dd, -8 * step, 8 * step);
+      }
+      r.m.setBlob(this.quality === 'low'); r.m.update(s, b, perf);
     }
   }
   private syncModels(sim: Sim) {
@@ -133,7 +188,7 @@ export class ThreeRenderer implements IRenderer {
     }
     const vh = VW / aspect * 1.5;
     // 카메라는 비스듬히 내려다보므로 화면 아래쪽(가까운 터치라인)은 조준점에서 가까운 거리까지만 보인다 → 아래 여유를 따로 계산
-    const hf = this.camera.fov * Math.PI / 360, hc = Math.sin(ELEV) * L + 2, dh = Math.cos(ELEV) * L, near = Math.max(4, dh - hc / Math.tan(ELEV + hf));
+    const hf = this.camera.fov * Math.PI / 360, hc = Math.sin(this.elev) * L + 2, dh = Math.cos(this.elev) * L, near = Math.max(4, dh - hc / Math.tan(this.elev + hf));
     if (sim && ball && sim.M.setTaker && sim.M.setAim && ball.owner === sim.M.setTaker) { // 세트피스 조준: 조준점이 화면 안에 들어오게 조준점 쪽으로 옮긴다 (공이 화면 밖으로 나가지는 않게)
       const ax = sim.M.aimX, ay = sim.M.aimY, hw = VW / 2 - 6, up = vh / 2 - 8, dn = near - 4;
       if (ay > ty + dn) ty = ay - dn; if (ay < ty - up) ty = ay + up; if (ball.y < ty - up) ty = ball.y + up; if (ball.y > ty + dn) ty = ball.y - dn;
@@ -160,7 +215,7 @@ export class ThreeRenderer implements IRenderer {
     } else if (this.mode === 'top') {
       px = cam.x; py = L * 1.7; pz = cam.y + 10; this.camPos.set(px, py, pz); this.camLook.set(lx, 0, lz);
     } else {
-      px = cam.x; py = Math.sin(ELEV) * L + 2; pz = cam.y + Math.cos(ELEV) * L; this.camPos.set(px, py, pz); this.camLook.set(lx, 0.6, lz);
+      px = cam.x; py = Math.sin(this.elev) * L + 2; pz = cam.y + Math.cos(this.elev) * L; this.camPos.set(px, py, pz); this.camLook.set(lx, 0.6, lz);
     }
     cam.shake = Math.max(0, cam.shake - dtR); const sh = cam.shake;
     this.shk.x = sh > 0 ? (Math.random() - 0.5) * sh * 14 : 0; this.shk.y = sh > 0 ? (Math.random() - 0.5) * sh * 10 : 0;
@@ -209,6 +264,7 @@ export class ThreeRenderer implements IRenderer {
       if (this.replay && this.loadFrame(sim, this.replayT)) { ball = this.rBall; sim.players.forEach((p, i) => this.models.get(p)!.update(this.pose[i], ball, perf)); }
       else { ball = sim.ball; for (const m of this.models.values()) { m.root.visible = !m.p.off; if (!m.p.off) m.update(m.p, ball, perf); } }
       this.ball.position.set(ball.x, 0.11 + ball.z, ball.y);
+      this.updateRefs(sim, dtR, perf, paused);
       if (!paused) { const sp = Math.hypot(ball.vx, ball.vy); if (sp > 0.05) { const axis = this.tmpV.set(-ball.vy, 0, ball.vx).normalize(); this.ball.rotateOnWorldAxis(axis, -sp * dtR * (this.replay ? 0.55 : 1) / 0.11); } }
       this.ballShadow.position.set(ball.x + ball.z * 0.12, 0.012, ball.y); const ss = 1 / (1 + ball.z * 0.35); this.ballShadow.scale.set(ss, ss, ss); this.ballShadow.visible = this.quality === 'low' || ball.z > 0.3;
       HU.forEach((h, i) => { const r = this.rings[i]; if (h && h.ctrl && !this.replay && !this.celeCam) { r.visible = true; r.position.x = h.ctrl.x; r.position.z = h.ctrl.y; } else r.visible = false; });

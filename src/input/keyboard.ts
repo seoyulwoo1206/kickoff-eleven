@@ -32,6 +32,7 @@ export interface KeyboardHooks {
   /** F: 카메라 전환 (C는 FC 온라인처럼 수비 자세 키) */
   cycleCamera: () => void;
   cycleView: () => void;
+  cycleCamH?: () => void;
   toggleXt?: () => void;
 }
 export function installKeyboard(h: KeyboardHooks) {
@@ -45,6 +46,7 @@ export function installKeyboard(h: KeyboardHooks) {
     if (e.code === 'Escape' || e.code === 'KeyP') { h.togglePause(); e.preventDefault(); return; }
     if (e.code === 'KeyF' && !e.repeat && !route('KeyF')) { h.cycleCamera(); return; }
     if (e.code === 'KeyR' && !e.repeat && !route('KeyR')) { h.cycleView(); return; }
+    if (e.code === 'KeyT' && !e.repeat && !route('KeyT')) { h.cycleCamH?.(); return; }
     if (e.code === 'KeyG' && !e.repeat && !route('KeyG')) { h.toggleXt?.(); return; }
     if (!h.isPlaying()) return; const r = route(e.code); if (!r) return; e.preventDefault(); keyDown(h.inp[r[0]], r[1], e.repeat);
   });

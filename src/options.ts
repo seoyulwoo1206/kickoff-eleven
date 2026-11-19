@@ -10,11 +10,13 @@ export interface Options { sel: [number, number]; len: number; diff: DiffKey; mo
   stickSprint: boolean; vibrate: boolean; btnSize: 'small' | 'normal' | 'large'; btnAlpha: 'light' | 'normal' | 'solid';
   /** 시야 배율 (1 가깝게 ~ 2.4 전체) */
   view: number;
+  /** 중계 카메라가 내려다보는 각(rad): 0.36 낮게 ~ 0.92 아주 높게 */
+  camH: number;
   /** xT 패널에서 고른 격자·모델·T (패널을 열었는지는 저장하지 않는다) */
   xt: { part: string; model: string; T: string };
   /** 해설: 음성(자막 포함) · 자막만 · 끄기 */
   cmt: 'voice' | 'text' | 'off'; }
-export const opts: Options = { sel: [0, 2], len: 300, diff: 'normal', mode: 'ai', tempo: 'normal', cursor: 'manual', sound: true, gfx: (window.matchMedia && window.matchMedia('(pointer: coarse)').matches) ? 'mid' : 'high', names: 'real', stickSprint: true, vibrate: true, btnSize: 'normal', btnAlpha: 'normal', view: 1.35, xt: { part: 'tree', model: 'dtmc', T: '10' }, cmt: 'voice' };
+export const opts: Options = { sel: [0, 2], len: 300, diff: 'normal', mode: 'ai', tempo: 'normal', cursor: 'manual', sound: true, gfx: (window.matchMedia && window.matchMedia('(pointer: coarse)').matches) ? 'mid' : 'high', names: 'real', stickSprint: true, vibrate: true, btnSize: 'normal', btnAlpha: 'normal', view: 1.35, camH: 0.5, xt: { part: 'tree', model: 'dtmc', T: '10' }, cmt: 'voice' };
 const KEY = 'ko11v2';
 export function loadOpts() {
   try {
@@ -29,5 +31,5 @@ export function loadOpts() {
   if (opts.sel[0] === opts.sel[1]) opts.sel[1] = (opts.sel[0] + 1) % TEAMS.length;
 }
 export function saveOpts() {
-  try { localStorage.setItem(KEY, JSON.stringify({ sel: opts.sel, len: opts.len, diff: opts.diff, mode: opts.mode, snd: opts.sound, tempo: opts.tempo, cursor: opts.cursor, gfx: opts.gfx, names: opts.names, stickSprint: opts.stickSprint, vibrate: opts.vibrate, btnSize: opts.btnSize, btnAlpha: opts.btnAlpha, view: opts.view, xt: opts.xt, cmt: opts.cmt, v2: true })); } catch { /* */ }
+  try { localStorage.setItem(KEY, JSON.stringify({ sel: opts.sel, len: opts.len, diff: opts.diff, mode: opts.mode, snd: opts.sound, tempo: opts.tempo, cursor: opts.cursor, gfx: opts.gfx, names: opts.names, stickSprint: opts.stickSprint, vibrate: opts.vibrate, btnSize: opts.btnSize, btnAlpha: opts.btnAlpha, view: opts.view, camH: opts.camH, xt: opts.xt, cmt: opts.cmt, v2: true })); } catch { /* */ }
 }

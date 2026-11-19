@@ -8,6 +8,8 @@ export interface IRenderer {
   cw: number; ch: number;
   resize(): void;
   puff(x: number, y: number, n: number, sp: number): void;
+  /** 심판 연출: 카드를 꺼내 든다 / 부심이 깃발을 든다 (3D 렌더러만) */
+  refEvent?(k: 'card' | 'offside', t?: number, num?: number, kind?: 'Y' | 'R'): void;
   /** 한 프레임. sim이 없으면 메뉴 배경 */
   render(sim: Sim | null, dtR: number, perf: number, paused: boolean): void;
   /** 경기 시작 시 상태 초기화 (파티클·리플레이 버퍼 등) */
@@ -16,6 +18,8 @@ export interface IRenderer {
   setCamMode?(m: CamMode): void;
   /** 시야 배율: 1 가깝게(가로 38m) ~ 2.4 전체(91m) */
   setView?(v: number): void;
+  /** 중계 카메라가 내려다보는 각(rad) */
+  setElev?(v: number): void;
   /** 최근 프레임 평균 fps (자동 품질 조절용) */
   fps?: number;
 }

@@ -69,7 +69,7 @@ export function kitTextures(kit: Kit, gk: boolean, num: number, name?: string) {
   gb.fillStyle = ink; gb.textAlign = 'center'; gb.textBaseline = 'middle';
   gb.save(); gb.translate(w / 2, 0); gb.scale(0.62, 1); // 몸통이 둥글어 가운데 60%만 정면으로 보인다
   if (name) { gb.font = '700 17px "IBM Plex Sans KR","Saira Condensed",sans-serif'; gb.fillText(name.toUpperCase(), 0, 30); }
-  gb.font = '800 60px "Saira Condensed","Arial Narrow",sans-serif'; gb.fillText(String(num), 0, name ? 74 : 64); gb.restore();
+  gb.font = '800 60px "Saira Condensed","Arial Narrow",sans-serif'; if (num > 0) gb.fillText(String(num), 0, name ? 74 : 64); gb.restore(); // 심판(번호 0)은 등번호 없음
   return { front: tex(cf), back: tex(cb) };
 }
 /** 머리(구)에 입힐 얼굴. 구의 u=0.5가 얼굴 정면, v는 위가 1. 생김새(눈·눈썹·코·입·수염·머리선)는 씨앗 seed에서 — 선수마다 다르다.

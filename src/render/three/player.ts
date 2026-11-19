@@ -6,7 +6,7 @@ import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import type { Player } from '../../sim/types';
 /** 포즈에 필요한 상태. 경기 중엔 Player 그대로, 리플레이 땐 버퍼에서 채운 객체 */
-export interface PoseState { x: number; y: number; dir: number; vx: number; vy: number; run: number; kickCD: number; slide: number; dive: number; diveDir: number; stun: number; cele: boolean; role: string; i: number; kickWind: number; spin: number; feint: number; lunge: number; head: number; }
+export interface PoseState { x: number; y: number; dir: number; vx: number; vy: number; run: number; kickCD: number; slide: number; dive: number; diveDir: number; stun: number; cele: boolean; role: string; i: number; kickWind: number; spin: number; feint: number; lunge: number; head: number; /** 오른팔을 머리 위로 든 정도 0~1 (심판의 카드·부심의 깃발) */ raise?: number; }
 import type { Kit } from '../../data/teams';
 import { kitTextures, faceTexture } from './textures';
 import { clamp } from '../../sim/util';
@@ -120,6 +120,8 @@ export class PlayerModel {
   }
   static keyOf(p: Player) { return p.num + '|' + p.nameEn; }
   setBlob(on: boolean) { this.blob.visible = on; }
+  /** 손에 물건을 쥐여 준다 (i: 0 왼손, 1 오른손) — 아래팔 끝에 붙는다 */
+  hold(obj: THREE.Object3D, i = 1) { obj.position.set(0.02, -FARM - 0.05, 0); this.fore[i].add(obj); }
   /** 상태로 포즈를 만든다. tGlobal은 연출용 시간(초).
       달리기: 허벅지 스윙 + 넘어오는 다리의 무릎 접기 + 디딤발 무릎 완충, 골반·어깨가 서로 반대로 돌고, 가속하면 앞으로·멈추면 뒤로·돌면 안쪽으로 기운다.
       골반 높이는 디딘 발이 땅에 닿게 다리 자세에서 역산한다(달릴 땐 뜨는 구간만큼 더). 자세가 바뀌는 순간(킥·점프·슬라이딩…)은 0.04~0.2초 섞어 넘긴다 */
@@ -213,6 +215,9 @@ export class PlayerModel {
         torso.rotation.set(0, 0, 0.1 * fly * (1 - up)); head.rotation.z = 0.75 * fly * (1 - up);
         leg(0, -0.25 + 1.0 * up * (1 - up) * 4 * 0.3, 0.3 + 0.9 * up * (1 - up) * 4 * 0.5, -0.5); leg(1, 0.1 + 0.9 * up * (1 - up) * 4 * 0.3, 0.45 + 0.8 * up * (1 - up) * 4 * 0.5, -0.5);
         for (const i of [0, 1]) arm(i, 2.0 * fly * (1 - up) + 0.2, 0.55, 0.25 + 0.5 * up);
+      }
+      if (p.raise) { // 심판: 카드(깃발)를 든 오른팔을 곧게 올린다
+        mode = 15; fade = 0.12; const e = p.raise; arm(1, 0.2 + 2.95 * e, 0.06, 0.12 * (1 - e)); arm(0, -0.05, 0.1, 0.2); torso.rotation.z += 0.06 * e;
       }
       if (hold || thrown) { // 스로인: 공을 머리 위로 든 자세, 던진 직후엔 두 팔을 앞으로 뿌린다
         mode = hold ? 8 : 9; fade = 0.06; const k = hold ? 0 : Math.min(1, kickA / 0.35), sw2 = 3.35 - k * 2.1 + (hold ? Math.sin(tGlobal * 3) * 0.04 : 0);

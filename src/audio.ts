@@ -8,6 +8,8 @@ export function ensureAudio() {
   if (!AC) { try { AC = new (window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext)(); } catch { /* 오디오 없음 */ } }
   if (AC && AC.state === 'suspended') AC.resume();
 }
+/** 화면을 나가면(탭 숨김·창 포커스 잃음) 소리를 멈추고, 돌아오면 잇는다 */
+export function audioAway(away: boolean) { if (!AC) return; try { if (away) { if (AC.state === 'running') void AC.suspend(); } else if (AC.state === 'suspended') void AC.resume(); } catch { /* */ } }
 export function crowdStart() {
   if (!audio.on || !AC || crowd) return;
   try {

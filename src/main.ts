@@ -17,7 +17,7 @@ import { Renderer } from './render/canvas2d';
 import { ThreeRenderer } from './render/three/scene';
 import type { IRenderer, CamMode } from './render/types';
 import { opts, loadOpts, saveOpts } from './options';
-import { audio, ensureAudio, crowdStart, crowdStop, crowdSwell, sfx, anthem, anthemStop } from './audio';
+import { audio, ensureAudio, crowdStart, crowdStop, crowdSwell, sfx, anthem, anthemStop, audioAway } from './audio';
 import { showIntro, hideIntro } from './ui/intro';
 import { NET, LOCAL, initPeer, netSend, netClose, netHost, netJoin, netPing } from './net/peer';
 import { makeSnap, netInterp, applyNetInput, encodeInput, type NetMsg, type StartCfg, type Snap, type SnapBuf } from './net/protocol';
@@ -29,7 +29,7 @@ import { applySquadStrength, squadOf, displayName, aliasOf } from './data/squads
 import { RatingTracker, rate, fallbackXt } from './rating';
 import { pitchHtml, tokHtml, halfPos, fullPos, type Tok } from './ui/pitch';
 import { lookOf } from './data/looks';
-import { CMT, CMT_NAME, cmt, cmtTick, cmtStop } from './commentary';
+import { CMT, CMT_NAME, cmt, cmtTick, cmtStop, cmtCtx, cmtReset } from './commentary';
 import { xtAt, has as xtHas } from './xt/table';
 import { defaultTactics, applyFormation, LINE_NAMES, STYLE_NAMES, PRESS_NAMES, type Tactics, type Style } from './sim/tactics';
 import { substitute } from './sim/rules';
@@ -63,6 +63,9 @@ function setView(v: number, save = true) {
   $('viewBtn').textContent = '시야: ' + (Math.abs(near[0] - opts.view) < 0.03 ? near[1] : '×' + opts.view.toFixed(2));
 }
 function cycleView() { const i = VIEWS.findIndex(v => v[0] > opts.view + 0.03); setView(VIEWS[i < 0 ? 0 : i][0]); }
+const CAMH: [number, string][] = [[0.36, '낮게'], [0.5, '보통'], [0.68, '높게'], [0.92, '아주 높게']]; // 중계 카메라가 내려다보는 각(rad)
+function setCamH(v: number, save = true) { opts.camH = v; R.setElev?.(v); if (save) saveOpts(); const n = CAMH.reduce((a, b) => Math.abs(b[0] - v) < Math.abs(a[0] - v) ? b : a); $('camHBtn').textContent = '카메라 높이: ' + n[1]; }
+function cycleCamH() { const i = CAMH.findIndex(c => c[0] > opts.camH + 0.01); setCamH(CAMH[i < 0 ? 0 : i][0]); }
 function cycleCamera() { camMode = CAMS[(CAMS.indexOf(camMode) + 1) % CAMS.length]; R.setCamMode?.(camMode); $('camBtn').textContent = '카메라: ' + CAM_NAME[camMode]; }
 let perf = 0, lastTs = 0, acc = 0, simLast = 0;
 const snapBuf: SnapBuf = { buf: [], off: null };
@@ -103,6 +106,7 @@ function startMatch(cfg?: StartCfg) {
   resetXt(); autoHU = null;
   { const tb = XT.tb, pt = XT.part, md = XT.model, T = XT.T; // 평점: 연구 xT 표가 있으면 그 값으로, 없으면 거리 기반 어림값
     rat = NET.role === 'guest' ? null : new RatingTracker(tb && xtHas(tb, pt, md, T) ? (x, y, t) => xtAt(tb, pt, md, T, x, y, t) : fallbackXt); ratRoster(); subPick = null; subMsg = ''; }
+  cmtReset(); cmtChain.t = -1; cmtTeam = -1; cmtStars = sim ? [0, 1].map(t => { const ps = sim!.team[t].filter(q => q.role !== 'GK' && !q.off); return ps.length ? displayName(ps.reduce((x, y) => (y.ovr > x.ovr ? y : x)), opts.names) : ''; }) as [string, string] : ['', ''];
   introT = (net || opts.mode === 'pk') ? 0 : INTRO_LEN; if (introT > 0) R.setCamMode?.('intro');
   renderPauseTactics();
   if (NET.role === 'guest') { snapBuf.buf = []; snapBuf.off = null; }
@@ -121,42 +125,58 @@ function drain(s: Sim) {
 function applyLocalEv(e: SimEvent, relay: boolean) {
   const ev = (k: string, a?: unknown) => { if (relay && NET.role === 'host' && NET.ready) netSend({ t: 'ev', k, a }); };
   switch (e.k) {
-    case 'banner': showBanner(e.big, e.small, e.ms, e.goal); ev('b', [e.big, e.small, e.ms, e.goal]); cmtBanner(e.big, e.small); break;
-    case 'sfx': sfx(e.type); ev('x', e.type); buzz(e.type); break;
+    case 'banner': showBanner(e.big, e.small, e.ms, e.goal); ev('b', [e.big, e.small, e.ms, e.goal]); cmtBanner(e.big, e.small); if (e.big === 'OFFSIDE') R.refEvent?.('offside'); break;
+    case 'sfx': sfx(e.type); ev('x', e.type); buzz(e.type); if (e.type === 'post') cmt.post(); break;
     case 'crowd': crowdSwell(e.amt, e.dur); ev('c', [e.amt, e.dur]); break;
     case 'puff': R.puff(e.x, e.y, e.n, e.sp); break;
     case 'shake': R.cam.shake = Math.max(R.cam.shake, e.v); break;
     case 'hud': resetHud(); break;
-    case 'card': renderPauseTactics(); ratRoster(); if (e.kind === 'Y' || e.kind === 'R') boo(); break;
-    case 'sub': renderPauseTactics(); ratRoster(); break;
+    case 'card': renderPauseTactics(); ratRoster(); if (e.kind === 'Y' || e.kind === 'R') boo(); R.refEvent?.('card', e.t, e.num, e.kind); if (sim) { const q = sim.team[e.t].find(x => x.num === e.num); cmtSync(); if (q) cmt.card(displayName(q, opts.names), sim.M.teams[e.t].name, e.kind === 'R'); } break;
+    case 'sub': renderPauseTactics(); ratRoster(); if (sim) { const q = sim.team[e.t].find(x => x.num === e.num); if (q) cmt.sub(displayName(q, opts.names)); } break;
     case 'full': fullTime(); break;
     case 'xt': if (rat && sim && !sim.M.so) rat.push(e); cmtXt(e);
       if (XT.tb) { const p = e.e === 'out' || e.e === 'goal' || !sim ? null : sim.team[e.t].find(q => q.num === e.num); xtEvent(e, p ? displayName(p, opts.names) : null, performance.now() / 1000); } break; // 게스트에겐 중계하지 않는다
   }
 }
-/* 해설: 사건 → 한마디 (commentary.ts가 자막·음성으로 낸다) */
+/* 해설: 사건 → 한마디 (commentary.ts가 자막·음성으로 낸다). 여기선 경기 상황(점수·시간·슈팅·점유율·간판 선수)을 넘기고, 공의 흐름에서 역습·볼 돌리기를 가려낸다 */
 let cmtTeam = -1, cmtShotAt = -1e9; // 마지막으로 공을 만진 팀 (끊어냄 판정), 마지막 슛 시각
+const cmtChain = { t: -1, n: 0, x0: 0, at: 0, said: false }; // 한 팀이 끊기지 않고 이어 간 터치: 팀·횟수·시작 위치(자기 골에서 m)·시작 시각·역습을 이미 말했나
+let cmtStars: [string, string] = ['', ''];
+function cmtSync() {
+  if (!sim) return; const M = sim.M, ps = M.stats.poss;
+  cmtCtx({ teams: [M.teams[0].name, M.teams[1].name], score: [M.score[0], M.score[1]], min: Math.floor(M.time / M.len * 90), half: M.half, shots: [M.stats.shots[0], M.stats.shots[1]], poss: ps[0] / Math.max(0.01, ps[0] + ps[1]) * 100, stars: cmtStars });
+}
 function cmtBanner(big: string, small: string) {
-  if (!sim) return; const M = sim.M, sc = `${M.teams[0].name} ${M.score[0]}, ${M.teams[1].name} ${M.score[1]}`;
-  if (big === 'KICK OFF') { if (M.half === 1 && M.time < 2 && M.score[0] + M.score[1] === 0) cmt.start(M.teams[0].name, M.teams[1].name); else if (M.half === 2 && M.time < M.len / 2 + 2) cmt.second(); }
-  else if (big === 'HALF TIME') cmt.half(sc);
-  else if (big === 'FULL TIME') cmt.full(M.score[0] === M.score[1] ? `${M.score[0]} 대 ${M.score[1]}, 무승부입니다` : `${M.teams[M.score[0] > M.score[1] ? 0 : 1].name}의 승리입니다. ${Math.max(M.score[0], M.score[1])} 대 ${Math.min(M.score[0], M.score[1])}`);
+  if (!sim) return; const M = sim.M; cmtSync();
+  if (big === 'KICK OFF') { if (M.half === 1 && M.time < 2 && M.score[0] + M.score[1] === 0) cmt.start(); else if (M.half === 2 && M.time < M.len / 2 + 2) cmt.second(); }
+  else if (big === 'HALF TIME') cmt.half();
+  else if (big === 'FULL TIME') cmt.full();
+  else if (big === 'EXTRA TIME') cmt.extra();
+  else if (big === 'PENALTY SHOOTOUT') cmt.shootout();
   else if (big === 'OFFSIDE') cmt.offside();
-  else if (!big && /경고|퇴장|교체 IN|추가시간/.test(small)) cmt.note(small.replace('교체 IN', '교체 투입,'));
+  else { const m = /추가시간 \+(\d+)분/.exec(small); if (m) cmt.added(+m[1]); }
 }
 function cmtXt(e: Extract<SimEvent, { k: 'xt' }>) {
-  if (!sim || sim.M.so) return; const M = sim.M, p = e.num ? sim.team[e.t].find(q => q.num === e.num) : null, nm = p ? displayName(p, opts.names) : M.teams[e.t].name;
+  if (!sim || sim.M.so) return; const M = sim.M, p = e.num ? sim.team[e.t].find(q => q.num === e.num) : null, nm = p ? displayName(p, opts.names) : M.teams[e.t].name, lx = e.t === 0 ? e.x : 105 - e.x;
+  cmtSync();
+  if (e.e === 'gain' || e.e === 'kick') { // 터치가 이어지는 동안: 자기 진영에서 시작해 6초 안에 상대 진영 깊숙이 가면 역습, 9번 넘게 이어지면 볼 돌리기
+    const now = performance.now();
+    if (cmtChain.t !== e.t) { cmtChain.t = e.t; cmtChain.n = 0; cmtChain.x0 = lx; cmtChain.at = now; cmtChain.said = false; }
+    else if (e.e === 'gain') cmtChain.n++;
+    if (!cmtChain.said && cmtChain.x0 < 42 && lx > 70 && now - cmtChain.at < 6500) { cmtChain.said = true; cmt.counter(M.teams[e.t].name); }
+    else if (cmtChain.n >= 9 && lx < 75) { cmtChain.n = 0; cmt.spell(M.teams[e.t].name); }
+  }
   switch (e.e) {
-    case 'shot': cmtShotAt = performance.now(); cmt.shot(nm, Math.abs((e.t === 0 ? 105 : 0) - e.x) > 24); cmtTeam = e.t; break;
-    case 'save': cmt.save(nm); cmtTeam = e.t; break;
-    case 'goal': cmt.goal(p ? nm : null, `${M.teams[0].name} ${M.score[0]}, ${M.teams[1].name} ${M.score[1]}`); cmtTeam = -1; break;
+    case 'shot': cmtShotAt = performance.now(); cmt.shot(nm, e.t, Math.hypot(105 - lx, e.y - 34)); cmtTeam = e.t; break;
+    case 'save': cmt.save(nm, e.t); cmtTeam = e.t; break;
+    case 'goal': cmt.goal(p ? nm : null, e.t); cmtTeam = -1; cmtChain.t = -1; break;
     case 'clear': if (Math.random() < 0.6) cmt.clear(nm); cmtTeam = e.t; break;
     case 'gain':
       if (cmtTeam >= 0 && cmtTeam !== e.t && p && p.role !== 'GK' && performance.now() - cmtShotAt > 1500) { if (Math.random() < 0.3) cmt.win(nm); }
-      else if (cmtTeam === e.t && (e.t === 0 ? e.x : 105 - e.x) > 84 && Math.abs(e.y - 34) < 16 && Math.random() < 0.3) cmt.chance(M.teams[e.t].name); // 박스 안으로 공이 들어갔다
+      else if (cmtTeam === e.t && lx > 84 && Math.abs(e.y - 34) < 16 && Math.random() < 0.3) cmt.chance(M.teams[e.t].name); // 박스 안으로 공이 들어갔다
       cmtTeam = e.t; break;
     case 'kick': cmtTeam = e.t; break;
-    case 'out': cmtTeam = -1; if (M.spType && M.phase === 'setpiece') cmt.set(M.spType, M.teams[e.t].name); break;
+    case 'out': cmtTeam = -1; cmtChain.t = -1; cmt.out(); if (M.spType && M.phase === 'setpiece') cmt.set(M.spType, M.teams[e.t].name, e.t, M.spType === 'freekick' && Math.hypot(105 - lx, e.y - 34) < 32); break;
   }
 }
 function buzz(type: string) { if (!opts.vibrate || !isTouch || !navigator.vibrate) return; try { if (type === 'goal') navigator.vibrate([80, 40, 120]); else if (type === 'tackle') navigator.vibrate(25); else if (type === 'post') navigator.vibrate(45); } catch { /* */ } }
@@ -235,12 +255,15 @@ function netInterpNow() { if (sim) netInterp(sim, snapBuf, perf, (x, y) => R.puf
 window.setInterval(() => { if (NET.role === 'guest' && state === 'play' && sim) { readInput(INP[0], STEP); const m = encodeInput(INP[0], inSt); if (m) netSend(m); clearPresses(INP[0]); } }, 1000 / 60);
 
 /* ---------- 입력 ---------- */
-installKeyboard({ inp: INP, isPlaying: () => state === 'play', hasLocalP2: () => !!(sim && sim.M.twoP && !NET.role), togglePause: () => { if (state === 'play') pauseGame(); else if (state === 'paused') resumeGame(); }, cycleCamera, cycleView, toggleXt: () => toggleXt() });
+installKeyboard({ inp: INP, isPlaying: () => state === 'play', hasLocalP2: () => !!(sim && sim.M.twoP && !NET.role), togglePause: () => { if (state === 'play') pauseGame(); else if (state === 'paused') resumeGame(); }, cycleCamera, cycleView, cycleCamH, toggleXt: () => toggleXt() });
 installTouch(INP[0], () => { if (!isTouch) { isTouch = true; document.body.classList.add('touch'); if (state === 'play' || state === 'paused') $('touch').hidden = false; } }, () => ({ stickSprint: opts.stickSprint }));
 if (isTouch) document.body.classList.add('touch');
 applyTouchStyle(opts.btnSize, opts.btnAlpha);
 window.addEventListener('blur', () => { for (const I of INP) dropKeys(I); if (state === 'play' && !NET.ready) pauseGame(); }); // 온라인에선 창 포커스만 잃어도 상대를 기다리게 하지 않는다
-document.addEventListener('visibilitychange', () => { if (document.hidden && state === 'play') pauseGame(); });
+document.addEventListener('visibilitychange', () => { if (document.hidden && state === 'play') pauseGame(); setAway(); });
+// 화면을 나가면(다른 탭·다른 앱·창 포커스 잃음) 효과음·관중·해설을 멈추고, 돌아오면 잇는다
+function setAway() { const away = document.hidden || !document.hasFocus(); audioAway(away); CMT.away = away; if (away) cmtStop(); }
+window.addEventListener('blur', setAway); window.addEventListener('focus', setAway); window.addEventListener('pagehide', () => { audioAway(true); CMT.away = true; cmtStop(); });
 
 /* ---------- 전술·교체 UI ---------- */
 // 메뉴의 전술 선택 (팀별). 팀을 바꾸면 그 팀 선수단의 포메이션으로 초기화
@@ -335,7 +358,7 @@ loadKeys(); installKeyCapture();
 $('keysBtn').addEventListener('click', () => { renderKeys(); $('keys').hidden = false; });
 $('keysClose').addEventListener('click', () => { $('keys').hidden = true; });
 bindSeg('segGfx', opts.gfx, v => { opts.gfx = v as typeof opts.gfx; R.setQuality?.(opts.gfx); saveOpts(); });
-$('camBtn').addEventListener('click', cycleCamera); $('viewBtn').addEventListener('click', cycleView); setView(opts.view, false);
+$('camBtn').addEventListener('click', cycleCamera); $('viewBtn').addEventListener('click', cycleView); setView(opts.view, false); $('camHBtn').addEventListener('click', cycleCamH); setCamH(opts.camH, false);
 window.addEventListener('wheel', e => { if (state === 'play' && !e.ctrlKey && !(e.target as HTMLElement | null)?.closest?.('#xtPanel')) setView(opts.view + Math.sign(e.deltaY) * 0.1); }, { passive: true });
 bindSeg('segSnd', audio.on ? 'on' : 'off', v => { audio.on = v === 'on'; opts.sound = audio.on; });
 $('startBtn').addEventListener('click', () => { ensureAudio(); if (opts.mode === 'cup') { openCup(); return; } startMatch(); });
@@ -446,7 +469,7 @@ function frame(ts: number) {
   if (state === 'play' && sim) {
     if (NET.role === 'guest') netInterpNow();
     else if (NET.role !== 'host' && introT <= 0) runSteps(dt);
-    if (sim) { updateHud(sim, LOCAL()); halftimePanel(sim); gauges(sim); cmtTick(); }
+    if (sim) { updateHud(sim, LOCAL()); halftimePanel(sim); gauges(sim); cmtTick(state === 'play' && introT <= 0 && sim.M.phase !== 'full'); }
   } else if (state === 'paused' && NET.role === 'guest' && sim) netInterpNow();
   netPing(perf);
   R.render(sim, dt, perf, state === 'paused');

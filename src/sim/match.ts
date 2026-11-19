@@ -87,12 +87,16 @@ export function kickoff(s: Sim, kt: number) {
   for (const p of players) { if (p.off) continue; let x = p.bx; if (p.role !== 'GK') x = Math.min(x, p.t === kt ? 46 : 41); p.x = wx(x, p.t); p.y = p.by; p.vx = p.vy = 0; p.dir = p.t === 0 ? 0 : Math.PI; p.kickCD = 0; p.stun = 0; p.holdT = 0; p.forcePass = false; p.dive = 0; p.lunge = 0; p.head = 0; p.atFeet = false; p.cele = false; }
   const fw = team[kt].filter(p => p.role !== 'GK' && !p.off), tk = fw[fw.length - 2] ?? fw[0], mate = fw[fw.length - 1] ?? fw[0];
   tk.x = wx(51.7, kt); tk.y = CY; mate.x = wx(50.5, kt); mate.y = CY + 6; tk.dir = kt === 0 ? Math.PI : 0; mate.dir = tk.dir; // 킥오프 두 선수는 자기 진영을 본다
-  placeBall(s, CX, CY); ball.owner = tk; ball.lastTouch = kt; M.setTaker = null; M.dead = null; M.wall = []; M.spots = null; M.overT = 0;
+  placeBall(s, CX, CY); ball.owner = tk; ball.lastTouch = kt; M.setTaker = null; M.wall = []; M.spots = null; M.overT = 0;
+  // 킥오프는 패스로 시작한다: 키커는 찰 때까지 제자리(몰고 나갈 수 없다 — 사람은 방향만 돌리고 패스·롱패스·스루, 8초 넘기면 가까운 동료에게), 상대는 찰 때까지 센터서클 밖
+  M.dead = tk; M.deadT = 0; M.deadR = 9.15; M.setX = CX; M.setY = CY; M.spType = null; M.setAim = false; M.aimMan = null;
+  if (HU[kt]) { M.setTaker = tk; M.setT = 0; }
+  M.spots = new Map(players.filter(p => !p.off && p !== tk && p.role !== 'GK').map(p => [p, { x: p.x, y: p.y }])); // 찰 때까지 모두 자기 진영 제자리 (없으면 수비 팀 공격수가 '역습 출구' 자리를 찾아 센터서클을 가로질러 상대 진영으로 넘어갔다)
   xtEv(s, 'out', kt, 0, CX, CY);
   if (!HU[kt]) { tk.forcePass = true; tk.decT = 0.25; }
   M.phase = 'kickoff'; M.phaseT = 1.3; M.protect = 0; M.adv = null;
   for (const h of HU) { if (!h) continue; h.charging = false; h.charge = 0; h.lock = 0; setCtrl(h, h.t === kt ? tk : nearestOutfield(s, h.t, ball)); }
-  banner(s, 'KICK OFF', '', 1100); sfx(s, 'whistle');
+  banner(s, 'KICK OFF', HU[kt] ? '패스로 시작합니다' : '', 1100); sfx(s, 'whistle');
 }
 export function setPiece(s: Sim, type: SetPieceType, t: number, x: number, y: number) {
   const { M, players, team, ball, HU } = s;
