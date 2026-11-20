@@ -46,7 +46,11 @@ export class PlayerModel {
   /** 이 모델을 만든 선수(교체되면 달라진다 → scene이 다시 만든다) */
   key: string;
   // 움직임 상태: 가속·회전 속도(기울기), 서 있음↔달리기 섞기, 자세가 바뀔 때 0.1초쯤 섞어 넘기기
-  private L = { t: -1, sp: 0, dir: 0, acc: 0, turn: 0, a: 0, cr: 0, look: 0, mode: -1, mix: 1, dur: 0.12 };
+  private L = { t: -1, sp: 0, dir: 0, acc: 0, turn: 0, a: 0, cr: 0, look: 0, mode: -1, mix: 1, dur: 0.12, run: 0, ph: 0, kcd: 0, k0: 0, drb: 0, tl: 0 };
+  /** 달리기 주기의 위상(rad) — 공을 발에 붙인 드리블의 터치 박자를 `scene.ts`가 여기에 맞춘다 */
+  get stepPh() { return this.L.ph; }
+  /** 차는 발: 0 왼발, 1 오른발(로컬 +Z쪽) */
+  get kickFoot() { return this.p.foot === 'L' ? 0 : 1; }
   private bones: THREE.Object3D[] = []; private cur = new Float32Array(45); private snap = new Float32Array(45);
   constructor(public p: Player, kit: Kit, blobTex: THREE.Texture, backName?: string) {
     const gk = p.role === 'GK', skin = p.skin, vc = vcMat();
@@ -125,7 +129,7 @@ export class PlayerModel {
   /** 상태로 포즈를 만든다. tGlobal은 연출용 시간(초).
       달리기: 허벅지 스윙 + 넘어오는 다리의 무릎 접기 + 디딤발 무릎 완충, 골반·어깨가 서로 반대로 돌고, 가속하면 앞으로·멈추면 뒤로·돌면 안쪽으로 기운다.
       골반 높이는 디딘 발이 땅에 닿게 다리 자세에서 역산한다(달릴 땐 뜨는 구간만큼 더). 자세가 바뀌는 순간(킥·점프·슬라이딩…)은 0.04~0.2초 섞어 넘긴다 */
-  update(p: PoseState, ball: { x: number; y: number; z?: number; vx?: number; vy?: number; owner?: Player | null; passTarget?: unknown; kicker?: unknown }, tGlobal: number) {
+  update(p: PoseState, ball: { x: number; y: number; z?: number; vx?: number; vy?: number; owner?: Player | null; passTarget?: unknown; kicker?: unknown; knock?: unknown }, tGlobal: number) {
     const r = this.root, L = this.L, TAU = Math.PI * 2;
     r.position.set(p.x, 0, p.y); r.rotation.set(0, -p.dir, 0);
     const sp = Math.hypot(p.vx, p.vy), aT = clamp((sp - 0.3) / 1.3, 0, 1);
@@ -133,9 +137,15 @@ export class PlayerModel {
     if (cut) { L.acc = 0; L.turn = 0; L.a = aT; L.cr = 0; }
     else if (dt > 0) { const k = 1 - Math.exp(-dt * 7); L.acc += (clamp((sp - L.sp) / dt, -14, 14) - L.acc) * k; let dd = p.dir - L.dir; dd = ((dd % TAU) + TAU * 1.5) % TAU - Math.PI; L.turn += (clamp(dd / dt, -8, 8) - L.turn) * k; L.a += (aT - L.a) * (1 - Math.exp(-dt * 9)); }
     L.sp = sp; L.dir = p.dir;
-    const a = L.a, idle = 1 - a, u = clamp((sp - 3.6) / 3.8, 0, 1), stride = clamp(sp / 8, 0.22, 1.25) * a, ph = p.run * 2.6; // a: 0 서 있음 → 1 움직임, u: 0 조깅 → 1 질주
+    // 보폭: 한 주기(두 걸음)에 가는 거리는 빠를수록 길다 — 걷기 1.8m·조깅 2.7m·질주 4m (초당 2~4.3걸음). 전엔 늘 2.42m라 질주하면 초당 6.6걸음으로 종종걸음이었다
+    const cyc = clamp(1.5 + 0.3 * sp, 1.8, 4.2); { let dr = p.run - L.run; L.run = p.run; if (cut || dr < 0 || dr > 2) dr = 0; L.ph = (L.ph + dr * TAU / cyc) % TAU; }
+    const a = L.a, idle = 1 - a, u = clamp((sp - 3.6) / 3.8, 0, 1), stride = clamp(sp / 8, 0.22, 1.25) * a, ph = L.ph, amp = cyc / 5.2 * a; // a: 0 서 있음 → 1 움직임, u: 0 조깅 → 1 질주, amp: 허벅지 스윙(디딘 발이 땅을 미는 속도가 달리는 속도와 맞게)
     const own = !!ball.owner && (ball.owner as unknown as PoseState) === p;
-    const kickA = p.kickCD > 0 ? (0.3 - p.kickCD) / 0.3 : -1; // 0→1 킥 진행
+    // 드리블 터치(질주 드리블로 공을 앞에 차 놓음 — kickCD 0.12~0.22)는 킥 자세로 바꾸지 않고 달리던 그대로 간다. 전엔 터치마다(초당 2.5번) 킥 자세가 달리기를 덮어 질주 드리블 시간의 34%가 킥 자세였다
+    if (cut) L.k0 = p.kickCD > 0 ? 0.3 : 0; else if (p.kickCD > L.kcd + 0.02) { L.k0 = p.kickCD; L.tl = Math.cos(ph) > 0 ? 0 : 1; } else if (p.kickCD <= 0) L.k0 = 0; L.kcd = p.kickCD;
+    const touch = L.k0 > 0 && L.k0 <= 0.23 && p.kickCD > 0;
+    const drbT = own || (ball.knock === p && Math.hypot(ball.x - p.x, ball.y - p.y) < 3.5) ? 1 : 0; if (cut) L.drb = drbT; else L.drb += (drbT - L.drb) * (1 - Math.exp(-dt * 10)); const drb = L.drb; // 공을 몰고 있다 (차 놓고 쫓는 동안도) — 숙임·팔 벌림이 터치마다 깜빡이지 않게 부드럽게
+    const kickA = p.kickCD > 0 && !touch ? (0.3 - p.kickCD) / 0.3 : -1; // 0→1 킥 진행
     const wind = p.kickWind > 0 ? Math.min(1, p.kickWind / 0.1) : 0; // 와인드업: 발을 뒤로
     const gk = p.role === 'GK', K = this.p.foot === 'L' ? 0 : 1, S = 1 - K, sg = K === 1 ? 1 : -1; // K: 차는 발(1 = 오른발, 로컬 +Z쪽), S: 디딤발
     const body = this.body, hips = this.hips, torso = this.torso, head = this.head, thigh = this.thigh, shin = this.shin;
@@ -157,17 +167,18 @@ export class PlayerModel {
     } else {
       // ── 걷기·달리기 ──
       for (const i of [0, 1]) { const f = ph + i * Math.PI, s = Math.sin(f), c = Math.cos(f);
-        const th = (0.6 + 0.22 * u) * stride * s + 0.1 * u * stride;
+        const th = amp * s + 0.1 * u * stride;
         const kn = 0.1 + (0.8 + 0.85 * u) * stride * Math.pow(Math.max(0, Math.cos(f + 0.3)), 1.25) + (0.18 + 0.2 * u) * stride * Math.max(0, -c) ** 2; // 넘어오는 다리는 뒤꿈치가 엉덩이 쪽으로, 디딘 다리는 살짝 굽혀 받는다
         leg(i, th, kn, 0.08 - 0.5 * stride * Math.max(0, -s) ** 2 + 0.2 * stride * Math.max(0, s) * Math.max(0, c), 0.035 * idle); }
+      if (touch) { const e = Math.sin(Math.PI * clamp(1 - p.kickCD / L.k0, 0, 1)), i = L.tl; thigh[i].rotation.z += 0.2 * e; shin[i].rotation.z = Math.min(-0.05, shin[i].rotation.z + 0.35 * e); } // 드리블 터치: 앞으로 넘어오던 다리를 조금 더 뻗어 공을 민다
       const near = bq < 22 ? 1 : 0.35, tap = tGlobal * 5.4 + p.i * 1.3; // 서 있을 땐 무릎을 풀고 제자리에서 발을 구른다 (공이 가까우면 더)
       if (idle > 0.01) for (const i of [0, 1]) { const z = Math.max(0, Math.sin(tap + i * Math.PI)); thigh[i].rotation.z += idle * near * (0.07 + 0.05 * z); shin[i].rotation.z -= idle * near * (0.19 + 0.13 * z); }
-      const s0 = Math.sin(ph), lean = (0.05 + 0.17 * clamp(sp / 8, 0, 1)) * a + (own ? 0.1 : 0) + 0.03 * idle;
+      const s0 = Math.sin(ph), lean = (0.05 + 0.17 * clamp(sp / 8, 0, 1)) * a + 0.1 * drb + 0.03 * idle;
       body.rotation.z = -clamp(L.acc * 0.02, -0.13, 0.2) * a; body.rotation.x = clamp(L.turn * sp * 0.011, -0.26, 0.26); // 가속하면 앞으로·멈추면 뒤로, 돌면 안쪽으로 기운다
       hips.rotation.y = -0.13 * s0 * stride; hips.rotation.x = 0.045 * Math.cos(ph) * stride;
       torso.rotation.set(-hips.rotation.x * 0.8, 0.36 * s0 * stride * (0.6 + 0.4 * u), -lean + Math.sin(tGlobal * 1.7 + p.i) * 0.012 * idle); // 어깨는 골반과 반대로 돈다
       const el0 = 0.28 + 0.95 * clamp(sp / 4.2, 0, 1) + 0.25 * u, Aa = (0.3 + 0.6 * u) * stride + 0.12 * a;
-      for (const i of [0, 1]) { const s = -Math.sin(ph + i * Math.PI); arm(i, s * Aa - 0.08 * a + 0.03, 0.2 - 0.06 * u + (own ? 0.2 : 0) + 0.04 * idle, el0 + 0.3 * Math.max(0, s) * stride + 0.08 * idle * Math.sin(tGlobal * 1.3 + i * 2 + p.i)); }
+      for (const i of [0, 1]) { const s = -Math.sin(ph + i * Math.PI); arm(i, s * Aa - 0.08 * a + 0.03, 0.2 - 0.06 * u + 0.2 * drb + 0.04 * idle, el0 + 0.3 * Math.max(0, s) * stride + 0.08 * idle * Math.sin(tGlobal * 1.3 + i * 2 + p.i)); }
       // 수비 자세: 공 가진 상대가 가까우면 무릎을 굽히고 팔을 벌려 낮춘다
       const o = ball.owner as Player | null | undefined, crT = !own && !gk && !!o && o.t !== this.p.t && bq < 5.5 && sp < 5.2 ? 1 : 0;
       L.cr += (crT - L.cr) * (1 - Math.exp(-dt * 8)); if (cut) L.cr = crT;
