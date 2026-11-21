@@ -316,10 +316,12 @@ function fillRatings() {
   const r = rate(rat), M = sim.M; if (r.list.length < 12 || !r.mvp) { el.hidden = true; return; }
   const by = new Map(r.list.map(p => [p.t + ':' + p.num, p])), bc = (v: number) => v >= 8 ? 'r9' : v >= 7 ? 'r7' : v >= 6 ? 'r6' : 'r5';
   const toks: Tok[] = sim.players.map(p => { const q = fullPos(p.bx, p.by, p.t), v = by.get(p.t + ':' + p.num); return { id: 'r' + p.t + p.i, num: p.num, name: displayName(p, opts.names), kit: p.role === 'GK' ? M.kit[p.t].gk : M.kit[p.t].c1, skin: p.skin, hair: p.hair, x: q.x, y: q.y, badge: v ? v.rating.toFixed(1) : '-', badgeCls: v ? bc(v.rating) : '', cls: 'stat ' + (v === r.mvp ? 'mvp ' : '') + (p.off ? 'dim' : '') }; });
-  const gone = r.list.filter(p => !sim!.players.some(q => q.t === p.t && q.num === p.num)), m = r.mvp;
+  const gone = r.list.filter(p => !sim!.players.some(q => q.t === p.t && q.num === p.num)).sort((a, b) => a.t - b.t), m = r.mvp;
+  const outTok = (p: typeof m) => { const T = M.teams[p.t], d = squadOf(T)?.players.find(q => q.num === p.num), lk = d ? lookOf(T.code, d.nameEn, d.num) : null; // 나간 선수의 Player 객체는 들어온 선수로 덮였으므로 선수단 자료에서 겉모습을 찾는다
+    return tokHtml({ id: 'o' + p.t + p.num, num: p.num, name: p.name, kit: p.role === 'GK' ? M.kit[p.t].gk : M.kit[p.t].c1, skin: lk?.skin ?? '#d2a27c', hair: lk?.hair ?? '#2a2018', sub: '▼ ' + T.code, badge: p.rating.toFixed(1), badgeCls: bc(p.rating), cls: 'stat ' + (p === m ? 'mvp' : '') }); };
   el.innerHTML = `<div class="mvpline"><em>★ 최우수 선수</em><b>${m.name}</b><span>${M.teams[m.t].code} · 평점 ${m.rating.toFixed(1)}${m.goals ? ` · ${m.goals}골` : ''}${m.assists ? ` · ${m.assists}도움` : ''}${m.saves ? ` · 선방 ${m.saves}` : ''}${m.recov + m.clears ? ` · 공 따냄 ${m.recov + m.clears}` : ''}</span></div>`
     + pitchHtml(toks, 'full')
-    + (gone.length ? `<p class="ratenote">교체로 나간 선수: ${gone.map(p => `${M.teams[p.t].code} ${p.name} ${p.rating.toFixed(1)}`).join(' · ')}</p>` : '')
+    + (gone.length ? `<div class="outrow"><span class="label">교체로 나간 선수</span><div class="benchrow">${gone.map(outTok).join('')}</div></div>` : '') // 경기장 그림과 같은 말로 (전엔 작은 글자 한 줄이라 안 보였다)
     + `<p class="ratenote">평점 = 공격(패스·드리블로 올린 xT, 골·도움) + 수비(공을 따낸 자리에서 상대가 갖고 있던 xT, 걷어내기·선방) − 잃은 공. 수비수는 자기 구역에서 내준 위협과 슈팅이 적을수록 높습니다.${XT.tb ? '' : ' (xT 표가 없어 골까지 거리로 어림한 값을 씁니다.)'}</p>`;
   el.hidden = false;
 }
