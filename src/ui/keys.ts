@@ -6,6 +6,8 @@ const LABELS: [Key, string][] = [['up', '위'], ['down', '아래'], ['left', '�
 let waiting: Key | null = null;
 const pretty = (code: string) => code.replace(/^Key|^Arrow|^Digit/, '').replace('Space', '스페이스').replace('ShiftLeft', 'L-Shift').replace('Period', '.').replace('Comma', ',');
 export function loadKeys() { try { const m = JSON.parse(localStorage.getItem('ko11keys') || 'null'); if (m && typeof m === 'object') setK1(m); } catch { /* */ } }
+/** 액션에 묶인 (첫) 키의 이름 — 화면 안내용 */
+export function keyOf(k: Key) { const c = Object.entries(K1).find(([, v]) => v === k); return c ? pretty(c[0]) : ''; }
 export function renderKeys() {
   const inv = new Map<Key, string[]>(); for (const [code, k] of Object.entries(K1)) { if (!inv.has(k)) inv.set(k, []); inv.get(k)!.push(code); }
   $('keyList').innerHTML = LABELS.map(([k, l]) => `<div class="keyrow"><span>${l}</span><button class="ghost small" data-k="${k}">${waiting === k ? '키를 누르세요…' : (inv.get(k) || []).map(pretty).join(' / ') || '-'}</button></div>`).join('');

@@ -11,7 +11,7 @@ import { installTouch, touchGauge, applyTouchStyle } from './input/touch';
 import { openLineup, closeLineup } from './ui/lineup';
 import { newCup, loadCup, saveCup, userFixture, advance, type Cup } from './cup';
 import { renderCup } from './ui/cup';
-import { loadKeys, renderKeys, installKeyCapture } from './ui/keys';
+import { loadKeys, renderKeys, installKeyCapture, keyOf } from './ui/keys';
 import { boo } from './audio';
 import { Renderer } from './render/canvas2d';
 import { ThreeRenderer } from './render/three/scene';
@@ -198,7 +198,7 @@ function resumeGame(remote?: boolean) { if (state !== 'paused') return; state = 
 function toMenu(remote?: boolean) {
   cmtStop();
   if (remote !== true && NET.ready && state !== 'menu') netSend({ t: 'quit' });
-  state = 'menu'; sim = null; crowdStop(); XT.all = false; xtSync();
+  state = 'menu'; sim = null; $('skipHint').hidden = true; crowdStop(); XT.all = false; xtSync();
   $('pause').hidden = true; $('result').hidden = true; $('hud').hidden = true; $('pauseBtn').hidden = true; $('touch').hidden = true; $('menu').hidden = false; hideBanner(); renderMenu();
 }
 function showPing() { const el = $('hPing'); if (NET.rtt >= 0) el.textContent = '핑 ' + NET.rtt + 'ms'; if (state === 'menu' && NET.ready) netStatus('연결됨' + (NET.rtt >= 0 ? ' · 핑 ' + NET.rtt + 'ms' : '') + (NET.role === 'host' ? ' · 팀을 고르고 킥오프를 누르세요.' : ' · 호스트가 킥오프하면 시작돼요.'), true); }
@@ -482,7 +482,7 @@ function frame(ts: number) {
   if (state === 'play' && sim) {
     if (NET.role === 'guest') netInterpNow();
     else if (NET.role !== 'host' && introT <= 0) runSteps(dt);
-    if (sim) { updateHud(sim, LOCAL()); halftimePanel(sim); gauges(sim); cmtTick(state === 'play' && introT <= 0 && sim.M.phase !== 'full'); }
+    if (sim) { updateHud(sim, LOCAL()); halftimePanel(sim); gauges(sim); skipHint(sim); cmtTick(state === 'play' && introT <= 0 && sim.M.phase !== 'full'); }
   } else if (state === 'paused' && NET.role === 'guest' && sim) netInterpNow();
   netPing(perf);
   R.render(sim, dt, perf, state === 'paused');
@@ -505,6 +505,12 @@ function halftimePanel(s: Sim) {
   else if (!on && htShown) { htShown = false; $('htStats').hidden = true; }
 }
 // 터치 버튼 게이지: 슛 파워, 패스·롱패스 누른 시간
+/** 골 세리머니·리플레이 중: '패스 키 길게 = 건너뛰기' 안내 (실제 건너뛰기는 시뮬 `step`의 goal 분기) */
+function skipHint(s: Sim) {
+  const el = $('skipHint'), M = s.M, on = state === 'play' && M.phase === 'goal' && !M.so && !!s.HU[LOCAL()];
+  if (el.hidden === on) { el.hidden = !on; if (on) el.textContent = isTouch ? `${$('bA').textContent || '패스'} 버튼 길게 · 건너뛰기` /* 버튼 글자는 상황(공격 패스·수비 전환)에 따라 바뀐다 */ : `${keyOf('pass') || '패스 키'} 길게 · 건너뛰기`; }
+  if (on) el.classList.toggle('on', INP[0].down.pass);
+}
 function gauges(s: Sim) {
   if (!isTouch) return; const h = s.HU[LOCAL()], I = INP[0]; if (!h) return;
   touchGauge('bB', h.charging ? h.charge : 0, h.charge > 0.8);

@@ -179,6 +179,8 @@ function attackOn(s: Sim) {
   if (!o && ball.isShot) return true;
   return wx(ball.x, t) > 60 && !(M.dead && M.spType === 'goalkick');
 }
+/** 골 뒤 세리머니·리플레이를 건너뛰려고 패스 키를 누르고 있어야 하는 시간(초) */
+export const SKIP_HOLD = 0.45;
 const OVER_MAX = 10; // 마지막 공격을 지켜보는 최대 시간 (실제 초)
 /** 한 틱. dt는 시뮬 시간(초). 경기 시계는 dt/tempo로 실제 시간을 따른다 */
 export function step(s: Sim, dt: number) {
@@ -199,7 +201,10 @@ export function step(s: Sim, dt: number) {
     }
   }
   else if (ph === 'kickoff' || ph === 'setpiece') { M.phaseT -= dt; if (M.phaseT <= 0) { M.phase = 'live'; M.protect = Math.max(M.protect, 1.2); } }
-  else if (ph === 'goal') { M.phaseT -= dt; if (M.phaseT <= 0) { if (M.so) soRecord(s, true); else kickoff(s, M.nextKick); } }
+  else if (ph === 'goal') { M.phaseT -= dt;
+    // 세리머니·리플레이 건너뛰기: 사람이 패스 키를 SKIP_HOLD초 넘게 누르고 있으면 바로 킥오프 (골이 들어가는 순간은 보이게 0.5초 뒤부터, 승부차기는 제외)
+    if (!M.so && M.phaseT > 0 && M.phaseT < 8.5) for (const h of HU) if (h && INP[h.t].down.pass && INP[h.t].holdT.pass > SKIP_HOLD) { M.phaseT = 0; M.slow = 0; banner(s, '', '', 50); break; }
+    if (M.phaseT <= 0) { if (M.so) soRecord(s, true); else kickoff(s, M.nextKick); } }
   else if (ph === 'halftime') { M.phaseT -= dt; if (M.phaseT <= 0) { if (M.half === 1) { M.half = 2; M.time = M.len / 2; } kickoff(s, (M.half === 2 || M.half === 4) ? 1 - M.firstKick : M.firstKick); } }
   else if (ph === 'full') return;
   for (const h of HU) { if (!h) continue; const I = INP[h.t], ours = oursBall(s, h.t); if (I.press.pass) h.armP = ours; if (I.press.lob) h.armL = ours; } // 패스·롱패스는 우리 공일 때 누른 것만 (떼는 순간 나가므로)
