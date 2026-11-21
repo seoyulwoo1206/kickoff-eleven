@@ -29,7 +29,7 @@ import { applySquadStrength, squadOf, displayName, aliasOf } from './data/squads
 import { RatingTracker, rate, fallbackXt } from './rating';
 import { pitchHtml, tokHtml, halfPos, fullPos, type Tok } from './ui/pitch';
 import { lookOf } from './data/looks';
-import { CMT, CMT_NAME, cmt, cmtTick, cmtStop, cmtCtx, cmtReset } from './commentary';
+import { CMT, CMT_NAME, cmt, cmtTick, cmtStop, cmtCtx, cmtReset, cmtVoiceInfo, cmtVoiceSet, cmtSample } from './commentary';
 import { xtAt, has as xtHas } from './xt/table';
 import { defaultTactics, applyFormation, LINE_NAMES, STYLE_NAMES, PRESS_NAMES, type Tactics, type Style } from './sim/tactics';
 import { substitute } from './sim/rules';
@@ -191,7 +191,7 @@ function fullTime() {
   if (NET.role !== 'guest') { const M = sim.M; showBanner('FULL TIME', `${M.teams[0].code} ${M.score[0]} - ${M.score[1]} ${M.teams[1].code}`, 1400, false); }
 }
 function pauseGame(remote?: boolean) {
-  if (state !== 'play') return; state = 'paused'; $('pause').hidden = false; renderPauseTactics(); $('soundBtn').textContent = audio.on ? '소리 끄기' : '소리 켜기'; $('restartBtn').hidden = NET.role === 'guest';
+  if (state !== 'play') return; state = 'paused'; $('pause').hidden = false; renderPauseTactics(); cmtLabel(); $('soundBtn').textContent = audio.on ? '소리 끄기' : '소리 켜기'; $('restartBtn').hidden = NET.role === 'guest';
   for (const I of INP) dropKeys(I); ($('resumeBtn') as HTMLButtonElement).focus(); if (remote !== true && NET.ready) netSend({ t: 'pause' });
 }
 function resumeGame(remote?: boolean) { if (state !== 'paused') return; state = 'play'; $('pause').hidden = true; lastTs = 0; simLast = 0; if (remote !== true && NET.ready) netSend({ t: 'resume' }); }
@@ -368,8 +368,19 @@ $('restartBtn').addEventListener('click', () => startMatch());
 $('soundBtn').addEventListener('click', () => { audio.on = !audio.on; opts.sound = audio.on; CMT.sound = audio.on; if (!audio.on) cmtStop(); $('soundBtn').textContent = audio.on ? '소리 끄기' : '소리 켜기'; ensureAudio(); if (audio.on) crowdStart(); else crowdStop(); });
 $('quitBtn').addEventListener('click', () => toMenu());
 // 해설: 음성(자막 포함) → 자막만 → 끄기
-CMT.mode = opts.cmt; CMT.sound = opts.sound; $('cmtBtn').textContent = '해설: ' + CMT_NAME[CMT.mode];
-$('cmtBtn').addEventListener('click', () => { const order = ['voice', 'text', 'off'] as const; CMT.mode = opts.cmt = order[(order.indexOf(CMT.mode) + 1) % 3]; $('cmtBtn').textContent = '해설: ' + CMT_NAME[CMT.mode]; if (CMT.mode !== 'voice') cmtStop(); saveOpts(); });
+CMT.mode = opts.cmt; CMT.sound = opts.sound; CMT.voice = opts.voice;
+/** 해설 버튼 글자: 한국어 목소리가 둘 이상이면 몇 번째 목소리인지도 (목소리 목록은 늦게 오므로 일시정지를 열 때 다시 쓴다) */
+function cmtLabel() { const v = cmtVoiceInfo(); $('cmtBtn').textContent = '해설: ' + CMT_NAME[CMT.mode] + (CMT.mode === 'voice' && v.n > 1 ? ` ${v.i + 1}/${v.n}` : ''); }
+cmtLabel();
+// 누를 때마다: 음성 1 → 음성 2 → … → 자막 → 끄기. 목소리를 바꾸면 그 목소리로 한마디 들려준다
+$('cmtBtn').addEventListener('click', () => {
+  const v = cmtVoiceInfo();
+  if (CMT.mode === 'voice' && v.i < v.n - 1) { opts.voice = cmtVoiceSet(v.i + 1); cmtSample(); }
+  else if (CMT.mode === 'voice') { CMT.mode = opts.cmt = 'text'; cmtStop(); }
+  else if (CMT.mode === 'text') { CMT.mode = opts.cmt = 'off'; cmtStop(); }
+  else { CMT.mode = opts.cmt = 'voice'; opts.voice = cmtVoiceSet(0); if (v.n > 1) cmtSample(); }
+  cmtLabel(); saveOpts();
+});
 $('againBtn').addEventListener('click', () => { ensureAudio(); startMatch(); });
 $('menuBtn2').addEventListener('click', () => toMenu());
 $('hostBtn').addEventListener('click', () => { ensureAudio(); netHost(); });

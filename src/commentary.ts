@@ -1,10 +1,10 @@
 /* 해설 (32차에 다시 씀): 캐스터(중계)와 해설위원 두 사람이 말한다. 화면 위 자막(#cmt) + 브라우저 음성 합성(한국어 목소리가 있을 때만).
-   시뮬과 무관(사건을 듣기만 한다). 자막을 그대로 읽지 않는다 — 말(say)은 따로 쓰고, 장면의 흥분도 ex(0 차분 ~ 1 절정)로 빠르기·높이를 바꾼다.
+   시뮬과 무관(사건을 듣기만 한다). 말(say)을 따로 쓸 수 있고, 장면의 흥분도 ex(0 차분 ~ 1 절정)로 빠르기(1.0~1.2)·크기만 바꾼다(높이는 안 바꾼다).
    경기 상황(점수·시간·슈팅·점유율·선방 수·코너킥 수·누가 몇 골)을 기억해 같은 사건도 다르게 말한다: 선제골/동점골/역전골/쐐기골/추격골·극장골·멀티골·해트트릭,
    슛 → 선방/골대/빗나감, 역습, 볼 돌리기, 조용한 시간의 한마디(기록 소개), 카드·교체·추가시간.
-   중요도 pri: 1 흐름 · 2 장면 · 3 골·휘슬 — 덜 중요한 말은 앞말이 끝날 때까지 참는다. 해설위원의 뒷말은 `later`에 넣어 1.8~3초 뒤에 */
+   중요도 pri: 1 흐름 · 2 장면 · 3 골·휘슬 — 덜 중요한 말은 앞말이 끝날 때까지 참고, 더 큰 장면만 앞말을 끊는다. 해설위원의 뒷말은 `later`에 넣어 1.8~3초 뒤에 */
 export type CmtMode = 'voice' | 'text' | 'off';
-export const CMT = { mode: 'voice' as CmtMode, sound: true, /** 화면을 나가 있다 (말하지 않는다) */ away: false };
+export const CMT = { mode: 'voice' as CmtMode, sound: true, /** 화면을 나가 있다 (말하지 않는다) */ away: false, /** 고른 캐스터 목소리 `순번|voiceURI` ('' = 알아서) */ voice: '' };
 export const CMT_NAME: Record<CmtMode, string> = { voice: '음성', text: '자막', off: '끄기' };
 export interface CmtCtx { teams: [string, string]; score: [number, number]; /** 경기 시계(분) */ min: number; half: number; shots: [number, number]; /** 팀 0 점유율 % */ poss: number; /** 팀별 간판 선수 */ stars: [string, string]; }
 
@@ -25,35 +25,54 @@ const later: { at: number; ep: number; fn: () => void }[] = [];
 /** 해설위원의 뒷말: ms 뒤에, 그사이 큰 장면(골·휘슬)이 없었으면 */
 const after = (ms: number, fn: () => void) => { later.push({ at: now() + ms, ep: B.ep, fn }); };
 export function cmtCtx(c: CmtCtx) { ctx = c; for (const t of [0, 1]) if (c.score[t] < c.score[1 - t]) B.trailed[t] = true; }
-export function cmtReset() { B = fresh(); later.length = 0; lastPri = 0; lastAt = -1e9; }
+export function cmtReset() { B = fresh(); later.length = 0; lastPri = 0; lastAt = -1e9; wait = null; }
 
-/* ── 목소리 ── */
-let hideAt = 0, lastAt = -1e9, lastPri = 0, tried = 0, voices: [SpeechSynthesisVoice | null, SpeechSynthesisVoice | null] = [null, null], spTok = 0;
+/* ── 목소리 ── (35차: 높이를 올려 읽지 않고, 같은 급의 말은 끊지 않는다)
+   전엔 흥분할수록 빠르기 1.52배·높이 1.5배로 읽어 아이 목소리처럼 들렸고(합성 음성의 높이를 바꾸면 소리도 거칠어진다),
+   장면(pri 2)마다 앞말을 `cancel`로 끊어 말 중간이 뚝뚝 잘렸다(슛 → 선방 → 빗나감이 1초 간격). */
+let hideAt = 0, lastAt = -1e9, lastPri = 0, spTok = 0, curPri = 0, holdUntil = 0, busyUntil = 0;
+type Part = [string, number]; // [말, 흥분도 0~1]
+/** 앞말이 끝나기를 기다리는 한마디 (하나만 — 새 말이 오면 바뀐다) */
+let wait: { parts: Part[]; who: 0 | 1; pri: number; at: number } | null = null;
 const box = () => document.getElementById('cmt');
 const canSpeak = () => typeof window !== 'undefined' && 'speechSynthesis' in window;
-/** 캐스터·해설위원 목소리 고르기: 자연스러운(온라인·Natural) 목소리와 남성 목소리를 먼저. 목소리가 하나뿐이면 해설위원은 같은 목소리를 낮게 */
-function pickVoices() {
-  if (voices[0] || tried > 60 || !canSpeak()) return voices; tried++;
-  const sc = (v: SpeechSynthesisVoice) => (/Natural|Online|Neural/i.test(v.name) ? 4 : 0) + (/InJoon|Hyunsu|BongJin|GookMin|Male|남성/i.test(v.name) ? 3 : 0) + (/Google/i.test(v.name) ? 2 : 0) + (v.localService ? 1 : 0);
-  const ko = window.speechSynthesis.getVoices().filter(v => /^ko/i.test(v.lang)).sort((a, b) => sc(b) - sc(a));
-  if (ko.length) voices = [ko[0], ko[1] ?? null];
-  return voices;
+/** 한국어 목소리, 좋은 순서: 자연스러운(Natural·Neural) 목소리 → 남성 → 기기에 깔린 목소리 → 구글 온라인(전송된 소리라 거칠다) */
+function koVoices(): SpeechSynthesisVoice[] {
+  if (!canSpeak()) return [];
+  const sc = (v: SpeechSynthesisVoice) => (/Natural|Neural/i.test(v.name) ? 5 : 0) + (/Online/i.test(v.name) ? 1 : 0) + (/InJoon|Hyunsu|BongJin|GookMin|Male|남성/i.test(v.name) ? 3 : 0) + (v.localService ? 2 : 0) + (/Google/i.test(v.name) ? 1 : 0);
+  return window.speechSynthesis.getVoices().filter(v => /^ko/i.test(v.lang)).sort((a, b) => sc(b) - sc(a));
 }
-type Part = [string, number]; // [말, 흥분도 0~1]
+function voiceIdx(l: SpeechSynthesisVoice[]) { if (!CMT.voice) return 0; const k = CMT.voice.indexOf('|'), n = +CMT.voice.slice(0, k), uri = CMT.voice.slice(k + 1); return l[n] && l[n].voiceURI === uri ? n : Math.max(0, l.findIndex(v => v.voiceURI === uri)); }
+/** [캐스터, 해설위원]: 해설위원은 캐스터가 안 쓰는 목소리 중 가장 좋은 것. 목소리가 하나뿐이면 null(같은 목소리로 조금 천천히) */
+function pickVoices(): [SpeechSynthesisVoice | null, SpeechSynthesisVoice | null] { const l = koVoices(); if (!l.length) return [null, null]; const i = voiceIdx(l); return [l[i], l.length > 1 ? l[i === 0 ? 1 : 0] : null]; }
+/** 고를 수 있는 한국어 목소리 수와 지금 캐스터 목소리의 순번 */
+export function cmtVoiceInfo() { const l = koVoices(); return { n: l.length, i: l.length ? voiceIdx(l) : 0 }; }
+/** 캐스터 목소리를 순번으로 고른다. 저장할 값(`CMT.voice`)을 돌려준다 */
+export function cmtVoiceSet(i: number) { const l = koVoices(); CMT.voice = l[i] ? i + '|' + l[i].voiceURI : ''; return CMT.voice; }
+function utter(parts: Part[], who: 0 | 1) {
+  const [va, vb] = pickVoices(), v = who === 1 && vb ? vb : va; if (!v) return; let len = 0;
+  for (const [t, ex] of parts) {
+    const u = new SpeechSynthesisUtterance(t); u.voice = v; u.lang = v.lang; len += t.length;
+    if (who === 0) { u.rate = 1 + ex * 0.2; u.pitch = 1; u.volume = 0.86 + ex * 0.14; } // 캐스터: 흥분하면 조금 빠르고 크게. 높이는 그대로 둔다
+    else { u.rate = vb ? 0.98 : 0.94; u.pitch = 1; u.volume = 0.9; } // 해설위원: 차분하게 (목소리가 하나뿐이면 조금 더 천천히 — 전엔 높이를 0.7로 낮췄는데 소리가 뭉개졌다)
+    try { window.speechSynthesis.speak(u); } catch { /* 일부 브라우저는 사용자 입력 전엔 막는다 */ }
+  }
+  busyUntil = now() + 2500 + len * 260; // 이보다 오래 '말하는 중'이면 멈춘 것으로 본다 (크롬의 온라인 목소리가 가끔 그런다)
+}
+/** 앞말을 끊고 말한다 — cancel 직후 바로 speak하면 삼켜지는 브라우저가 있어 70ms 뒤에 */
+function cutIn(parts: Part[], who: 0 | 1, pri: number) {
+  wait = null; curPri = pri; window.speechSynthesis.cancel(); holdUntil = now() + 400; const tk = ++spTok; // holdUntil: 그사이 온 말이 먼저 나가지 않게
+  window.setTimeout(() => { if (tk !== spTok) return; holdUntil = 0; if (!CMT.away && CMT.sound && CMT.mode === 'voice') utter(parts, who); }, 70);
+}
 function speak(parts: Part[], who: 0 | 1, pri: number) {
   if (CMT.mode !== 'voice' || !CMT.sound || CMT.away || !canSpeak()) return;
-  const [va, vb] = pickVoices(), v = who === 1 && vb ? vb : va; if (!v) return; const syn = window.speechSynthesis;
-  let cut = false; if (pri >= 2) { if (syn.speaking || syn.pending) { syn.cancel(); cut = true; } } else if (syn.speaking || syn.pending) return;
-  const go = () => {
-    for (const [t, ex] of parts) {
-      const u = new SpeechSynthesisUtterance(t); u.voice = v; u.lang = v.lang; u.volume = 1;
-      if (who === 0) { u.rate = clamp(1.12 + ex * 0.4, 0.8, 1.7); u.pitch = clamp(1.0 + ex * 0.5, 0.5, 1.7); } // 캐스터: 흥분할수록 빠르고 높게
-      else { u.rate = 1.02 + ex * 0.12; u.pitch = vb ? 0.95 : 0.7; } // 해설위원: 차분하고 낮게
-      try { syn.speak(u); } catch { /* 일부 브라우저는 사용자 입력 전엔 막는다 */ }
-    }
-  };
-  if (cut) { const tk = ++spTok; window.setTimeout(() => { if (tk === spTok && !CMT.away) go(); }, 70); } else go(); // cancel 직후 바로 speak하면 삼켜지는 브라우저가 있다
+  const syn = window.speechSynthesis, t = now(), talking = syn.speaking || syn.pending;
+  if (!talking && t >= holdUntil) { wait = null; curPri = pri; utter(parts, who); }
+  else if (pri > curPri || (talking && t > busyUntil)) cutIn(parts, who, pri); // 더 큰 장면만 앞말을 끊는다 (골이 흐름 이야기를, 슛이 한담을)
+  else if (pri >= 2) wait = { parts, who, pri, at: t }; // 같은 급의 장면은 앞말이 끝나는 대로 (`cmtTick`). 흐름 이야기(pri 1)는 버린다
 }
+/** 목소리 들어 보기 (목소리를 바꿨을 때) */
+export function cmtSample() { if (canSpeak() && CMT.sound && !CMT.away) cutIn([['이 목소리로 중계합니다.', 0.2], ['슛! 골입니다!', 1]], 0, 3); }
 interface Line { text: string; say?: string | Part[]; pri?: number; ex?: number; who?: 0 | 1; }
 /** 한마디: 자막을 띄우고 읽는다. 앞말보다 덜 중요하면 참는다(false) */
 function line(l: Line): boolean {
@@ -81,6 +100,9 @@ function idle() {
 /** 매 프레임: 자막 지우기, 미뤄 둔 뒷말, 조용할 때 한마디. playing = 경기가 흐르는 중 */
 export function cmtTick(playing = false) {
   const t = now(), el = box(); if (el && !el.hidden && t > hideAt) { el.hidden = true; lastPri = 0; }
+  if (wait && t >= holdUntil && canSpeak() && !(window.speechSynthesis.speaking || window.speechSynthesis.pending)) { // 앞말이 끝났다: 기다리던 말을 (2.6초 넘게 묵었으면 버린다)
+    const w = wait; wait = null; if (t - w.at < 2600 && CMT.mode === 'voice' && CMT.sound && !CMT.away) { curPri = w.pri; utter(w.parts, w.who); }
+  }
   for (let i = later.length - 1; i >= 0; i--) if (t >= later[i].at) { const q = later.splice(i, 1)[0]; if (q.ep === B.ep && playing) q.fn(); }
   if (B.shot && t - B.shot.at > 4000) B.shot = null;
   if (!playing || CMT.mode === 'off') { B.idleAt = t; return; }
@@ -89,7 +111,7 @@ export function cmtTick(playing = false) {
     line({ pri: 2, ex: 0.6, text: d === 0 ? '이제 5분 남짓! 한 골이면 승부가 갈립니다!' : `남은 시간이 얼마 없습니다! ${ctx.teams[d > 0 ? 1 : 0]}, 총공세에 나서야 합니다!` });
   } else if (t - B.idleAt > 14000 && chance(0.02)) idle();
 }
-export function cmtStop() { const el = box(); if (el) el.hidden = true; lastPri = 0; lastAt = -1e9; later.length = 0; spTok++; if (canSpeak()) window.speechSynthesis.cancel(); }
+export function cmtStop() { const el = box(); if (el) el.hidden = true; lastPri = 0; lastAt = -1e9; later.length = 0; wait = null; spTok++; if (canSpeak()) window.speechSynthesis.cancel(); }
 
 export const cmt = {
   start() {
@@ -148,9 +170,9 @@ export const cmt = {
     const late = ctx.min >= 85 && me - op <= 1 && me >= op;
     const kind = me + op === 1 ? '선제골' : me === op ? '동점골' : prevMe === op ? (B.trailed[t] ? '역전골' : '다시 앞서가는 골') : me - op === 2 ? '추가골' : me - op >= 3 ? '쐐기골' : '추격골';
     const tag = k >= 3 ? '해트트릭' : k === 2 ? '멀티골' : late ? '극장골' : kind;
-    const shout = pick('gl', ['골! 골! 골입니다!', '고오오올!', '들어갔습니다! 골!', '골망을 흔듭니다! 골!', '터졌습니다! 골!']);
+    const shout = pick('gl', ['골! 골입니다!', '골! 들어갑니다!', '들어갔습니다! 골!', '골망을 흔듭니다! 골!', '터졌습니다! 골!']);
     const call = k >= 3 ? `${n}! 해트트릭입니다! 오늘 세 골째!` : k === 2 ? `${n}! 오늘 두 번째 골! 멀티골입니다!` : late ? `${n}! 이 시간에 터진 ${kind}! 극장골입니다!` : pick('gl2', [`${n}! ${n}의 ${kind}입니다!`, `${ig(n)} 해냅니다! ${tn}의 ${kind}!`, `${n}의 ${kind}! 완벽한 마무리!`]);
-    line({ pri: 3, ex: 1, text: `골! ${n}의 ${tag}! ${a} ${s[0]} : ${s[1]} ${b}`, say: [[shout, 1], [call, 0.9], [sc + '!', 0.55]] });
+    line({ pri: 3, ex: 1, text: `골! ${n}의 ${tag}! ${a} ${s[0]} : ${s[1]} ${b}`, say: [[shout + ' ' + call, 1], [sc + '.', 0.4]] });
     after(4200, () => line({ who: 1, pri: 2, text:
       k >= 3 ? `${n}, 오늘은 정말 막을 수가 없네요. 완벽한 하루입니다`
       : late ? '이 시간대에 이런 골이 나옵니다! 축구는 끝날 때까지 모르는 거예요'
