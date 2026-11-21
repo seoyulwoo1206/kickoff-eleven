@@ -414,13 +414,19 @@ export function slideCheck(s: Sim, p: Player) {
   if (o.t === p.t || (o.role === 'GK' && !o.atFeet) || M.protect > 0 || o.shield > 0) return; // 누른 킥은 슬라이딩에도 지켜 준다. 키퍼는 발밑에 둔 공만 뺏을 수 있다
   const q = d(p, o); if (q > 1.8) return;
   const ba = Math.atan2(ball.y - p.y, ball.x - p.x), ma = Math.atan2(p.vy, p.vx);
-  const behind = Math.cos(o.dir) * Math.cos(ma) + Math.sin(o.dir) * Math.sin(ma) > 0.6 && d(p, ball) > q;
-  const sideways = Math.abs(angDiff(ma, ba)) > 1.1; // 공이 아니라 사람을 향한 슬라이딩
+  const qb = d(p, ball), into = Math.abs(angDiff(ma, Math.atan2(o.y - p.y, o.x - p.x))) < 0.9; // into: 상대 몸 쪽으로 미끄러진다 (옆에서 나란히 미끄러지는 건 몸에 안 닿는다)
+  const behind = into && Math.cos(o.dir) * Math.cos(ma) + Math.sin(o.dir) * Math.sin(ma) > 0.6 && qb > q; // 뒤에서: 공보다 사람 몸이 먼저다
+  const aimed = Math.abs(angDiff(ma, ba)) <= 1.1; // 공 쪽으로 미끄러지고 있다
   const fast = Math.hypot(p.vx, p.vy) > 9;
-  const win = !behind && !sideways && s.rnd() < 0.55 + n(p.attrs.slt) * 0.3 - (o.feint > 0 ? 0.25 : 0);
+  // 실제로 닿았을 때만 판정한다: 공을 노리고 발이 닿는 거리(1.5m)거나, 몸이 부딪혔거나(0.95m, 뒤에서는 1.25m). 아니면 계속 미끄러진다
+  // (전엔 상대 1.8m 안에 들기만 하면 판정했고, 공을 못 따내면 전부 파울이었다 — 나란히 쫓다가 누르면 닿기도 전에 100% 파울·카드 40%)
+  const atBall = !behind && aimed && qb < 1.5; if (!atBall && !(into && q < (behind ? 1.25 : 0.95))) return;
   p.slide = 0; p.stun = 0.7;
-  if (win) { ball.owner = null; ball.vx = Math.cos(ma) * 9; ball.vy = Math.sin(ma) * 9; ball.vz = 1.5; ball.lastTouch = p.t; ball.kicker = p; ball.shot++; o.stun = 0.5; o.kickCD = 0.5; p.kickCD = 0.3; }
-  else { o.stun = 0.6; foulCommitted(s, p, o, sideways && fast, behind); }
+  if (atBall && s.rnd() < 0.55 + n(p.attrs.slt) * 0.3 - (o.feint > 0 ? 0.25 : 0)) { ball.owner = null; ball.vx = Math.cos(ma) * 9; ball.vy = Math.sin(ma) * 9; ball.vz = 1.5; ball.lastTouch = p.t; ball.kicker = p; ball.shot++; o.stun = 0.5; o.kickCD = 0.5; p.kickCD = 0.3; return; }
+  // 못 따냈다. 공을 노린 태클은 늦어서 발을 건 경우만 파울(30% 안팎), 나머지는 상대가 넘어가고 태클한 선수만 바닥에 남는다. 몸으로 들어간 태클은 대개 파울(뒤에서 90%·옆에서 75%)
+  const pf = atBall ? clamp(0.3 - n(p.attrs.slt) * 0.15 + (fast ? 0.08 : 0), 0.12, 0.5) : behind ? 0.9 : 0.75;
+  if (s.rnd() < pf) { o.stun = 0.6; foulCommitted(s, p, o, !atBall && !behind && fast, behind); }
+  else o.stun = Math.max(o.stun, 0.12); // 뛰어넘느라 한 박자
 }
 export function foul(s: Sim, by: Player, on: Player) { foulCommitted(s, by, on, false, false); }
 /** 스탠딩 태클: 공이 발에서 떨어진 순간(노크온·터치 직후)이 기회. 밸런스 높은 상대는 잘 안 뺏긴다 */

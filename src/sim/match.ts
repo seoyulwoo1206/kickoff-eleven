@@ -84,9 +84,12 @@ export function placeBall(s: Sim, x: number, y: number) {
 export function kickoff(s: Sim, kt: number) {
   const { M, players, team, ball, HU } = s;
   M.scorer = null;
-  for (const p of players) { if (p.off) continue; let x = p.bx; if (p.role !== 'GK') x = Math.min(x, p.t === kt ? 46 : 41); p.x = wx(x, p.t); p.y = p.by; p.vx = p.vy = 0; p.dir = p.t === 0 ? 0 : Math.PI; p.kickCD = 0; p.stun = 0; p.holdT = 0; p.forcePass = false; p.dive = 0; p.lunge = 0; p.head = 0; p.atFeet = false; p.cele = false; }
+  // 배치: 기본 대형(수비 15~17·미드필더 30~33·공격 46m)을 하프라인 쪽으로 당긴다 — 차는 팀 공격수 51.3m·미드필더 41m·수비 30m, 받는 팀은 1m 뒤. 키커 말고는 두 팀 모두 센터서클(9.15m) 밖
+  for (const p of players) { if (p.off) continue; let x = p.bx, y = p.by;
+    if (p.role !== 'GK') { const fr = p.t === kt ? 51.3 : 50.3; x = Math.min(fr, fr - (46 - x) * (p.t === kt ? 0.68 : 0.72)); const dx = x - CX, dy = y - CY, q = Math.hypot(dx, dy); if (q < 10) { if (q < 0.5) { x = CX - 10; y = CY; } else { x = CX + dx / q * 10; y = CY + dy / q * 10; } } }
+    p.x = wx(x, p.t); p.y = y; p.vx = p.vy = 0; p.dir = p.t === 0 ? 0 : Math.PI; p.kickCD = 0; p.stun = 0; p.holdT = 0; p.forcePass = false; p.dive = 0; p.lunge = 0; p.head = 0; p.atFeet = false; p.cele = false; }
   const fw = team[kt].filter(p => p.role !== 'GK' && !p.off), tk = fw[fw.length - 2] ?? fw[0], mate = fw[fw.length - 1] ?? fw[0];
-  tk.x = wx(51.7, kt); tk.y = CY; mate.x = wx(50.5, kt); mate.y = CY + 6; tk.dir = kt === 0 ? Math.PI : 0; mate.dir = tk.dir; // 킥오프 두 선수는 자기 진영을 본다
+  tk.x = wx(51.7, kt); tk.y = CY; if (mate !== tk) { mate.x = wx(51.3, kt); mate.y = CY + (mate.by < CY - 0.5 ? -10.3 : 10.3); } // 짝은 하프라인 위 서클 바로 밖 (옆으로 주는 패스를 받는 자리) tk.dir = kt === 0 ? Math.PI : 0; mate.dir = tk.dir; // 킥오프 두 선수는 자기 진영을 본다
   placeBall(s, CX, CY); ball.owner = tk; ball.lastTouch = kt; M.setTaker = null; M.wall = []; M.spots = null; M.overT = 0;
   // 킥오프는 패스로 시작한다: 키커는 찰 때까지 제자리(몰고 나갈 수 없다 — 사람은 방향만 돌리고 패스·롱패스·스루, 8초 넘기면 가까운 동료에게), 상대는 찰 때까지 센터서클 밖
   M.dead = tk; M.deadT = 0; M.deadR = 9.15; M.setX = CX; M.setY = CY; M.spType = null; M.setAim = false; M.aimMan = null;
