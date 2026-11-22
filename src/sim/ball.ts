@@ -175,19 +175,25 @@ export function passTo(s: Sim, p: Player, m: Player, loft: boolean, power = 0) {
   ball.passTarget = m; s.M.stats.passA[p.t]++;
   const h = HU[p.t]; if (h && m.role !== 'GK') { h.ctrl = m; h.lock = 0.5; } // 커서는 차는 순간 받는 선수로
 }
-export function shortPass(s: Sim, p: Player, ang: number, power = 0) {
+/** 숏패스가 갈 동료 (없으면 null) */
+export function shortPick(s: Sim, p: Player, ang: number, power = 0, tie = 0.2): Player | null { // tie: 조준에서 이 각(rad) 안은 동점 — 방향키 없이 누른 패스는 넓게(0.4)
   const ax = Math.cos(ang), ay = Math.sin(ang); let best: Player | null = null, bs = -1e9;
   const maxD = 22 + power * 14; // 탭은 22m 안의 동료에게만, 길게 누르면 36m까지
   for (const minC of [0.45, 0.1, -1]) { // 조준 방향 안에 없으면 각도를 넓히고, 그래도 없으면 방향에 가장 가까운 동료에게라도 준다
     for (const m of s.team[p.t]) {
       if (m === p || m.off) continue; const L = leadPos(p, m), dx = L.x - p.x, dy = L.y - p.y, q = Math.hypot(dx, dy);
       if (q < 2.5 || q > (minC < 0 ? Math.max(26, maxD) : maxD)) continue; const c = (dx * ax + dy * ay) / q; if (c < minC) continue;
-      const sc = Math.min(c, 0.92) / 0.92 * 4 - Math.max(0, q - 9 - power * 20) / 16 - laneRisk(s, p, L, p.t) * 1.2 - (m.role === 'GK' ? 2 : 0) + (m.runT > 0 ? 0.8 : 0) - (nearBlock(s, p, L, p.t) ? 3 : 0); // 코앞 상대 발에 차 주지 않는다 // 조준 방향(±23° 안은 동점)이 가장 중요, 같은 방향이면 가까운 동료(탭) · 길게 누르면 먼 동료, 선로 위험은 참고만
+      const off = Math.max(0, Math.acos(Math.min(1, c)) - tie); // 조준에서 벗어난 각 (11° 안은 동점)
+      const sc = 4 - off * 5 - Math.max(0, q - 13 - power * 20) / 16 - laneRisk(s, p, L, p.t) * 1.2 - (m.role === 'GK' ? 2 : 0) + (m.runT > 0 ? 0.8 : 0) - (nearBlock(s, p, L, p.t) ? 3 : 0) - power * Math.max(0, 8 + power * 16 - q) / 8; // 조준 방향이 먼저: 20° 비껴 선 동료는 조준한 동료보다 12m 가까워야 이긴다 (전엔 ±23°가 동점·30°도 0.23점이라 늘 가까운 동료에게 갔다). 같은 방향이면 탭은 가까운 동료(13m까지 감점 없음), 길게 누르면 먼 동료 — 누른 만큼 가까운 동료를 감점한다(끝까지 누르면 24m 안쪽은 1m당 1/8점; 전엔 가까운 동료 감점이 없어 길게 눌러도 가까운 동료에게 갔다). 코앞 상대 발은 피한다
       if (sc > bs) { bs = sc; best = m; }
     }
     if (best) break;
   }
-  if (best) passTo(s, p, best, false, power); else { p.dir = ang; kick(s, p, ax * 13, ay * 13, 0); }
+  return best;
+}
+export function shortPass(s: Sim, p: Player, ang: number, power = 0, tie = 0.2) {
+  const best = shortPick(s, p, ang, power, tie);
+  if (best) passTo(s, p, best, false, power); else { p.dir = ang; kick(s, p, Math.cos(ang) * 13, Math.sin(ang) * 13, 0); }
 }
 export function longPass(s: Sim, p: Player, ang: number, power = 0.5) {
   const t = p.t, ax = Math.cos(ang), ay = Math.sin(ang), lx = wx(p.x, t), wide = Math.abs(p.y - CY) > 13 && lx > 72;
@@ -510,10 +516,12 @@ export function updateBall(s: Sim, dt: number) {
   }
 }
 /** 트래핑·헤딩. 동료에게 가는 패스는 받는 선수 외의 우리 편(패서 포함)은 건드리지 않는다. 퍼스트 터치 품질은 볼컨트롤·공 속도·높이에 따라 */
+const BODY = 0.5; // 몸에 맞는 폭(m). 슛은 전처럼 확률로만 막는다 (슛까지 반드시 막으면 골이 준다 — 리그 1.55 → 1.44)
+const HUM_REACH = 0.2, HUM_PR = 0.15; // 사람이 조작하는 선수의 가로채기: 발이 더 멀리 닿고 덜 헛디딘다
 export function ballControl(s: Sim) {
   const { ball, M, players } = s;
   if (ball.owner) return;
-  const sp = Math.hypot(ball.vx, ball.vy); let best: Player | null = null, bd = 1e9;
+  const sp = Math.hypot(ball.vx, ball.vy); let best: Player | null = null, bd = 1e9, solid = false;
   const pt = ball.passTarget;
   // 공중볼 맞이: 나한테 오는 뜬 공이 0.35초 안에 머리 높이(2.0m)로 내려오는 지점 — 이미 그 아래면 가장 가까워지는 지점 — 으로 몸을 붙여 간다 (초속 4m까지; 더 길게·빠르게 해도 크로스 첫 터치는 같았다).
   // 전엔 1.5m 밖에서 공이 닿은 걸로 치고 그 틱에 몸을 0.5~1m 옮겨 붙였다 — 헤딩·가슴 트래핑이 순간이동처럼 보였다
@@ -526,17 +534,21 @@ export function ballControl(s: Sim) {
   if (ball.z > 0.9 && sp > 6) { if (pt) meet(pt); for (const h of s.HU) if (h && h.ctrl && h.ctrl !== pt && h.ctrl.role !== 'GK' && ball.lastTouch !== h.t && !ball.isShot && ball.z > 1.5) meet(h.ctrl); } // 사람이 조작하는 선수도 상대가 띄운 공엔 같이 몸을 붙여 뜬다
   for (const p of players) {
     if (p.kickCD > 0 || p.stun > 0 || p.off) continue; if (p.beatT > 0 && ball.knock && ball.knock.t !== p.t) continue; // 방금 제쳐진 수비수는 상대가 차 놓은 공에 발을 못 댄다
-    const gk = p.role === 'GK', mine = pt === p, hum = !gk && !mine && ball.lastTouch !== p.t && s.HU[p.t]?.ctrl === p; // hum: 사람이 조작하는 선수는 상대가 띄운 공 밑에 가 있으면 머리로 따낸다 (전엔 받는 선수가 아니면 1.7m 위의 공에 못 닿았다)
-    if (ball.z > (gk ? (!ball.isShot && wx(p.x, p.t) < 16.5 ? 2.85 : 2.4) : mine || hum ? 2.45 : 1.7)) continue; // 받는 선수는 뛰어올라 2.45m까지 (뜬 공은 0.85m 안에 와야 닿으므로, 2.2면 머리 위로 지나가는 공이 늘어 리그 골 2.03→1.72)
-    if (pt && !mine && pt.t === p.t && !gk && sp > 5) continue;
+    const gk = p.role === 'GK', mine = pt === p, humA = !gk && !mine && ball.lastTouch !== p.t && s.HU[p.t]?.ctrl === p; // hum: 사람이 조작하는 선수는 상대가 띄운 공 밑에 가 있으면 머리로 따낸다 (전엔 받는 선수가 아니면 1.7m 위의 공에 못 닿았다)
+    if (ball.z > (gk ? (!ball.isShot && wx(p.x, p.t) < 16.5 ? 2.85 : 2.4) : mine || humA ? 2.45 : 1.7)) continue; // 받는 선수는 뛰어올라 2.45m까지 (뜬 공은 0.85m 안에 와야 닿으므로, 2.2면 머리 위로 지나가는 공이 늘어 리그 골 2.03→1.72)
+    // 공이 지나가는 길에서 옆으로 떨어진 거리. BODY 안이면 몸에 맞는다 — 발을 뻗는 가로채기(확률)와 달리 반드시 건드린다.
+    // 전엔 길 위에 서 있어도 20m/s 패스의 27%·26m/s의 50%가 몸을 그냥 통과했다 (가로채기 시험: 길 옆 0.5m에서 73%·50%)
+    const lat = sp > 1 ? Math.abs((p.x - ball.x) * ball.vy - (p.y - ball.y) * ball.vx) / sp : 9, ahead = (p.x - ball.x) * ball.vx + (p.y - ball.y) * ball.vy > 0;
+    const hum = s.HU[p.t]?.ctrl === p;
+    if (pt && !mine && pt.t === p.t && !gk && sp > 5) continue; // 동료에게 가는 패스는 받는 선수 말고는 흘려 준다
     const passing = !mine && ball.knock !== p && sp > 8; // 나한테 오는 공이 아닌데 지나간다 → 발을 뻗어 끊는 시도
     if (passing && !gk) { const dq = d(p, ball) || 1, c = ((p.x - ball.x) * ball.vx + (p.y - ball.y) * ball.vy) / (dq * sp); if (c < (ball.isShot ? 0 : -0.5)) continue; } // 이미 지나간 공엔 발이 안 닿는다: 슛은 옆·뒤(90° 밖), 패스는 뒤(120° 밖)에서 못 막는다 (슈터 옆·뒤에 붙은 수비가 슛의 68%를 잡아 버렸다. 패스까지 90°로 하면 리그 패스 성공률 75→88%·압박 회수 77→57%)
-    const q = d(p, ball), reach = gk ? (ball.z > 1.5 && !ball.isShot ? 1.3 : 1.1) : mine ? (ball.z > 0.9 ? 0.85 : 1.5) : ball.knock === p ? 1.4 : passing ? 1.15 + n(p.attrs.int) * 0.15 : 0.95; if (q < reach && q < bd) { bd = q; best = p; } // 자기가 차 놓은 공은 발을 뻗어 다시 잡는다
+    const q = d(p, ball), reach = gk ? (ball.z > 1.5 && !ball.isShot ? 1.3 : 1.1) : mine ? (ball.z > 0.9 ? 0.85 : 1.5) : ball.knock === p ? 1.4 : passing ? 1.15 + n(p.attrs.int) * 0.15 + (hum ? HUM_REACH : 0) : 0.95; if (q < reach && q < bd) { bd = q; best = p; solid = passing && !gk && ahead && !ball.isShot && lat < BODY; } // 자기가 차 놓은 공은 발을 뻗어 다시 잡는다
   }
   if (!best) return;
   if (best.role !== 'GK' && ball.passTarget !== best && ball.knock !== best && sp > 8) { // 가로채기 판정: 빠른 공일수록·가로채기 능력이 낮을수록 헛발 (한 번 헛디디면 .25초 다시 못 뻗음)
-    const pr = clamp(1.35 - sp / 30, 0.3, 1) * (0.9 + n(best.attrs.int) * 0.2) * (best.stun > 0 ? 0 : 1);
-    if (s.rnd() >= pr) { best.kickCD = 0.25; return; }
+    const pr = clamp(1.35 - sp / 30, 0.3, 1) * (0.9 + n(best.attrs.int) * 0.2) * (best.stun > 0 ? 0 : 1) + (s.HU[best.t]?.ctrl === best ? HUM_PR : 0);
+    if (!solid && s.rnd() >= pr) { best.kickCD = 0.25; return; }
     if (ball.isShot && ball.kicker && ball.kicker.t !== best.t && sp > 14) { // 슛 블록: 잡지 못하고 몸에 맞고 튄다 (코너킥·세컨드 볼)
       const a = Math.atan2(ball.vy, ball.vx) + (s.rnd() < 0.5 ? 1 : -1) * (0.5 + s.rnd() * 1.5), v = sp * (0.25 + s.rnd() * 0.2);
       ball.vx = Math.cos(a) * v; ball.vy = Math.sin(a) * v; ball.vz = 1.5 + s.rnd() * 3; ball.isShot = false; ball.passTarget = null; ball.curl = 0; ball.lastTouch = best.t; ball.kicker = best; ball.shot++; best.kickCD = 0.3; sfx(s, 'tackle'); xtEv(s, 'clear', best.t, best.num, best.x, best.y); return;

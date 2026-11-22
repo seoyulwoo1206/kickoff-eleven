@@ -188,7 +188,7 @@ export function humanUpdate(s: Sim, h: Human, dt: number) {
       if (skillMove(s, p, sv.x, sv.y)) return;
     }
     // 패스는 떼는 순간, 누른 시간이 세기 (탭 = 보통). 우리 공일 때 누른 것만 (수비 때 누른 전환·슬라이딩 키를 공을 뺏은 뒤에 떼도 패스가 나가지 않는다)
-    if (I.rel.pass && h.armP) { const pw = clamp((I.holdT.pass - 0.12) / 0.45, 0, 1); queueKick(s, p, () => shortPass(s, p, aim, pw), 0.04); h.charging = false; return; }
+    if (I.rel.pass && h.armP) { const pw = clamp((I.holdT.pass - 0.12) / 0.45, 0, 1), tie = mag > 0.15 ? 0.2 : 0.4; queueKick(s, p, () => shortPass(s, p, aim, pw, tie), 0.04); h.charging = false; return; } // 방향키 없이 누르면 보는 쪽 넓게
     if (I.rel.lob && h.armL) { const pw = clamp((I.holdT.lob - 0.1) / 0.5, 0, 1); queueKick(s, p, () => longPass(s, p, aim, 0.35 + pw * 0.65)); h.charging = false; return; }
     if (I.press.through) { const pw = I.down.sprint ? 0.8 : 0; queueKick(s, p, () => throughPass(s, p, aim, pw), 0.04); h.charging = false; return; }
     if (I.rel.chip && !h.zUsed && !h.charging) { queueKick(s, p, () => chipShot(s, p)); return; } // Z만 눌렀다 떼면 칩슛 (Z를 누른 채 슛 = 감아차기)

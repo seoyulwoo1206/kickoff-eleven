@@ -6,6 +6,7 @@ import { gkHands, slideCheck, intercept, interceptT, offsideLine } from '../ball
 import { steer, chase, moveTo, targetFor, gapY, defLine } from '../move';
 import { tryTackle, aiCarrier } from './carrier';
 import { gkAI } from './gk';
+const LANE_R = 2.2, LANE_T = 0.7; // 길목 끊기: 패스가 이 거리(m) 안을, 이 시간(초) 안에 지나가면 나간다
 
 /* 팀 AI: 공 없을 땐 가장 빨리 닿는 선수가 추격. 수비 땐 가장 가까운 AI가 (사람과 별개로) 항상 압박, 둘째는 골 쪽 커버,
    나머지 DF/MF는 근처 상대를 골 쪽에서 마크. 공격 땐 공 가진 선수 주변 둘이 앞 좌우로 패스 받을 자리를 잡는다 */
@@ -130,6 +131,8 @@ export function teamAI(s: Sim, t: number, dt: number) {
   const pressMul = (tac.press === 0 ? 0.88 : tac.press === 2 ? 1.12 : 1) * (pressing ? 1.15 : 1), tk = (h ? 0.4 : D.tackle) * (tac.press === 2 ? 1.15 : tac.press === 0 ? 0.85 : 1) * (pressing ? 1.3 : 1), press = (h ? 1.18 : D.press) * pressMul;
   // 압박 트리거: 공 가진 상대가 자기 골을 보고 있거나 터치가 커졌을 때 더 세게 달라붙는다
   const trig = carrier && carrier.t !== t && (carrier.kickCD > 0 || Math.cos(carrier.dir) * (t === 0 ? -1 : 1) > 0.3) ? 1.12 : 1;
+  // 상대의 낮은 패스가 굴러가는 중(반응 지연 뒤): 속도² (아니면 0). 전엔 쫓는 선수 한 명과 받는 선수의 마커만 움직여, 길목 옆에 선 나머지는 공이 지나가는 걸 보고만 있었다
+  const lane = h && !ball.owner && ball.kicker && ball.kicker.t !== t && !ball.isShot && ball.z < 0.8 && M.phase === 'live' && !M.dead && M.react[t] <= 0 ? ((v2: number) => v2 > 64 ? v2 : 0)(ball.vx * ball.vx + ball.vy * ball.vy) : 0;
   for (const p of team[t]) {
     if (p.off) continue;
     if (h && p === h.ctrl) continue;
@@ -151,6 +154,10 @@ export function teamAI(s: Sim, t: number, dt: number) {
         chase(p, tx, ty, jockey(s, p, own, press * trig), dt); tryTackle(s, p, own, tk * trig); // 3m 안에선 덤비지 않고 따라붙는 속도로
       } else { const q = intercept(s, p); chase(p, q.x, q.y, 1.25, dt); if (knocker && knocker.t !== t) tryTackle(s, p, knocker, tk * trig); } // 노크온 중인 상대는 공이 발에서 떨어져 있으니 발을 뻗어 끊는다
       continue;
+    }
+    if (lane && p.stun <= 0 && p.kickCD <= 0) { // 길목 끊기: 상대 패스가 곧 내 옆(LANE_R m 안)을 지나가면 그 자리로 한 발 나가 발을 댄다
+      const dx = p.x - ball.x, dy = p.y - ball.y, tc = (dx * ball.vx + dy * ball.vy) / lane;
+      if (tc > 0.04 && tc < LANE_T) { const cx = ball.x + ball.vx * tc, cy = ball.y + ball.vy * tc, lat = Math.hypot(cx - p.x, cy - p.y); if (lat > 0.25 && lat < LANE_R) { chase(p, cx, cy, 1.15, dt); continue; } }
     }
     if (p === cover) {
       if (carrier && carrier.t !== t && (pressing || (!humanOn && (d(p, carrier) < 3.6 || (wx(carrier.x, t) < 40 && d(p, carrier) < 9))))) { chase(p, carrier.x + seen(s, carrier).x, carrier.y + seen(s, carrier).y, jockey(s, p, carrier, press), dt); tryTackle(s, p, carrier, tk); continue; } // 드리블러가 코앞까지 오면 물러서지 않고 맞붙는다
