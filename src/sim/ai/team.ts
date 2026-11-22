@@ -6,7 +6,7 @@ import { gkHands, slideCheck, intercept, interceptT, offsideLine } from '../ball
 import { steer, chase, moveTo, targetFor, gapY, defLine } from '../move';
 import { tryTackle, aiCarrier } from './carrier';
 import { gkAI } from './gk';
-const LANE_R = 2.2, LANE_T = 0.7; // 길목 끊기: 패스가 이 거리(m) 안을, 이 시간(초) 안에 지나가면 나간다
+const LANE_R = 1.8, LANE_T = 0.7; // 길목 끊기: 패스가 이 거리(m) 안을, 이 시간(초) 안에 지나가면 나간다
 
 /* 팀 AI: 공 없을 땐 가장 빨리 닿는 선수가 추격. 수비 땐 가장 가까운 AI가 (사람과 별개로) 항상 압박, 둘째는 골 쪽 커버,
    나머지 DF/MF는 근처 상대를 골 쪽에서 마크. 공격 땐 공 가진 선수 주변 둘이 앞 좌우로 패스 받을 자리를 잡는다 */

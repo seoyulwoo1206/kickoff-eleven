@@ -57,14 +57,21 @@ if (!only || only === 2) {
   ts.sort((a, b) => a - b);
   console.log(`② 주인 없는 로빙 n=${r.n}: 키퍼가 먼저 ${pct(r.gk, r.n)} (중앙값 ${ts.length ? ts[ts.length >> 1].toFixed(1) : '-'}초) · 공격수 ${pct(r.att, r.n)} · 수비 ${pct(r.def, r.n)} · 아무도/아웃 ${pct(r.none, r.n)}`);
 }
+/** 첫 터치 뒤 secs초를 더 돌려 누가 공을 갖고 있나 (0 우리·1 상대·-1 없음). 방향키는 놓는다 */
+function after(s: Sim, secs: number) { const I = s.INP[0]; I.tx = I.ty = 0; for (let k = 0; k < secs * 60 && s.M.phase === 'live'; k++) { step(s, STEP); s.ev.length = 0; } const o = s.ball.owner; return s.M.phase !== 'live' ? -1 : o ? o.t : -1; }
 if (!only || only === 3) {
-  const r = { n: 0, cbHead: 0, cbOwn: 0, st: 0, stShot: 0, other: 0, none: 0 };
-  for (let i = 0; i < N; i++) {
-    const s = setup(i), fw = of(s, 1, 'FW'), mf = of(s, 1, 'MF'), df = of(s, 0, 'DF'), w = mf[0], st = fw[0], cb = df[i % df.length], I = s.INP[0];
-    put(w, 50, CY + ((i % 5) - 2) * 7); put(st, 20 + (i % 4) * 2, CY + ((i % 7) - 3) * 2.5); put(cb, st.x - 1.2, st.y + ((i % 3) - 1) * 0.5); s.HU[0]!.ctrl = cb;
-    give(s, w); s.HU[0]!.ctrl = cb; w.dir = Math.atan2(st.y - w.y, st.x - w.x); passTo(s, w, st, true); s.HU[0]!.ctrl = cb; r.n++;
-    const o = watch(s, w, 4, () => { s.HU[0]!.ctrl = cb; if (noStick) { I.tx = I.ty = 0; return; } const q = intercept(s, cb), dx = q.x - cb.x, dy = q.y - cb.y, L = Math.hypot(dx, dy); if (L > 0.3) { I.tx = dx / L; I.ty = dy / L; } else { I.tx = I.ty = 0; } });
-    if (!o.first) r.none++; else if (o.first === cb) { if (o.how === 'own') r.cbOwn++; else r.cbHead++; } else if (o.first === st) { if (o.how === 'shot') r.stShot++; else r.st++; } else r.other++;
+  // 띄운 공을 받는 공격수 옆(골 쪽 1.2m)에 수비수 — 사람이 조작(공 떨어질 자리로 방향키) / AI 동료 — 자기 진영(22m)과 중원(48m)
+  for (const [label, hum, sx] of [['③ 사람 수비수 헤딩', true, 20], ['③ 사람 수비수 헤딩·중원', true, 46], ['④ AI 동료 수비수', false, 20], ['④ AI 동료 수비수·중원', false, 46]] as [string, boolean, number][]) {
+    const r = { n: 0, cbHead: 0, cbOwn: 0, st: 0, stShot: 0, other: 0, none: 0, us: 0, them: 0 };
+    for (let i = 0; i < N; i++) {
+      const s = setup(i), fw = of(s, 1, 'FW'), mf = of(s, 1, 'MF'), df = of(s, 0, 'DF'), w = mf[0], st = fw[0], cb = df[i % df.length], I = s.INP[0], far = of(s, 0, 'FW')[0];
+      const cur = () => { s.HU[0]!.ctrl = hum ? cb : far; };
+      put(w, sx + 30, CY + ((i % 5) - 2) * 7); put(st, sx + (i % 4) * 2, CY + ((i % 7) - 3) * 2.5); put(cb, st.x - 1.2, st.y + ((i % 3) - 1) * 0.5); cur();
+      give(s, w); cur(); w.dir = Math.atan2(st.y - w.y, st.x - w.x); passTo(s, w, st, true); cur(); r.n++;
+      const o = watch(s, w, 4, () => { cur(); if (!hum || noStick) { I.tx = I.ty = 0; return; } const q = intercept(s, cb), dx = q.x - cb.x, dy = q.y - cb.y, L = Math.hypot(dx, dy); if (L > 0.3) { I.tx = dx / L; I.ty = dy / L; } else { I.tx = I.ty = 0; } });
+      if (!o.first) r.none++; else if (o.first === cb) { if (o.how === 'own') r.cbOwn++; else r.cbHead++; } else if (o.first === st) { if (o.how === 'shot') r.stShot++; else r.st++; } else r.other++;
+      const who = after(s, 3); if (who === 0) r.us++; else if (who === 1) r.them++;
+    }
+    console.log(`${label}${noStick ? '(방향키 없음)' : ''} n=${r.n}: 수비수가 머리로 넘김 ${pct(r.cbHead, r.n)} · 수비수가 잡음 ${pct(r.cbOwn, r.n)} · 공격수가 받음 ${pct(r.st + r.stShot, r.n)} · 다른 선수 ${pct(r.other, r.n)} · 아무도 ${pct(r.none, r.n)} → 3초 뒤 소유: 우리 ${pct(r.us, r.n)} · 상대 ${pct(r.them, r.n)}`);
   }
-  console.log(`③ 사람 수비수 헤딩${noStick ? '(방향키 없음)' : ''} n=${r.n}: 수비수가 머리로 걷어 냄 ${pct(r.cbHead, r.n)} · 수비수가 잡음 ${pct(r.cbOwn, r.n)} · 공격수가 받음 ${pct(r.st + r.stShot, r.n)} · 다른 선수 ${pct(r.other, r.n)} · 아무도 ${pct(r.none, r.n)}`);
 }

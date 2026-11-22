@@ -516,8 +516,24 @@ export function updateBall(s: Sim, dt: number) {
   }
 }
 /** 트래핑·헤딩. 동료에게 가는 패스는 받는 선수 외의 우리 편(패서 포함)은 건드리지 않는다. 퍼스트 터치 품질은 볼컨트롤·공 속도·높이에 따라 */
-const BODY = 0.5; // 몸에 맞는 폭(m). 슛은 전처럼 확률로만 막는다 (슛까지 반드시 막으면 골이 준다 — 리그 1.55 → 1.44)
-const HUM_REACH = 0.2, HUM_PR = 0.15; // 사람이 조작하는 선수의 가로채기: 발이 더 멀리 닿고 덜 헛디딘다
+/** 이긴 헤딩을 동료에게: 4~20m 안의 열린 동료(방향키 쪽 우선)가 가슴 높이로 받게 머리로 넘긴다. 줄 동료가 없으면 false (걷어 낸다) */
+function headTo(s: Sim, p: Player, ang: number | null): boolean {
+  const { ball } = s, t = p.t, g = wx(0, t); let best: Player | null = null, bs = -1e9;
+  for (const m of s.team[t]) {
+    if (m === p || m.off || m.role === 'GK' || m.stun > 0) continue; const dx = m.x - p.x, dy = m.y - p.y, q = Math.hypot(dx, dy); if (q < 4 || q > 20) continue;
+    let open = 8; for (const o of s.team[1 - t]) if (!o.off) open = Math.min(open, d(o, m)); if (open < 2) continue;
+    const sc = open * 0.5 - Math.abs(q - 10) / 5 + (ang !== null ? (dx * Math.cos(ang) + dy * Math.sin(ang)) / q * 3 : 0) + (Math.abs(m.x - g) - Math.abs(p.x - g)) / 12 - (Math.abs(m.x - g) < 18 && Math.abs(m.y - CY) < 14 ? 3 : 0); // 열린 동료 · 10m 안팎 · 방향키 쪽 · 우리 골에서 먼 쪽. 우리 골문 앞으로는 넘기지 않는다
+    if (sc > bs) { bs = sc; best = m; }
+  }
+  if (!best) return false;
+  const T = clamp(d(p, best) / 12, 0.55, 1.05), L = lead(best, T), e = (s.rnd() - 0.5) * (0.26 - n(p.attrs.hea) * 0.12), a = Math.atan2(L.y - ball.y, L.x - ball.x) + e, v = Math.hypot(L.x - ball.x, L.y - ball.y) / T * 1.05;
+  ball.vx = Math.cos(a) * v; ball.vy = Math.sin(a) * v; ball.vz = (0.9 - ball.z + G * T * T / 2) / T; ball.isShot = false; ball.curl = 0; ball.thru = false; ball.setp = false; ball.lastTouch = t; ball.kicker = p; ball.shot++; ball.knock = null;
+  ball.passTarget = best; p.kickCD = 0.35; p.dir = a; const h = s.HU[t]; if (h) { h.ctrl = best; h.lock = 0.5; }
+  sfx(s, 'kick'); xtEv(s, 'clear', t, p.num, p.x, p.y); return true;
+}
+const BODY = 0.4; // 몸에 맞는 폭(m, 38차 0.5 → 39차 0.4). 슛은 전처럼 확률로만 막는다 (슛까지 반드시 막으면 골이 준다 — 리그 1.55 → 1.44)
+const HUM_REACH = 0.1, HUM_PR = 0.05; // 사람이 조작하는 선수의 가로채기: 발이 조금 더 닿고 덜 헛디딘다 (38차 0.2·0.15는 1.5m 밖 공이 발에 붙어 판정이 너무 후했다)
+const REACH = 1.0, REACH_INT = 0.1; // 발을 뻗어 닿는 거리(m): 1.0 + 가로채기 능력 ±0.1 (전 1.15 ± 0.15)
 export function ballControl(s: Sim) {
   const { ball, M, players } = s;
   if (ball.owner) return;
@@ -543,7 +559,7 @@ export function ballControl(s: Sim) {
     if (pt && !mine && pt.t === p.t && !gk && sp > 5) continue; // 동료에게 가는 패스는 받는 선수 말고는 흘려 준다
     const passing = !mine && ball.knock !== p && sp > 8; // 나한테 오는 공이 아닌데 지나간다 → 발을 뻗어 끊는 시도
     if (passing && !gk) { const dq = d(p, ball) || 1, c = ((p.x - ball.x) * ball.vx + (p.y - ball.y) * ball.vy) / (dq * sp); if (c < (ball.isShot ? 0 : -0.5)) continue; } // 이미 지나간 공엔 발이 안 닿는다: 슛은 옆·뒤(90° 밖), 패스는 뒤(120° 밖)에서 못 막는다 (슈터 옆·뒤에 붙은 수비가 슛의 68%를 잡아 버렸다. 패스까지 90°로 하면 리그 패스 성공률 75→88%·압박 회수 77→57%)
-    const q = d(p, ball), reach = gk ? (ball.z > 1.5 && !ball.isShot ? 1.3 : 1.1) : mine ? (ball.z > 0.9 ? 0.85 : 1.5) : ball.knock === p ? 1.4 : passing ? 1.15 + n(p.attrs.int) * 0.15 + (hum ? HUM_REACH : 0) : 0.95; if (q < reach && q < bd) { bd = q; best = p; solid = passing && !gk && ahead && !ball.isShot && lat < BODY; } // 자기가 차 놓은 공은 발을 뻗어 다시 잡는다
+    const q = d(p, ball), reach = gk ? (ball.z > 1.5 && !ball.isShot ? 1.3 : 1.1) : mine ? (ball.z > 0.9 ? 0.85 : 1.5) : ball.knock === p ? 1.4 : passing ? REACH + n(p.attrs.int) * REACH_INT + (hum ? HUM_REACH : 0) : 0.95; if (q < reach && q < bd) { bd = q; best = p; solid = passing && !gk && ahead && !ball.isShot && lat < BODY; } // 자기가 차 놓은 공은 발을 뻗어 다시 잡는다
   }
   if (!best) return;
   if (best.role !== 'GK' && ball.passTarget !== best && ball.knock !== best && sp > 8) { // 가로채기 판정: 빠른 공일수록·가로채기 능력이 낮을수록 헛발 (한 번 헛디디면 .25초 다시 못 뻗음)
@@ -552,6 +568,10 @@ export function ballControl(s: Sim) {
     if (ball.isShot && ball.kicker && ball.kicker.t !== best.t && sp > 14) { // 슛 블록: 잡지 못하고 몸에 맞고 튄다 (코너킥·세컨드 볼)
       const a = Math.atan2(ball.vy, ball.vx) + (s.rnd() < 0.5 ? 1 : -1) * (0.5 + s.rnd() * 1.5), v = sp * (0.25 + s.rnd() * 0.2);
       ball.vx = Math.cos(a) * v; ball.vy = Math.sin(a) * v; ball.vz = 1.5 + s.rnd() * 3; ball.isShot = false; ball.passTarget = null; ball.curl = 0; ball.lastTouch = best.t; ball.kicker = best; ball.shot++; best.kickCD = 0.3; sfx(s, 'tackle'); xtEv(s, 'clear', best.t, best.num, best.x, best.y); return;
+    }
+    if (!solid && ball.z < 0.9) { // 발을 뻗어 끊었다: 뻗는 동작을 보이고 몸을 공 쪽으로 조금 옮긴다 (1m 밖 공이 그냥 발에 붙어 보이지 않게)
+      const dx = ball.x - best.x, dy = ball.y - best.y, q = Math.hypot(dx, dy); best.lunge = 0.25;
+      if (q > 0.6) { const k = Math.min(q - 0.6, 0.3) / q; best.x += dx * k; best.y += dy * k; best.dir = Math.atan2(dy, dx); }
     }
   }
   if (best.role === 'GK' && ball.z > 1.5 && !ball.isShot) { // 키퍼의 공중볼: 뛰어올라 잡는다. 상대가 붙어 있으면 반쯤은 주먹으로 쳐낸다
@@ -564,11 +584,13 @@ export function ballControl(s: Sim) {
   }
   if (ball.z > 1.5 && best.role !== 'GK' && ball.passTarget !== best && ball.lastTouch !== best.t && s.HU[best.t]?.ctrl === best) { // 사람이 조작하는 선수의 헤딩 경합: 상대가 띄운 공 밑에 먼저 가 있으면 머리로 걷어 내거나(압박·자기 진영) 떨궈 잡는다
     const p = best, t = p.t, I = s.INP[t]; let o: Player | null = null, od = 1.3; for (const q of s.team[1 - t]) { if (q.off || q.role === 'GK' || q.stun > 0) continue; const dd = d(q, p); if (dd < od) { od = dd; o = q; } }
-    if (o && s.rnd() >= clamp(0.55 + (n(p.attrs.hea) + n(p.attrs.jmp) - n(o.attrs.hea) - n(o.attrs.jmp)) * 0.3, 0.25, 0.88)) { p.kickCD = 0.3; return; } // 졌다: 공은 그대로 간다
+    if (o && s.rnd() >= clamp(0.66 + (n(p.attrs.hea) + n(p.attrs.jmp) - n(o.attrs.hea) - n(o.attrs.jmp)) * 0.3, 0.3, 0.92)) { p.kickCD = 0.3; return; } // 졌다: 공은 그대로 간다 (39차: 기본 .55 → .66)
     let press = 9; for (const q of s.team[1 - t]) if (!q.off) press = Math.min(press, d(q, p));
     if (press < 4 || wx(p.x, t) < 32) { // 걷어 내는 헤딩: 방향키 쪽(없으면 우리 골에서 먼 쪽)으로 12~18m, 떨어질 자리 가까운 동료가 받으러 간다
       { const dx = ball.x - p.x, dy = ball.y - p.y, q = Math.hypot(dx, dy); if (q > 0.45) { const k = (q - 0.45) / q; p.x += dx * k; p.y += dy * k; } }
       const mg = Math.hypot(I.mx, I.my), g = wx(0, t), a = mg > 0.3 ? Math.atan2(I.my, I.mx) : Math.atan2((p.y - CY) * 0.7, p.x - g), v = 10 + n(p.attrs.hea) * 2 + s.rnd() * 3;
+      if (o) o.kickCD = Math.max(o.kickCD, 0.3);
+      if (headTo(s, p, mg > 0.3 ? a : null)) return; // 줄 동료가 있으면 머리로 넘긴다 (전엔 늘 12~18m 걷어내기라 이겨도 소유가 안 됐다)
       ball.vx = Math.cos(a) * v; ball.vy = Math.sin(a) * v; ball.vz = 5.5 + s.rnd() * 2; ball.isShot = false; ball.curl = 0; ball.thru = false; ball.lastTouch = t; ball.kicker = p; ball.shot++; p.kickCD = 0.35; p.dir = a; if (o) o.kickCD = Math.max(o.kickCD, 0.3);
       const lx = p.x + Math.cos(a) * v * 1.1, ly = p.y + Math.sin(a) * v * 1.1; let m: Player | null = null, md = 12; for (const q of s.team[t]) { if (q === p || q.off || q.role === 'GK') continue; const dd = Math.hypot(q.x - lx, q.y - ly); if (dd < md) { md = dd; m = q; } }
       ball.passTarget = m; sfx(s, 'kick'); xtEv(s, 'clear', t, p.num, p.x, p.y); return;
@@ -579,8 +601,9 @@ export function ballControl(s: Sim) {
     const t = best.t, gx = t === 0 ? W : 0; const dG = Math.hypot(gx - best.x, CY - best.y), mine = ball.passTarget === best;
     if (mine && ball.z > 1.5 && sp > 8) { // 공중볼 경합: 받는 선수 1.3m 안에 붙은 상대 필드 선수는 같이 뛰어올라 머리로 걷어 낼 수 있다 (헤딩·점프 대결). 없으면 받는 선수가 자리만 잡으면 코너킥 열에 아홉이 헤딩슛이 됐다
       let o: Player | null = null, od = 1.3; for (const q of s.team[1 - t]) { if (q.off || q.role === 'GK' || q.stun > 0 || q.slide > 0) continue; const dd = d(q, best); if (dd < od) { od = dd; o = q; } }
-      if (o && s.rnd() < clamp(0.42 + (n(o.attrs.hea) + n(o.attrs.jmp) - n(best.attrs.hea) - n(best.attrs.jmp)) * 0.2 + (1.3 - od) * 0.12, 0.12, 0.8) * (ball.setp || s.HU[o.t]?.ctrl === o ? 1 : 0.25)) { // 세트피스는 수비가 자리를 잡고 기다린다. 흐르는 경기의 크로스는 그 0.25배 (0.4배면 크로스 받는 선수 첫 터치 92/96/85 → 85/86/78%)
-        const og = wx(0, o.t), a = Math.atan2(o.y - CY + (s.rnd() - 0.5) * 16, o.x - og) + (s.rnd() - 0.5) * 0.9, v = 9 + s.rnd() * 6; // 우리 골에서 멀어지는 쪽으로
+      if (o && s.rnd() < clamp(0.42 + (n(o.attrs.hea) + n(o.attrs.jmp) - n(best.attrs.hea) - n(best.attrs.jmp)) * 0.2 + (1.3 - od) * 0.12 + (s.HU[o.t]?.ctrl === o ? 0.15 : 0), 0.12, 0.85) * (ball.setp || s.HU[o.t]?.ctrl === o ? 1 : s.HU[o.t] ? 0.8 : 0.25)) { // 39차: 사람이 조작하는 수비수 +.15, 사람 팀의 AI 동료는 흐르는 경기에서도 ×.8 (×.25로는 열에 하나만 따냈다) // 세트피스는 수비가 자리를 잡고 기다린다. 흐르는 경기의 크로스는 그 0.25배 (0.4배면 크로스 받는 선수 첫 터치 92/96/85 → 85/86/78%)
+        best.kickCD = 0.3; o.kickCD = 0.35; if (headTo(s, o, null)) return; // 줄 동료가 있으면 머리로 넘긴다
+        const og = wx(0, o.t), a = Math.atan2(o.y - CY + (s.rnd() - 0.5) * 16, o.x - og) + (s.rnd() - 0.5) * 0.9, v = 9 + s.rnd() * 6; // 없으면 우리 골에서 멀어지는 쪽으로
         ball.vx = Math.cos(a) * v; ball.vy = Math.sin(a) * v; ball.vz = 4 + s.rnd() * 4; ball.isShot = false; ball.passTarget = null; ball.curl = 0; ball.thru = false; ball.lastTouch = o.t; ball.kicker = o; ball.shot++; o.kickCD = 0.35; best.kickCD = 0.3; o.dir = a; sfx(s, 'kick'); xtEv(s, 'clear', o.t, o.num, o.x, o.y); return;
       }
     }
