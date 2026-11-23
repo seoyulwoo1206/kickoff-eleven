@@ -27,7 +27,7 @@ export function installTouch(I: Inp, onTouch: () => void, getOpts: () => TouchOp
   const stickEnd = (e: PointerEvent) => { if (e.pointerId !== stickId) return; stickId = null; stickEl.style.left = stickEl.style.top = stickEl.style.bottom = ''; stickEl.classList.add('rest'); /* 쉬는 자리(CSS)로 */ knob.style.transform = ''; I.tx = 0; I.ty = 0; if (stickSprintOn) { stickSprintOn = false; keyUp(I, 'sprint'); } };
   stickArea.addEventListener('pointerup', stickEnd); stickArea.addEventListener('pointercancel', stickEnd); stickArea.addEventListener('lostpointercapture', stickEnd);
   /* 버튼 4개(41차, FC 모바일 식): 패스·스루·슛이 질주 버튼을 둘러싼다. 버튼을 누른 채 SW px 넘게 밀면 그 방향의 다른 동작 —
-     패스 ↑ 로빙(롱패스·크로스)·↓ 침투 요청, 슛 ↑ 감아차기·↓ 칩슛, 질주 = 밀면 개인기(수비 땐 ↑ 키퍼 나오기·그 밖 동료 압박). 수비 땐 패스 = 전환, 스루 = 슬라이딩, 슛 = 태클.
+     패스 ↑ 로빙(롱패스·크로스)·↓ 침투 요청·옆으로 동료 호출(49차), 슛 ↑ 감아차기·↓ 칩슛, 질주 = 밀면 개인기(수비 땐 ↑ 키퍼 나오기·그 밖 동료 압박). 수비 땐 패스 = 전환, 스루 = 슬라이딩, 슛 = 태클.
      밀기는 기존 액션 키를 대신 눌러 주는 것이라 시뮬·온라인 입력은 그대로다 */
   const SW = 24;
   type Dir4 = 'u' | 'd' | 'l' | 'r';
@@ -46,8 +46,9 @@ export function installTouch(I: Inp, onTouch: () => void, getOpts: () => TouchOp
   // 패스 / 전환
   { let alt: Act | null = null;
     bindBtn($('bA'), () => { alt = null; keyDown(I, 'pass'); }, () => { if (alt) { if (alt === 'lob') keyUp(I, 'lob'); } else keyUp(I, 'pass'); alt = null; }, dir => {
-      if (!getOpts().attack || (dir !== 'u' && dir !== 'd')) return;
+      if (!getOpts().attack) return;
       const held = I.holdT.pass; keyCancel(I, 'pass');
+      if (dir === 'l' || dir === 'r') { alt = 'jockey'; tap('jockey'); return '호출'; } // 옆으로: 동료 호출 (C 탭)
       if (dir === 'u') { alt = 'lob'; keyDown(I, 'lob'); I.holdT.lob = held; return '로빙'; } // 누른 시간은 이어받는다 (길게 = 멀리)
       alt = 'run'; tap('run'); return '침투';
     }); }

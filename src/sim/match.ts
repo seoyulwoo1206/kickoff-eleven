@@ -59,7 +59,7 @@ function makePlayers(s: Sim, squads: [import('../data/squad').SquadDef | null, i
       const lk = lookOf(T.code, d ? d.nameEn : 'p' + i, d ? d.num : NUMS[i]);
       const p: Player = {
         t, i, role: f.role, bx: f.x, by: f.y, num: d ? d.num : NUMS[i], x: 0, y: 0, vx: 0, vy: 0, dir: t === 0 ? 0 : Math.PI, speed: 0,
-        kickCD: 0, stun: 0, tackleCD: 0, bodyCD: 0, reactT: 0, shield: 0, lagVx: 0, lagVy: 0, cutCD: 0, beatT: 0, runT: 0, runDir: 0, offs: false, slide: 0, decT: 0, holdT: 0, lastSave: -1, dive: 0, diveDir: 0, lunge: 0, head: 0, atFeet: false, run: s.rnd() * 10,
+        kickCD: 0, stun: 0, tackleCD: 0, bodyCD: 0, reactT: 0, shield: 0, lagVx: 0, lagVy: 0, cutCD: 0, beatT: 0, runT: 0, runDir: 0, callT: 0, offs: false, slide: 0, decT: 0, holdT: 0, lastSave: -1, dive: 0, diveDir: 0, lunge: 0, head: 0, atFeet: false, run: s.rnd() * 10,
         forcePass: false, forceShot: false, cele: false, hair: lk.hair, skin: lk.skin, look: lk.seed, tone: lk.tone,
         name: d ? d.name : `${T.code} ${NUMS[i]}`, nameEn: d ? d.nameEn : `${T.code} ${NUMS[i]}`, pos: d ? d.pos : f.pos, ovr: d ? overall(d) : Math.round((T.atk + T.def + T.spd) / 3),
         foot: d ? d.foot : 'R', skill: d ? d.skill : 2, attrs: det, def: d,
@@ -129,6 +129,8 @@ export function setPiece(s: Sim, type: SetPieceType, t: number, x: number, y: nu
   for (const o of team[1 - t]) { if (o.role === 'GK' || o.off) continue; const q = d(o, ball); if (q < R) { const ux = (o.x - ball.x) / (q || 1), uy = (o.y - ball.y) / (q || 1); o.x = clamp(ball.x + ux * R, -1, W + 1); o.y = clamp(ball.y + uy * R, -1, H + 1); } }
   if (type === 'penalty') { const k = team[1 - t][0]; k.x = wx(0.8, 1 - t); k.y = CY; k.vx = k.vy = 0; for (const o of players) if (o !== tk && o !== k && wx(o.x, t) > W - 16.5 && Math.abs(o.y - CY) < 20.16) { o.x = wx(W - 18, t); } }
   if (type === 'freekick') M.wall = buildWall(s, t, x, y);
+  // 49차: 코너킥 자리(cornerSetup)를 찰 때까지 지킨다 — 전엔 세워 놓기만 해서 차기 전 몇 초 동안 공(코너 깃발) 쪽 대형 자리로 걸어 나와 박스가 비었다 (조준점으로 들어가는 `aimMan`만 움직인다 — teamAI)
+  if (type === 'corner' && !M.so) M.spots = new Map(players.filter(p => !p.off && p !== tk && p.role !== 'GK').map(p => [p, { x: p.x, y: p.y }]));
   if (type === 'penalty' || type === 'corner') M.stops++;
   M.phase = 'setpiece'; M.spType = type; M.phaseT = type === 'penalty' ? 1.4 : 0.8; M.protect = 1.6; M.adv = null;
   for (const h of HU) { if (!h) continue; h.charging = false; h.lock = 0; h.armP = h.armL = false; if (h.t === t) setCtrl(h, tk); else setCtrl(h, nearestOutfield(s, h.t, ball)); }
@@ -213,7 +215,7 @@ export function step(s: Sim, dt: number) {
   if (M.throwIn) { if (ball.owner !== M.throwIn || M.throwIn.off) M.throwIn = null; else { M.protect = Math.max(M.protect, 0.5); if (M.phase === 'live') M.throwT += dt; } } // 던지기 전엔 뺏을 수 없다
   M.protect = Math.max(0, M.protect - dt); M.react[0] = Math.max(0, M.react[0] - dt); M.react[1] = Math.max(0, M.react[1] - dt);
   for (const p of players) {
-    p.kickCD = Math.max(0, p.kickCD - dt); p.stun = Math.max(0, p.stun - dt); p.tackleCD = Math.max(0, p.tackleCD - dt); p.bodyCD = Math.max(0, p.bodyCD - dt); p.shield = Math.max(0, p.shield - dt); p.runT = Math.max(0, p.runT - dt); p.cutCD = Math.max(0, p.cutCD - dt); p.beatT = Math.max(0, p.beatT - dt); p.reactT = Math.max(0, p.reactT - dt); p.dive = Math.max(0, p.dive - dt); p.lunge = Math.max(0, p.lunge - dt); p.head = Math.max(0, p.head - dt);
+    p.kickCD = Math.max(0, p.kickCD - dt); p.stun = Math.max(0, p.stun - dt); p.tackleCD = Math.max(0, p.tackleCD - dt); p.bodyCD = Math.max(0, p.bodyCD - dt); p.shield = Math.max(0, p.shield - dt); p.callT = Math.max(0, p.callT - dt); p.runT = Math.max(0, p.runT - dt); p.cutCD = Math.max(0, p.cutCD - dt); p.beatT = Math.max(0, p.beatT - dt); p.reactT = Math.max(0, p.reactT - dt); p.dive = Math.max(0, p.dive - dt); p.lunge = Math.max(0, p.lunge - dt); p.head = Math.max(0, p.head - dt);
     p.feint = Math.max(0, p.feint - dt); p.burst = Math.max(0, p.burst - dt); if (p.spin > 0) { p.spin -= dt; p.dir += p.spinDir * Math.PI * 2 / 0.5 * dt; if (p.spin <= 0) p.spin = 0; }
     if (p.slide > 0) { p.slide -= dt; p.vx *= 1 - 2.5 * dt; p.vy *= 1 - 2.5 * dt; if (p.slide <= 0) { p.slide = 0; p.stun = Math.max(p.stun, 0.45); } }
     // 체력: 질주하면 빠르게, 달리면 천천히 닳고 걸으면 회복. 한 경기 내내 질주하면 다 닳는 정도 (스태미나 능력치로 보정)

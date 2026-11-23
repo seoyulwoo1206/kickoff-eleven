@@ -327,6 +327,16 @@ export class ThreeRenderer implements IRenderer {
       ctx.strokeStyle = '#ffd166'; ctx.lineWidth = 3; ctx.lineCap = 'round'; ctx.beginPath(); ctx.moveTo(6, 0); ctx.lineTo(len - 8, 0); ctx.stroke();
       ctx.fillStyle = '#ffd166'; ctx.beginPath(); ctx.moveTo(len + 2, 0); ctx.lineTo(len - 12, -7); ctx.lineTo(len - 12, 7); ctx.fill(); ctx.restore();
     }
+    // 동료 호출 화살표(49차): 부른 동료 발밑에서 공 가진 선수 쪽으로 (청록)
+    for (const p of players) {
+      const o = ball.owner; if (!(p.callT > 0) || p.off || !o || o.t !== p.t || o === p) continue;
+      const q = Math.hypot(o.x - p.x, o.y - p.y) || 1, L = Math.min(4.5, Math.max(0, q - 1.5)); if (L < 1) continue;
+      const a = this.toScreen(p.x, p.y, 0.05), b = this.toScreen(p.x + (o.x - p.x) / q * L, p.y + (o.y - p.y) / q * L, 0.05); if (!a.on) continue;
+      const ang = Math.atan2(b.y - a.y, b.x - a.x), len = Math.hypot(b.x - a.x, b.y - a.y);
+      ctx.save(); ctx.globalAlpha = clamp(p.callT / 0.4, 0, 1) * 0.95; ctx.translate(a.x, a.y); ctx.rotate(ang);
+      ctx.strokeStyle = '#5fd8ff'; ctx.lineWidth = 3; ctx.lineCap = 'round'; ctx.beginPath(); ctx.moveTo(6, 0); ctx.lineTo(len - 8, 0); ctx.stroke();
+      ctx.fillStyle = '#5fd8ff'; ctx.beginPath(); ctx.moveTo(len + 2, 0); ctx.lineTo(len - 12, -7); ctx.lineTo(len - 12, 7); ctx.fill(); ctx.restore();
+    }
     // 압박 지원 화살표: 가장 가까운 AI 동료 → 공 가진 상대
     for (const h of HU) {
       if (!h || h.pressT <= 0 || !ball.owner || ball.owner.t === h.t) continue; const o = ball.owner;

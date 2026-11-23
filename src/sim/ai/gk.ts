@@ -36,12 +36,14 @@ export function gkAI(s: Sim, k: Player, dt: number) {
     }
     if (!ball.isShot && (ball.z > 1.6 || ball.vz > 3) && lb < 45) { // 공중볼 (전엔 선에 서서 구경했다): ① 손 닿는 높이(2.7m)로 내려오는 자리에 공보다 먼저 가 있을 수 있으면 나가서 잡는다 — 골라인 5.5m 안은 늘, 11m 안은 그 자리 2.2m 안으로 올 상대가 없을 때만. ② 박스 안에 떨어질 공은 상대보다 먼저 닿으면 주우러 나간다
       const oppT = (x: number, y: number, r: number) => { let b = 1e9; for (const o of team[1 - t]) if (!o.off) b = Math.min(b, Math.max(0, Math.hypot(o.x - x, o.y - y) - r) / (o.speed * 1.15)); return b; };
-      let up = ball.z > 2.7, first = true;
+      let up = ball.z > 2.7, first = true, went = false, land: { x: number; y: number } | null = null;
       for (const q of s.pred) { if (q.z > 2.7) { up = true; continue; } if (!up) continue;
         const lq = wx(q.x, t), cy = Math.abs(q.y - CY), kt = Math.max(0, Math.hypot(q.x - k.x, q.y - k.y) - 1.0) / (k.speed * 1.05) + 0.12;
-        if (first) { first = false; if (q.z > 0.7 && lq > -0.3 && cy < 9 && kt < q.t && (lq < 5.5 || (lq < 11 && oppT(q.x, q.y, 2.2) > q.t))) { tx = lq; ty = q.y; f = 1.35; break; } }
-        if (q.z < 0.4) { if (lq > 0.5 && lq < 15.5 && cy < 18 && kt < oppT(q.x, q.y, 1) - 0.25) { tx = lq; ty = q.y; f = 1.3; } break; }
+        if (first) { first = false; land = q; if (q.z > 0.7 && lq > -0.3 && cy < 9 && kt < q.t && (lq < 5.5 || (lq < 11 && oppT(q.x, q.y, 2.2) > q.t))) { tx = lq; ty = q.y; f = 1.35; went = true; break; } }
+        if (q.z < 0.4) { if (lq > 0.5 && lq < 15.5 && cy < 18 && kt < oppT(q.x, q.y, 1) - 0.25) { tx = lq; ty = q.y; f = 1.3; went = true; } break; }
       }
+      // 49차: 못 나가는 크로스는 떨어질 자리 쪽으로 골라인 가까이에서 자리를 옮긴다 — 전엔 날아오는 공(코너 깃발 쪽)을 따라 니어 포스트 쪽 3.5m 앞에 서 있어, 파 포스트로 넘어간 공의 헤딩은 빈 골문이었다
+      if (!went && land && wx(land.x, t) < 16.5 && Math.abs(land.y - CY) < 16) { tx = Math.min(tx, 1.6); ty = clamp(CY + (land.y - CY) * 0.5, CY - 3.3, CY + 3.3); f = Math.max(f, 1.15); }
     }
     if (ball.kicker && ball.kicker.t !== t && ball.shot !== k.lastSave && vlx < -4 && lb <= lk + 0.5 && lb > lk - 1.8 && Math.abs(ball.y - k.y) < 2.9 && ball.z < 2.7) { // 선방 판정
       k.lastSave = ball.shot; const dy0 = Math.abs(ball.y - k.y), sp = Math.hypot(ball.vx, ball.vy), hi = ball.z > 1.6;

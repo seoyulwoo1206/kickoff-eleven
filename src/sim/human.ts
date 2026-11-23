@@ -86,6 +86,19 @@ export function triggerRun(s: Sim, h: Human, p: Player, aim: number) {
   const line = offsideLine(s, h.t), gy = gapY(s, h.t, best.y + clamp(CY - best.y, -12, 12) * 0.6, line), tx = wx(Math.min(Math.max(line, wx(best.x, h.t)) + 12, 102), h.t);
   best.runT = 3; best.runDir = Math.atan2(gy - best.y, tx - best.x); sfx(s, 'kick');
 }
+/** 동료 호출(49차, 공격 때 jockey 키): 가까운 동료 하나가 `callT` 3.2초 동안 공 가진 선수 6.5m 앞까지 받으러 온다(teamAI) — 짧은 패스를 주고받을 상대를 만든다.
+    대상: 4~34m 안 필드 선수 중 가까운 쪽, 방향키를 누르고 있으면 그쪽 동료 우대. 이미 부른 선수가 있으면 그 선수는 풀고 다른 선수를 부른다 */
+export function callSupport(s: Sim, h: Human, p: Player, aim: number | null) {
+  let best: Player | null = null, bs = -1e9;
+  for (const m of s.team[h.t]) {
+    if (m === p || m.role === 'GK' || m.off) continue; const dx = m.x - p.x, dy = m.y - p.y, q = Math.hypot(dx, dy); if (q < 4 || q > 34) continue;
+    const c = aim === null ? 0 : (dx * Math.cos(aim) + dy * Math.sin(aim)) / q;
+    const sc = -q / 7 + c * 2.5 - (m.callT > 0 ? 3 : 0); if (sc > bs) { bs = sc; best = m; }
+  }
+  for (const m of s.team[h.t]) m.callT = 0;
+  if (!best) return;
+  best.callT = 3.2; best.runT = 0; sfx(s, 'kick');
+}
 /** 스로인을 알아서 던질 때의 대상: 24m 안에서 가장 열린(가까운 상대가 먼) 동료, 너무 멀면 감점, 안쪽 우대 */
 function throwOpen(s: Sim, p: Player): Player | null {
   let best: Player | null = null, bs = -1e9;
@@ -141,6 +154,7 @@ export function humanUpdate(s: Sim, h: Human, dt: number) {
   }
   const aim = mag > 0.15 ? Math.atan2(my, mx) : p.dir;
   if (I.press.run && !h.charging) { if (oursBall(s, h.t)) triggerRun(s, h, p, aim); else h.pressT = 2.5; } // 슛을 모으는 중의 Q는 칩슛 수식키(폰: 슛 버튼을 아래로 밀기) // Q: 우리 공이면 침투 요청, 아니면 동료 압박
+  if (I.press.jockey && own && !dead && !M.throwIn) callSupport(s, h, p, mag > 0.15 ? aim : null); // C: 동료 호출 (수비 때의 C는 자세 낮추기)
   const kicking = p.kickWind > 0;
   // 이동
   if (dead) { // 공 뒤에 서서 조준 방향으로 돈다 (초당 6rad), 공은 놓인 자리에
@@ -199,7 +213,7 @@ export function humanUpdate(s: Sim, h: Human, dt: number) {
       if (skillMove(s, p, sv.x, sv.y)) return;
     }
     // 패스는 떼는 순간, 누른 시간이 세기 (탭 = 보통). 우리 공일 때 누른 것만 (수비 때 누른 전환·슬라이딩 키를 공을 뺏은 뒤에 떼도 패스가 나가지 않는다)
-    if (I.rel.pass && h.armP) { const pw = clamp((I.holdT.pass - 0.12) / 0.45, 0, 1), tie = mag > 0.15 ? 0.2 : 0.4; queueKick(s, p, () => shortPass(s, p, aim, pw, tie), 0.04); h.charging = false; return; } // 방향키 없이 누르면 보는 쪽 넓게
+    if (I.rel.pass && h.armP) { const pw = clamp((I.holdT.pass - 0.12) / 0.45, 0, 1), tie = mag > 0.15 ? 0.2 : 0.4, cm = mag > 0.15 ? null : s.team[p.t].find(m => m.callT > 0 && !m.off && m !== p && Math.hypot(m.x - p.x, m.y - p.y) < 30) ?? null; /* 방향키 없이 누르면 방금 부른 동료에게 (49차) */ queueKick(s, p, () => cm ? passTo(s, p, cm, false, pw) : shortPass(s, p, aim, pw, tie), 0.04); h.charging = false; return; } // 방향키 없이 누르면 보는 쪽 넓게
     if (I.rel.lob && h.armL) { const pw = clamp((I.holdT.lob - 0.1) / 0.5, 0, 1); queueKick(s, p, () => longPass(s, p, aim, 0.35 + pw * 0.65)); h.charging = false; return; }
     if (I.press.through) { const pw = I.down.sprint ? 0.8 : 0; queueKick(s, p, () => throughPass(s, p, aim, pw), 0.04); h.charging = false; return; }
     if (I.rel.chip && !h.zUsed && !h.charging) { queueKick(s, p, () => chipShot(s, p)); return; } // Z만 눌렀다 떼면 칩슛 (Z를 누른 채 슛 = 감아차기)

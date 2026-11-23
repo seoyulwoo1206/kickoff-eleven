@@ -138,6 +138,9 @@ export function teamAI(s: Sim, t: number, dt: number) {
   const trig = carrier && carrier.t !== t && (carrier.kickCD > 0 || Math.cos(carrier.dir) * (t === 0 ? -1 : 1) > 0.3) ? 1.12 : 1;
   // 상대의 낮은 패스가 굴러가는 중(반응 지연 뒤): 속도² (아니면 0). 전엔 쫓는 선수 한 명과 받는 선수의 마커만 움직여, 길목 옆에 선 나머지는 공이 지나가는 걸 보고만 있었다
   const lane = h && !ball.owner && ball.kicker && ball.kicker.t !== t && !ball.isShot && ball.z < 0.8 && M.phase === 'live' && !M.dead && M.react[t] <= 0 ? ((v2: number) => v2 > 64 ? v2 : 0)(ball.vx * ball.vx + ball.vy * ball.vy) : 0;
+  // 49차 박스 안 경합: 상대가 띄운 공이 받는 선수에게 날아오는 중이면, 그 선수에게 가장 가까운(7m 안) 우리 필드 선수 하나가 골 쪽 0.5m로 붙어 같이 뜬다 (`ballControl`의 공중볼 경합·헤딩 방해는 1.3m·2.2m 안이라야 걸린다 — 전엔 자기 자리에 서서 구경해 코너킥의 절반이 자유 헤딩이었다)
+  let air: Player | null = null; const airT = ball.passTarget;
+  if (!ball.owner && airT && airT.t !== t && !ball.isShot && (ball.z > 1.5 || ball.vz > 3) && M.phase === 'live') { let bd = 7; for (const p of team[t]) { if (p.off || p.role === 'GK' || p.stun > 0 || p.slide > 0 || (h && p === h.ctrl)) continue; const q = d(p, airT); if (q < bd) { bd = q; air = p; } } }
   for (const p of team[t]) {
     if (p.off) continue;
     if (h && p === h.ctrl) continue;
@@ -145,6 +148,11 @@ export function teamAI(s: Sim, t: number, dt: number) {
     if (p.role === 'GK') { gkAI(s, p, dt); continue; }
     if (own === p) { aiCarrier(s, p, dt); continue; }
     if (M.spots && M.dead && p !== M.aimMan) { const sp = M.spots.get(p); if (sp) { moveTo(p, sp.x + Math.sin(M.time * 1.3 + p.i * 2.1) * 0.5, sp.y + Math.cos(M.time * 1.1 + p.i * 1.4) * 0.5, 0.8, dt); continue; } } // 골킥: 찰 때까지 배치 자리
+    if (p.callT > 0 && own && own.t === t && own !== p) { // 동료 호출(49차): 공 가진 동료 쪽으로 6.5m 앞까지 와서 받는다 (패스 길에 상대가 서 있으면 옆으로 비킨다)
+      const dx = p.x - own.x, dy = p.y - own.y, q = Math.hypot(dx, dy) || 1, R = 6.5, g = openLane(own.x + dx / q * R, own.y + dy / q * R);
+      moveTo(p, clamp(g.x, 1, W - 1), clamp(g.y, 1.5, H - 1.5), q > R + 2 ? 1.2 : 0.9, dt); continue;
+    }
+    if (p === air && airT) { moveTo(p, airT.x + (t === 0 ? -0.5 : 0.5), airT.y, 1.15, dt); continue; }
     if (dd && M.wall.includes(p)) { steer(p, 0, 0, dt); p.dir = Math.atan2(M.setY - p.y, M.setX - p.x); continue; } // 벽은 찰 때까지 서 있는다
     if (p.runT > 0 && (att || (!own && ball.lastTouch === t))) { // 침투 지시: 지시 방향으로 질주하되 오프사이드 라인 안에서
       const line = offsideLine(s, t); let tx = p.x + Math.cos(p.runDir) * 12, ty = clamp(p.y + Math.sin(p.runDir) * 12, 2, H - 2);

@@ -35,7 +35,7 @@ export function updateHud(s: Sim, local: number) {
   const clr = own && wx(ball.x, local) < 60, lk = own ? (clr ? 'c' : 'a') : 'd'; // 골에서 45m 넘게 먼 자기 진영: 슛 키는 걷어내기(`shoot`) → 글자도 '클리어'
   if (lk !== labelCache) { labelCache = lk; // 글자와 밀기 안내(data-up/dn: 버튼 위·아래 작은 글자)
     const set = (id: string, text: string, up = '', dn = '') => { const el = $(id); el.textContent = text; el.dataset.up = up; el.dataset.dn = dn; };
-    if (own) { set('bA', '패스', '▲ 로빙', '▼ 침투'); if (clr) set('bB', '클리어'); else set('bB', '슛', '▲ 감아', '▼ 칩'); set('bD', '스루'); set('bC', '질주', '밀기 = 개인기'); }
+    if (own) { set('bA', '패스', '▲ 로빙', '▼ 침투 · ◀ 호출'); if (clr) set('bB', '클리어'); else set('bB', '슛', '▲ 감아', '▼ 칩'); set('bD', '스루'); set('bC', '질주', '밀기 = 개인기'); }
     else { set('bA', '전환'); set('bB', '태클'); set('bD', '슬라이딩'); set('bC', '질주', '▲ 키퍼', '◀▶ 압박'); }
   }
 }

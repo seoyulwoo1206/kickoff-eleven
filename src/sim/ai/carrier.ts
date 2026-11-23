@@ -3,7 +3,7 @@ import { d, wx, clamp } from '../util';
 import { DIFF } from '../../data/teams';
 import type { Sim, Player } from '../types';
 import { sfx, puff } from '../events';
-import { gain, knockOn, passTo, throughPass, chipShot, shoot, slideTackle, leadPos, laneRisk, offsideLine, queueKick, n, throwTo, throwPick, kick } from '../ball';
+import { gain, knockOn, passTo, throughPass, chipShot, shoot, slideTackle, leadPos, laneRisk, offsideLine, queueKick, n, throwTo, throwPick, kick, setKick } from '../ball';
 import { steer } from '../move';
 
 export function tryTackle(s: Sim, p: Player, own: Player | null, rate: number) {
@@ -46,6 +46,16 @@ export function tryTackle(s: Sim, p: Player, own: Player | null, rate: number) {
   }
 }
 export interface PassChoice { p: Player; score: number; loft: boolean; thru: boolean; }
+/** AI 코너킥(49차): 니어 포스트·파 포스트·페널티 스폿 앞 중 한 곳(±1.6m 흩어짐)으로 띄운다 — 사람 팀 세트피스와 같은 식(`setKick` loft), 떨어질 자리에 먼저 닿을 동료가 받는다.
+    (가장 열린 동료를 정확히 겨냥하게 했더니 코너킥의 35%가 골이었다.) 박스에 동료가 없으면 false (평소 패스로) */
+function aiCorner(s: Sim, p: Player) {
+  const { M, team } = s, t = p.t; let inBox = 0;
+  for (const m of team[t]) if (m !== p && !m.off && m.role !== 'GK' && wx(m.x, t) > W - 16 && Math.abs(m.y - CY) < 13) inBox++;
+  if (!inBox) return false;
+  const sd = M.setY < CY ? -1 : 1, r = s.rnd(), z: [number, number] = r < 0.4 ? [W - 6, sd * 3.2] : r < 0.75 ? [W - 7.5, -sd * 4] : [W - 10.5, sd * 0.5], pw = 0.2 + s.rnd() * 0.5;
+  M.aimX = wx(z[0] + (s.rnd() * 2 - 1) * 1.6, t); M.aimY = CY + z[1] + (s.rnd() * 2 - 1) * 1.6; M.aimMan = null;
+  queueKick(s, p, () => setKick(s, p, 'loft', pw)); return true;
+}
 export function bestAIPass(s: Sim, p: Player): PassChoice | null {
   let best: PassChoice | null = null, bs = -1e9;
   const line = offsideLine(s, p.t), st = s.M.tac[p.t].style, maxQ = 24 + p.attrs.vis * 0.22; // 시야가 좋을수록 먼 동료도 본다
@@ -78,7 +88,7 @@ export function aiCarrier(s: Sim, p: Player, dt: number) {
   if (p.decT <= 0 && M.phase === 'live') {
     p.decT = D.react * (0.8 + s.rnd() * 0.6);
     if (p.forceShot) { p.forceShot = false; const pw = 0.75 + s.rnd() * 0.1, ay = s.rnd() < 0.5 ? 1 : -1; queueKick(s, p, () => shoot(s, p, pw, ay)); return; }
-    if (p.forcePass) { p.forcePass = false; const m = bestAIPass(s, p); if (m) { queueKick(s, p, () => passTo(s, p, m.p, m.loft)); return; } }
+    if (p.forcePass) { p.forcePass = false; if (M.spType === 'corner' && M.dead === p && aiCorner(s, p)) return; const m = bestAIPass(s, p); if (m) { queueKick(s, p, () => passTo(s, p, m.p, m.loft)); return; } }
     // 압박받으면 개인기로 흘리기도 한다 (개인기 등급이 높을수록)
     if (nd < 2.2 && p.skill >= 3 && p.feint <= 0 && s.rnd() < 0.03 * p.skill) { p.feint = 0.35; p.burst = 0.45; }
     const kp = team[1 - t][0], kpOut = Math.abs(kp.x - gx) > 7;
@@ -91,6 +101,8 @@ export function aiCarrier(s: Sim, p: Player, dt: number) {
       if (m && ((pressed && m.score > -0.3) || m.score > 1.2 || (p.holdT > 2.4 && m.score > -1))) { if (m.thru) { const a = Math.atan2(m.p.y - p.y, m.p.x - p.x); queueKick(s, p, () => throughPass(s, p, a, 0, 30)); } else queueKick(s, p, () => passTo(s, p, m.p, m.loft)); return; }
     }
   }
+  // 49차: 세트피스·킥오프 키커는 찰 때까지 제자리 — 전엔 결정을 기다리는 0.35초 동안 골 쪽으로 몰고 가서, 코너킥은 0.9초 만에 공이 골라인을 넘어 상대 골킥이 됐다(40번 중 40번). 3초 넘게 줄 곳이 없으면 풀린다
+  if (M.dead === p && !M.throwIn && M.deadT < 3) { steer(p, 0, 0, dt); p.holdT += dt; return; }
   let dx = t === 0 ? 1 : -1, dy = (CY - p.y) / 40;
   if (nearest && nd < 6) { const w = (6 - nd) / 6 * 1.4; dx += (p.x - nearest.x) / nd * w; dy += (p.y - nearest.y) / nd * w * 1.3; }
   if (p.y < 4) dy += 0.8; if (p.y > H - 4) dy -= 0.8;
