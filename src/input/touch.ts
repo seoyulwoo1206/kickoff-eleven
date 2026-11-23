@@ -51,7 +51,7 @@ export function touchGauge(id: string, frac: number, hot = false) {
   const el = document.getElementById(id); if (!el) return;
   if (frac <= 0) { el.style.background = ''; return; }
   const col = hot ? '#ff5a4e' : '#ffb627';
-  el.style.background = `conic-gradient(${col} ${Math.round(frac * 360)}deg, rgba(9,17,27,.55) 0)`;
+  el.style.background = `conic-gradient(${col} ${Math.round(frac * 360)}deg, rgba(9,17,27,.26) 0)`;
 }
 /** 버튼 크기·투명도 (CSS 변수) */
 export function applyTouchStyle(size: 'small' | 'normal' | 'large', alpha: 'light' | 'normal' | 'solid') {
