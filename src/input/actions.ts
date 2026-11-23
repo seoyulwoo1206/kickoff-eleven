@@ -25,6 +25,8 @@ export function keyDown(I: Inp, k: Act | Dir, repeat?: boolean) {
   if (isAct(k)) { if (!repeat && !I.down[k]) { I.press[k] = true; I.holdT[k] = 0; } I.down[k] = true; }
   else I.keys.add(k);
 }
+/** 누르고 있던 액션을 거둔다 — 뗀 것(rel)으로 치지 않으므로 떼는 순간 나가는 패스·슛이 안 나간다 (폰: 버튼을 밀어 다른 동작으로 바꿀 때) */
+export function keyCancel(I: Inp, k: Act) { I.down[k] = false; }
 export function keyUp(I: Inp, k: Act | Dir) {
   if (isAct(k)) { if (I.down[k]) I.rel[k] = true; I.down[k] = false; }
   else I.keys.delete(k);

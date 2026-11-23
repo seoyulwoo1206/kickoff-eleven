@@ -129,7 +129,7 @@ export function humanUpdate(s: Sim, h: Human, dt: number) {
     if (p.holdT > 6 && !h.charging && p.kickWind <= 0 && !I.down.pass && !I.down.lob) { const m = bestAIPass(s, p); if (m) passTo(s, p, m.p, m.loft); else kick(s, p, (p.t === 0 ? 1 : -1) * 22, (s.rnd() - 0.5) * 8, 7); return; }
   }
   const aim = mag > 0.15 ? Math.atan2(my, mx) : p.dir;
-  if (I.press.run) { if (oursBall(s, h.t)) triggerRun(s, h, p, aim); else h.pressT = 2.5; } // Q: 우리 공이면 침투 요청, 아니면 동료 압박
+  if (I.press.run && !h.charging) { if (oursBall(s, h.t)) triggerRun(s, h, p, aim); else h.pressT = 2.5; } // 슛을 모으는 중의 Q는 칩슛 수식키(폰: 슛 버튼을 아래로 밀기) // Q: 우리 공이면 침투 요청, 아니면 동료 압박
   const kicking = p.kickWind > 0;
   // 이동
   if (dead) { // 공 뒤에 서서 조준 방향으로 돈다 (초당 6rad), 공은 놓인 자리에

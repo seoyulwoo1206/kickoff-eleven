@@ -1,6 +1,7 @@
 /* Canvas 2D 렌더러 (Phase 2에서 Three.js로 교체 예정). 진짜 원근 투영(TV 중계 카메라):
    카메라는 조준점(cam.x, cam.y) 뒤쪽 CAM.D m, 높이 CAM.Hc m에서 조준점을 내려다본다.
    proj(x,y,z) → 화면 좌표와 그 깊이에서의 px/m 배율(s). 멀면 작게, 가까우면 크게 */
+import { miniPos } from './minimap';
 import { W, H, CX, CY, GH, GZ } from '../sim/consts';
 import { clamp } from '../sim/util';
 import { hexRgb, isLight, type Kit } from '../data/teams';
@@ -261,7 +262,7 @@ export class Renderer implements IRenderer {
       } else { const cx2 = clamp(px, 24, cw - 24), cy2 = clamp(py, 24 + ins.t, ch - 24 - ins.b), a = Math.atan2(py - cy2, px - cx2); ctx.save(); ctx.translate(cx2, cy2); ctx.rotate(a); ctx.fillStyle = h.col; ctx.beginPath(); ctx.moveTo(12, 0); ctx.lineTo(-6, -8); ctx.lineTo(-6, 8); ctx.fill(); ctx.restore(); }
     }
     // 미니맵
-    const mk = clamp(cw * 0.24 / W, 0.8, 1.5), mw = W * mk, mh = H * mk, mx0 = cw - mw - Math.max(12, ins.r), my0 = ins.t + 56;
+    const mk = clamp(cw * 0.24 / W, 0.8, 1.5), mw = W * mk, mh = H * mk, mp = miniPos(cw, ch, mw, mh, ins), mx0 = mp.x, my0 = mp.y;
     ctx.fillStyle = 'rgba(9,17,27,.62)'; ctx.fillRect(mx0 - 3, my0 - 3, mw + 6, mh + 6); ctx.strokeStyle = 'rgba(238,243,234,.35)'; ctx.lineWidth = 1; ctx.strokeRect(mx0, my0, mw, mh);
     ctx.beginPath(); ctx.moveTo(mx0 + mw / 2, my0); ctx.lineTo(mx0 + mw / 2, my0 + mh); ctx.stroke();
     for (const p of players) { const kit = M.kit[p.t]; ctx.fillStyle = p.role === 'GK' ? kit.gk : kit.c1; const hh = HU.find(h => h && h.ctrl === p); ctx.beginPath(); ctx.arc(mx0 + p.x * mk, my0 + p.y * mk, hh ? 3.2 : 2.3, 0, 7); ctx.fill(); if (hh) { ctx.strokeStyle = hh.col; ctx.lineWidth = 1.5; ctx.stroke(); } }

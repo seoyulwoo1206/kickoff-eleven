@@ -1,9 +1,9 @@
-import { keyDown, keyUp, type Inp } from './actions';
+import { keyDown, keyUp, keyCancel, type Inp, type Act } from './actions';
 
-/* 왼쪽 55% 화면 어디든 누르면 그 자리에 아날로그 조이스틱이 뜬다. 오른쪽은 패스·슛·질주·스루 버튼 */
+/* 왼쪽 55% 화면 어디든 누르면 그 자리에 아날로그 조이스틱이 뜬다. 오른쪽은 질주·패스·스루·슛 버튼 (누른 채 밀면 다른 동작) */
 const $ = (id: string) => document.getElementById(id) as HTMLElement;
 const STICK_R = 58;
-export interface TouchOpts { stickSprint: boolean; }
+export interface TouchOpts { stickSprint: boolean; /** 버튼이 공격용인가 (우리 공 — `hud.ts`의 버튼 글자와 같은 기준) */ attack: boolean; /** 밀어서 바꾼 버튼 글자를 되돌린다 */ relabel: () => void; }
 let stickSprintOn = false;
 export function installTouch(I: Inp, onTouch: () => void, getOpts: () => TouchOpts) {
   const stickArea = $('stickArea'), stickEl = $('stick'), knob = stickEl.querySelector('.knob') as HTMLElement;
@@ -26,18 +26,47 @@ export function installTouch(I: Inp, onTouch: () => void, getOpts: () => TouchOp
   stickArea.addEventListener('pointermove', e => { if (e.pointerId === stickId) stickSet(e.clientX, e.clientY); });
   const stickEnd = (e: PointerEvent) => { if (e.pointerId !== stickId) return; stickId = null; stickEl.hidden = true; knob.style.transform = ''; I.tx = 0; I.ty = 0; if (stickSprintOn) { stickSprintOn = false; keyUp(I, 'sprint'); } };
   stickArea.addEventListener('pointerup', stickEnd); stickArea.addEventListener('pointercancel', stickEnd); stickArea.addEventListener('lostpointercapture', stickEnd);
-  const bindBtn = (el: HTMLElement, down: () => void, up: () => void) => {
-    el.addEventListener('pointerdown', e => { e.preventDefault(); try { el.setPointerCapture(e.pointerId); } catch { /* */ } el.classList.add('down'); down(); });
-    const end = () => { if (!el.classList.contains('down')) return; el.classList.remove('down'); up(); };
+  /* 버튼 4개(41차, FC 모바일 식): 패스·스루·슛이 질주 버튼을 둘러싼다. 버튼을 누른 채 SW px 넘게 밀면 그 방향의 다른 동작 —
+     패스 ↑ 로빙(롱패스·크로스)·↓ 침투 요청, 슛 ↑ 감아차기·↓ 칩슛, 질주 = 밀면 개인기(수비 땐 ↑ 키퍼 나오기·그 밖 동료 압박). 수비 땐 패스 = 전환, 스루 = 슬라이딩, 슛 = 태클.
+     밀기는 기존 액션 키를 대신 눌러 주는 것이라 시뮬·온라인 입력은 그대로다 */
+  const SW = 24;
+  type Dir4 = 'u' | 'd' | 'l' | 'r';
+  const bindBtn = (el: HTMLElement, down: () => void, up: () => void, swipe?: (dir: Dir4, dx: number, dy: number) => string | void) => {
+    let id: number | null = null, sx = 0, sy = 0, swiped = false;
+    el.addEventListener('pointerdown', e => { e.preventDefault(); if (id !== null) return; try { el.setPointerCapture(e.pointerId); } catch { /* */ } id = e.pointerId; sx = e.clientX; sy = e.clientY; swiped = false; el.classList.add('down'); I.touch = true; onTouch(); down(); });
+    el.addEventListener('pointermove', e => {
+      if (e.pointerId !== id || swiped || !swipe) return; const dx = e.clientX - sx, dy = e.clientY - sy; if (Math.hypot(dx, dy) < SW) return;
+      swiped = true; const alt = swipe(Math.abs(dy) >= Math.abs(dx) ? (dy < 0 ? 'u' : 'd') : (dx < 0 ? 'l' : 'r'), dx, dy); if (alt) { el.textContent = alt; el.classList.add('alt'); }
+    });
+    const end = (e: PointerEvent) => { if (id === null || (e.type !== 'lostpointercapture' && e.pointerId !== id)) return; id = null; el.classList.remove('down'); const was = el.classList.contains('alt'); el.classList.remove('alt'); up(); if (was) getOpts().relabel(); };
     el.addEventListener('pointerup', end); el.addEventListener('pointercancel', end); el.addEventListener('lostpointercapture', end);
     el.addEventListener('contextmenu', e => e.preventDefault());
   };
-  bindBtn($('bA'), () => { I.touch = true; onTouch(); keyDown(I, 'pass'); }, () => keyUp(I, 'pass'));
-  bindBtn($('bB'), () => { I.touch = true; onTouch(); keyDown(I, 'shoot'); }, () => keyUp(I, 'shoot'));
-  bindBtn($('bC'), () => { I.touch = true; onTouch(); keyDown(I, 'sprint'); }, () => keyUp(I, 'sprint'));
-  bindBtn($('bD'), () => { I.touch = true; onTouch(); keyDown(I, 'through'); }, () => keyUp(I, 'through'));
-  bindBtn($('bL'), () => { I.touch = true; onTouch(); keyDown(I, 'lob'); }, () => keyUp(I, 'lob'));
-  bindBtn($('bR'), () => { I.touch = true; onTouch(); keyDown(I, 'run'); }, () => keyUp(I, 'run'));
+  const tap = (k: Act, ms = 50) => { keyDown(I, k); window.setTimeout(() => keyUp(I, k), ms); };
+  // 패스 / 전환
+  { let alt: Act | null = null;
+    bindBtn($('bA'), () => { alt = null; keyDown(I, 'pass'); }, () => { if (alt) { if (alt === 'lob') keyUp(I, 'lob'); } else keyUp(I, 'pass'); alt = null; }, dir => {
+      if (!getOpts().attack || (dir !== 'u' && dir !== 'd')) return;
+      const held = I.holdT.pass; keyCancel(I, 'pass');
+      if (dir === 'u') { alt = 'lob'; keyDown(I, 'lob'); I.holdT.lob = held; return '로빙'; } // 누른 시간은 이어받는다 (길게 = 멀리)
+      alt = 'run'; tap('run'); return '침투';
+    }); }
+  // 슛 / 태클: 공격 때 누른 채 ↑ 감아차기(Z를 누른 채 슛)·↓ 칩슛(Q를 누른 채 슛)
+  { let mod: Act | null = null;
+    bindBtn($('bB'), () => { mod = null; keyDown(I, 'shoot'); }, () => { keyUp(I, 'shoot'); if (mod) { const m = mod; window.setTimeout(() => keyUp(I, m), 90); } mod = null; }, dir => {
+      if (!getOpts().attack || (dir !== 'u' && dir !== 'd')) return;
+      mod = dir === 'u' ? 'chip' : 'run'; keyDown(I, mod); return dir === 'u' ? '감아차기' : '칩슛';
+    }); }
+  // 스루 / 슬라이딩 (수비 땐 롱패스 키 = 슬라이딩)
+  { let k: Act = 'through';
+    bindBtn($('bD'), () => { k = getOpts().attack ? 'through' : 'lob'; keyDown(I, k); }, () => keyUp(I, k)); }
+  // 질주: 누른 채 밀면 — 공격: 개인기(달리는 쪽이면 치달), 수비: ↑ 키퍼 나오기(누르는 동안)·그 밖 동료 압박
+  { let gk = false;
+    bindBtn($('bC'), () => { gk = false; keyDown(I, 'sprint'); }, () => { keyUp(I, 'sprint'); if (gk) { gk = false; keyUp(I, 'gkRush'); } }, (dir, dx, dy) => {
+      if (getOpts().attack) { I.skill = { x: dx, y: dy }; tap('gkRush', 40); return '개인기'; }
+      if (dir === 'u') { gk = true; keyDown(I, 'gkRush'); return '키퍼'; }
+      tap('run'); return '압박';
+    }); }
   // 오른쪽 빈 공간 스와이프 = 개인기 (방향은 화면 기준 → 경기장 기준으로 그대로 씀)
   const skillArea = $('skillArea'); let skId: number | null = null, skx = 0, sky = 0;
   skillArea.addEventListener('pointerdown', e => { if (skId !== null) return; skId = e.pointerId; skx = e.clientX; sky = e.clientY; try { skillArea.setPointerCapture(e.pointerId); } catch { /* */ } });

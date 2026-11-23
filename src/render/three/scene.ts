@@ -1,5 +1,6 @@
 /* Three.js 렌더러. 시뮬 좌표 (x, y, z높이) → 월드 (x, z높이→Y, y→Z).
    중계 카메라(tv)는 가까운 터치라인 쪽(+Z) 위에서 공을 따라간다. pro = 조작 선수 뒤, top = 위에서 */
+import { miniPos } from '../minimap';
 import * as THREE from 'three';
 import { W, H, CX, CY } from '../../sim/consts';
 import { clamp } from '../../sim/util';
@@ -355,7 +356,7 @@ export class ThreeRenderer implements IRenderer {
     }
     // 미니맵 (코너킥 시점에선 박스가 다 보이므로 숨긴다 — 먼 쪽 코너의 키커를 가린다)
     if (this.spB > 0.5) return;
-    const mk = clamp(cw * 0.22 / W, 0.8, 1.6), mw = W * mk, mh = H * mk, mx0 = cw - mw - Math.max(12, ins.r), my0 = ins.t + 56;
+    const mk = clamp(cw * 0.22 / W, 0.8, 1.6), mw = W * mk, mh = H * mk, mp = miniPos(cw, ch, mw, mh, ins), mx0 = mp.x, my0 = mp.y;
     ctx.fillStyle = 'rgba(9,17,27,.62)'; ctx.fillRect(mx0 - 3, my0 - 3, mw + 6, mh + 6); if (XT.on && !XT.all && XT.map) drawMap(ctx, mx0, my0, mw, mh, XT.mapTeam, 0.85); /* xT 구역 지도 (공 가진 팀의 공격 방향) */ ctx.strokeStyle = 'rgba(238,243,234,.35)'; ctx.lineWidth = 1; ctx.strokeRect(mx0, my0, mw, mh);
     ctx.beginPath(); ctx.moveTo(mx0 + mw / 2, my0); ctx.lineTo(mx0 + mw / 2, my0 + mh); ctx.stroke();
     for (const p of players) { const kit = M.kit[p.t]; ctx.fillStyle = p.role === 'GK' ? kit.gk : kit.c1; const hh = HU.find(h => h && h.ctrl === p); ctx.beginPath(); ctx.arc(mx0 + p.x * mk, my0 + p.y * mk, hh ? 3.2 : 2.3, 0, 7); ctx.fill(); if (hh) { ctx.strokeStyle = hh.col; ctx.lineWidth = 1.5; ctx.stroke(); } }

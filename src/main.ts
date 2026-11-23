@@ -21,7 +21,7 @@ import { audio, ensureAudio, crowdStart, crowdStop, crowdSwell, sfx, anthem, ant
 import { showIntro, hideIntro } from './ui/intro';
 import { NET, LOCAL, initPeer, netSend, netClose, netHost, netJoin, netPing } from './net/peer';
 import { makeSnap, netInterp, applyNetInput, encodeInput, type NetMsg, type StartCfg, type Snap, type SnapBuf } from './net/protocol';
-import { updateHud, resetHud, showBanner, hideBanner } from './ui/hud';
+import { updateHud, resetHud, showBanner, hideBanner, touchAttack, relabelTouch } from './ui/hud';
 import { initMenu, renderMenu, setSeg, bindSeg, netStatus, NET_IDLE_MSG } from './ui/menu';
 import { fillResult } from './ui/result';
 import { randomSeed } from './sim/rng';
@@ -256,7 +256,7 @@ window.setInterval(() => { if (NET.role === 'guest' && state === 'play' && sim) 
 
 /* ---------- 입력 ---------- */
 installKeyboard({ inp: INP, isPlaying: () => state === 'play', hasLocalP2: () => !!(sim && sim.M.twoP && !NET.role), togglePause: () => { if (state === 'play') pauseGame(); else if (state === 'paused') resumeGame(); }, cycleCamera, cycleView, cycleCamH, toggleXt: () => toggleXt() });
-installTouch(INP[0], () => { if (!isTouch) { isTouch = true; document.body.classList.add('touch'); if (state === 'play' || state === 'paused') $('touch').hidden = false; } }, () => ({ stickSprint: opts.stickSprint }));
+installTouch(INP[0], () => { if (!isTouch) { isTouch = true; document.body.classList.add('touch'); if (state === 'play' || state === 'paused') $('touch').hidden = false; } }, () => ({ stickSprint: opts.stickSprint, attack: touchAttack(), relabel: relabelTouch }));
 if (isTouch) document.body.classList.add('touch');
 applyTouchStyle(opts.btnSize, opts.btnAlpha);
 window.addEventListener('blur', () => { for (const I of INP) dropKeys(I); if (state === 'play' && !NET.ready) pauseGame(); }); // 온라인에선 창 포커스만 잃어도 상대를 기다리게 하지 않는다
@@ -514,8 +514,7 @@ function skipHint(s: Sim) {
 function gauges(s: Sim) {
   if (!isTouch) return; const h = s.HU[LOCAL()], I = INP[0]; if (!h) return;
   touchGauge('bB', h.charging ? h.charge : 0, h.charge > 0.8);
-  touchGauge('bA', I.down.pass ? Math.min(1, Math.max(0, (I.holdT.pass - 0.12) / 0.45)) : 0);
-  touchGauge('bL', I.down.lob ? Math.min(1, Math.max(0, (I.holdT.lob - 0.1) / 0.5)) : 0);
+  touchGauge('bA', I.down.pass ? Math.min(1, Math.max(0, (I.holdT.pass - 0.12) / 0.45)) : I.down.lob ? Math.min(1, Math.max(0, (I.holdT.lob - 0.1) / 0.5)) : 0); // 패스 버튼을 위로 밀면 로빙 게이지
 }
 if (import.meta.env.PROD && 'serviceWorker' in navigator) window.addEventListener('load', () => { navigator.serviceWorker.register('./sw.js').catch(() => { /* http 등에선 불가 */ }); });
 function resize() { layoutStage(); R.resize(); $('rotateTip').hidden = !(isTouch && R.ch > R.cw); }

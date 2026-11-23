@@ -3,6 +3,10 @@ import type { Sim } from '../sim/types';
 const $ = (id: string) => document.getElementById(id) as HTMLElement;
 let hudCache = '', labelCache = '', oursAt = -1e9; // oursAt: 마지막으로 우리 공이었던 때(ms)
 export function resetHud() { hudCache = ''; labelCache = ''; oursAt = -1e9; }
+/** 터치 버튼이 지금 공격용인가 (글자와 같은 기준 — `touch.ts`가 밀기·스루/슬라이딩 버튼에 쓴다) */
+export const touchAttack = () => labelCache !== 'd';
+/** 버튼 글자를 다음 프레임에 다시 쓴다 (밀어서 바꾼 글자 되돌리기) */
+export function relabelTouch() { labelCache = ''; }
 export function updateHud(s: Sim, local: number) {
   const { M, HU, ball } = s;
   const raw = Math.floor(M.time / M.len * 90), end = M.half === 1 ? 45 : M.half === 2 ? 90 : M.half === 3 ? 105 : 120, minute = Math.min(end, raw), extra = raw > end && M.added[M.half - 1] ? `+${Math.min(M.added[M.half - 1], raw - end)}` : '';
@@ -17,7 +21,11 @@ export function updateHud(s: Sim, local: number) {
   const ours = !!h && (o ? o.t === local : ball.knock ? ball.knock.t === local : ball.passTarget ? ball.passTarget.t === local : ball.lastTouch === local && !(ball.kicker && ball.kicker.t !== local));
   if (ours) oursAt = now;
   const own = ours || (labelCache === 'a' && now - oursAt < (o ? 150 : 450)), lk = own ? 'a' : 'd';
-  if (lk !== labelCache) { labelCache = lk; $('bA').textContent = own ? '패스' : '전환'; $('bB').textContent = own ? '슛' : '태클'; $('bD').textContent = own ? '스루' : '키퍼'; $('bL').textContent = own ? '롱패스' : '슬라이딩'; $('bR').textContent = own ? '침투' : '동료 압박'; }
+  if (lk !== labelCache) { labelCache = lk; // 글자와 밀기 안내(data-up/dn: 버튼 위·아래 작은 글자)
+    const set = (id: string, text: string, up = '', dn = '') => { const el = $(id); el.textContent = text; el.dataset.up = up; el.dataset.dn = dn; };
+    if (own) { set('bA', '패스', '▲ 로빙', '▼ 침투'); set('bB', '슛', '▲ 감아', '▼ 칩'); set('bD', '스루'); set('bC', '질주', '밀기 = 개인기'); }
+    else { set('bA', '전환'); set('bB', '태클'); set('bD', '슬라이딩'); set('bC', '질주', '▲ 키퍼', '◀▶ 압박'); }
+  }
 }
 let bannerTimer = 0;
 export function showBanner(big: string, small: string, ms: number, isGoal: boolean) {

@@ -112,7 +112,6 @@ kbd{font-family:var(--f-num);font-weight:600;font-size:12px;border:1px solid var
 #skillArea{position:absolute;left:55%;top:0;width:45%;height:100%;pointer-events:auto;touch-action:none}
 .tbtns{z-index:1;transform:scale(var(--btn-scale,1));transform-origin:bottom right}
 .tb{opacity:var(--btn-alpha,.75)}
-#bL{width:54px;height:54px;right:182px;bottom:92px;font-size:12px}#bR{width:54px;height:54px;right:182px;bottom:26px;font-size:12px}
 #stick.sprint .base{border-color:var(--amber);box-shadow:0 0 14px rgba(255,182,39,.5)}
 .touchonly{display:none}
 body.touch .touchonly{display:grid}
@@ -151,7 +150,12 @@ body.touch .help .ph{order:-1}
 .tb{position:absolute;border-radius:50%;border:2px solid rgba(238,243,234,.5);background:rgba(9,17,27,.26);text-shadow:0 1px 3px rgba(0,0,0,.95),0 0 6px rgba(0,0,0,.6);font-weight:700;pointer-events:auto;touch-action:none;display:grid;place-items:center;font-size:15px;padding:0}
 .tb.down{background:var(--amber);color:var(--amber-ink);border-color:var(--amber);text-shadow:none}
 .tbtns{width:210px;height:200px}
-#bB{width:82px;height:82px;right:0;bottom:0}#bA{width:70px;height:70px;right:96px;bottom:6px}#bD{width:60px;height:60px;right:14px;bottom:100px;font-size:13px}#bC{width:56px;height:56px;right:112px;bottom:92px;font-size:13px}
+/* 버튼 4개(41차, FC 모바일 식): 질주가 모서리, 패스·스루·슛이 왼쪽 아래 → 위로 둘러싼다 */
+#bC{width:84px;height:84px;right:0;bottom:0}#bA{width:70px;height:70px;right:98px;bottom:4px}#bD{width:62px;height:62px;right:76px;bottom:82px;font-size:13px}#bB{width:74px;height:74px;right:2px;bottom:104px}
+/* 밀기 안내: 버튼 위·아래 작은 글자(data-up/dn — `hud.ts`), 밀어서 고른 동작은 테두리 강조 */
+.tb::before,.tb::after{position:absolute;left:0;right:0;text-align:center;font-size:9px;font-weight:700;line-height:1;opacity:.82;white-space:nowrap;pointer-events:none}
+.tb::before{content:attr(data-up);top:8px}.tb::after{content:attr(data-dn);bottom:8px}
+.tb.alt{border-color:#fff;box-shadow:0 0 0 3px rgba(255,182,39,.55);font-size:13px}.tb.alt::before,.tb.alt::after{content:''}
 
 /* 입장 라인업 */
 #intro{position:fixed;inset:0;z-index:7;display:grid;grid-template-rows:auto 1fr;gap:clamp(8px,2vh,18px);padding:calc(env(safe-area-inset-top,0px) + clamp(52px,9vh,84px)) max(16px,env(safe-area-inset-right,0px)) calc(env(safe-area-inset-bottom,0px) + 16px) max(16px,env(safe-area-inset-left,0px));background:linear-gradient(180deg,rgba(5,11,18,.82),rgba(5,11,18,.5) 45%,rgba(5,11,18,.86));opacity:0;transition:opacity .45s;cursor:pointer;overflow:hidden}
