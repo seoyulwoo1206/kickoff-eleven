@@ -38,7 +38,7 @@ function showCard(p?: PlayerDef) {
   for (const k of [0.33, 0.66, 1]) { g.beginPath(); for (let i = 0; i < 6; i++) { const a = -Math.PI / 2 + i * Math.PI / 3; g.lineTo(c + Math.cos(a) * R * k, c + Math.sin(a) * R * k); } g.closePath(); g.stroke(); }
   g.beginPath(); labels.forEach(([, v], i) => { const a = -Math.PI / 2 + i * Math.PI / 3, k = (v as number) / 99; g.lineTo(c + Math.cos(a) * R * k, c + Math.sin(a) * R * k); }); g.closePath();
   g.fillStyle = 'rgba(255,182,39,.35)'; g.fill(); g.strokeStyle = '#ffb627'; g.lineWidth = 2; g.stroke();
-  g.fillStyle = '#eef3ea'; g.font = '700 11px "IBM Plex Sans KR",sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle';
+  g.fillStyle = '#eef3ea'; g.font = '700 11px "Noto Sans KR",sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle';
   labels.forEach(([l, v], i) => { const a = -Math.PI / 2 + i * Math.PI / 3; g.fillText(`${l} ${v}`, c + Math.cos(a) * (R + 18), c + Math.sin(a) * (R + 14)); });
   const det: [string, number][] = gk ? [['반응', d.rea], ['점프', d.jmp], ['롱킥', d.lp], ['체력', d.sta]] : [['가속', d.acc], ['골결정', d.fin], ['슛파워', d.pow], ['짧은패스', d.sp], ['시야', d.vis], ['볼컨트롤', d.ctl], ['민첩', d.agi], ['몸싸움', d.str], ['체력', d.sta], ['헤더', d.hea], ['대인수비', d.mrk], ['태클', d.stk]];
   $('cardDetail').innerHTML = det.map(([l, v]) => `<span>${l}<b>${v}</b></span>`).join('');

@@ -1,6 +1,6 @@
 /* Three.js 렌더러. 시뮬 좌표 (x, y, z높이) → 월드 (x, z높이→Y, y→Z).
    중계 카메라(tv)는 가까운 터치라인 쪽(+Z) 위에서 공을 따라간다. pro = 조작 선수 뒤, top = 위에서 */
-import { miniPos } from '../minimap';
+import { miniPos, miniScale } from '../minimap';
 import * as THREE from 'three';
 import { W, H, CX, CY } from '../../sim/consts';
 import { clamp } from '../../sim/util';
@@ -287,7 +287,7 @@ export class ThreeRenderer implements IRenderer {
     if (!sim) return;
     if (this.replay) { // 레터박스 + REPLAY
       const bh = Math.round(ch * 0.09); ctx.fillStyle = '#000'; ctx.fillRect(0, 0, cw, bh); ctx.fillRect(0, ch - bh, cw, bh);
-      ctx.font = '800 16px "Saira Condensed","Arial Narrow",sans-serif'; ctx.textAlign = 'right'; ctx.textBaseline = 'middle'; ctx.fillStyle = '#ffb627'; ctx.fillText('● REPLAY', cw - Math.max(16, ins.r), ch - bh / 2);
+      ctx.font = '800 16px "Barlow Condensed","Arial Narrow",sans-serif'; ctx.textAlign = 'right'; ctx.textBaseline = 'middle'; ctx.fillStyle = '#ffb627'; ctx.fillText('● REPLAY', cw - Math.max(16, ins.r), ch - bh / 2);
       return;
     }
     const { players, HU, M, ball } = sim;
@@ -300,7 +300,7 @@ export class ThreeRenderer implements IRenderer {
       if (!h || !h.ctrl) continue; const c = h.ctrl, pp = this.toScreen(c.x, c.y, 2.05), px = pp.x, py = pp.y, on = pp.on && px > 8 && px < cw - 8 && py > 8 && py < ch - 8;
       if (on) {
         const ty2 = py - 10; ctx.fillStyle = h.col; ctx.beginPath(); ctx.moveTo(px, ty2 + 9); ctx.lineTo(px - 6, ty2); ctx.lineTo(px + 6, ty2); ctx.fill();
-        ctx.font = '800 13px "Saira Condensed","Arial Narrow",sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'bottom'; ctx.fillStyle = '#ffffff'; ctx.shadowColor = 'rgba(0,0,0,.6)'; ctx.shadowBlur = 3; ctx.fillText((M.twoP ? h.tag + ' · ' : '') + displayName(c, opts.names), px, ty2 - 1); ctx.shadowBlur = 0;
+        ctx.font = '800 13px "Barlow Condensed","Arial Narrow",sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'bottom'; ctx.fillStyle = '#ffffff'; ctx.shadowColor = 'rgba(0,0,0,.6)'; ctx.shadowBlur = 3; ctx.fillText((M.twoP ? h.tag + ' · ' : '') + displayName(c, opts.names), px, ty2 - 1); ctx.shadowBlur = 0;
         { const fp = this.toScreen(c.x, c.y, 0), bw = 30, bh = 3, bx = fp.x - bw / 2, by = fp.y + 4; ctx.fillStyle = 'rgba(9,17,27,.7)'; ctx.fillRect(bx - 1, by - 1, bw + 2, bh + 2); ctx.fillStyle = c.sta > 0.4 ? '#8fe3a3' : '#ff8a5c'; ctx.fillRect(bx, by, bw * c.sta, bh); } // 체력
         if (h.charging) { const fp = this.toScreen(c.x, c.y, 0), bw = 44, bh = 6, bx = fp.x - bw / 2, by = fp.y + 10; ctx.fillStyle = 'rgba(9,17,27,.85)'; ctx.fillRect(bx - 1, by - 1, bw + 2, bh + 2); ctx.fillStyle = h.charge > 0.8 ? '#ff5a4e' : h.col; ctx.fillRect(bx, by, bw * h.charge, bh); ctx.fillStyle = '#fff'; ctx.fillRect(bx + bw * 0.8, by - 2, 1.5, bh + 4); }
       } else { const cx2 = clamp(px, 24, cw - 24), cy2 = clamp(py, 24 + ins.t, ch - 24 - ins.b), a = Math.atan2(py - cy2, px - cx2); ctx.save(); ctx.translate(cx2, cy2); ctx.rotate(a); ctx.fillStyle = h.col; ctx.beginPath(); ctx.moveTo(12, 0); ctx.lineTo(-6, -8); ctx.lineTo(-6, 8); ctx.fill(); ctx.restore(); }
@@ -315,7 +315,7 @@ export class ThreeRenderer implements IRenderer {
         if (pv.shot) { const a = this.toScreen(e.x, e.y, e.z); lx = a.x; ly = a.y - 14; ctx.arc(a.x, a.y, 8, 0, 7); ctx.moveTo(a.x - 13, a.y); ctx.lineTo(a.x + 13, a.y); ctx.moveTo(a.x, a.y - 13); ctx.lineTo(a.x, a.y + 13); }
         else { for (let k = 0; k <= 20; k++) { const an = k / 20 * Math.PI * 2, a = this.toScreen(M.aimX + Math.cos(an) * 1.5, M.aimY + Math.sin(an) * 1.5, 0.02); if (k) ctx.lineTo(a.x, a.y); else ctx.moveTo(a.x, a.y); } const c = this.toScreen(M.aimX, M.aimY, 0.02); lx = c.x; ly = c.y - 16; }
         ctx.stroke();
-        ctx.font = '800 12px "Saira Condensed","Arial Narrow",sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'bottom'; ctx.lineWidth = 3; ctx.strokeStyle = 'rgba(9,17,27,.8)'; const tx = pv.kind === 'shot' ? '직접 슛' : pv.kind === 'drive' ? '낮고 빠르게' : '띄우기'; ctx.strokeText(tx, lx, ly); ctx.fillStyle = '#fff'; ctx.fillText(tx, lx, ly);
+        ctx.font = '800 12px "Barlow Condensed","Arial Narrow",sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'bottom'; ctx.lineWidth = 3; ctx.strokeStyle = 'rgba(9,17,27,.8)'; const tx = pv.kind === 'shot' ? '직접 슛' : pv.kind === 'drive' ? '낮고 빠르게' : '띄우기'; ctx.strokeText(tx, lx, ly); ctx.fillStyle = '#fff'; ctx.fillText(tx, lx, ly);
       }
     }
     // 침투 지시 화살표: 뛰는 동료 발 밑에서 지시 방향으로
@@ -338,7 +338,7 @@ export class ThreeRenderer implements IRenderer {
       ctx.fillStyle = '#ff5a4e'; ctx.beginPath(); ctx.moveTo(len + 2, 0); ctx.lineTo(len - 10, -6); ctx.lineTo(len - 10, 6); ctx.fill(); ctx.restore();
     }
     // 선수 이름표: 등번호 + 이름 (가까울수록 선명, 멀면 숨김)
-    ctx.font = '700 11px "IBM Plex Sans KR","Saira Condensed",sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'bottom';
+    ctx.font = '700 11px "Noto Sans KR","Barlow Condensed",sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'bottom';
     for (const p of players) {
       if (p.off || HU.some(h => h && h.ctrl === p)) continue;
       const hp = this.toScreen(p.x, p.y, 2.0), fp = this.toScreen(p.x, p.y, 0); if (!hp.on) continue;
@@ -350,16 +350,16 @@ export class ThreeRenderer implements IRenderer {
     }
     // xT: 방금 한 패스·드리블이 만든 ΔxT(%p)를 그 자리 위에 잠깐 띄운다 (패널을 열고 '하나' 보기일 때)
     if (XT.on && XT.pops.length) {
-      const now = performance.now() / 1000; ctx.font = '800 14px "Saira Condensed","Arial Narrow",sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'bottom';
+      const now = performance.now() / 1000; ctx.font = '800 14px "Barlow Condensed","Arial Narrow",sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'bottom';
       for (const q of XT.pops) { const a = now - q.at; if (a < 0 || a > 1.4) continue; const sp = this.toScreen(q.x, q.y, 2.3 + a * 0.9); if (!sp.on) continue; ctx.globalAlpha = Math.min(1, (1.4 - a) / 0.4); ctx.lineWidth = 3; ctx.strokeStyle = 'rgba(9,17,27,.85)'; const tx = (q.v >= 0 ? '+' : '−') + (Math.abs(q.v) * 100).toFixed(1); ctx.strokeText(tx, sp.x, sp.y); ctx.fillStyle = q.v >= 0 ? '#8fe3a3' : '#ff8a5c'; ctx.fillText(tx, sp.x, sp.y); }
       ctx.globalAlpha = 1;
     }
     // 미니맵 (코너킥 시점에선 박스가 다 보이므로 숨긴다 — 먼 쪽 코너의 키커를 가린다)
     if (this.spB > 0.5) return;
-    const mk = clamp(cw * 0.22 / W, 0.8, 1.6), mw = W * mk, mh = H * mk, mp = miniPos(cw, ch, mw, mh, ins), mx0 = mp.x, my0 = mp.y;
+    const mk = miniScale(cw, ch, 0.22, 0.8, 1.6), ds = Math.min(1, mk / 1.3), mw = W * mk, mh = H * mk, mp = miniPos(cw, ch, mw, mh, ins), mx0 = mp.x, my0 = mp.y;
     ctx.fillStyle = 'rgba(9,17,27,.62)'; ctx.fillRect(mx0 - 3, my0 - 3, mw + 6, mh + 6); if (XT.on && !XT.all && XT.map) drawMap(ctx, mx0, my0, mw, mh, XT.mapTeam, 0.85); /* xT 구역 지도 (공 가진 팀의 공격 방향) */ ctx.strokeStyle = 'rgba(238,243,234,.35)'; ctx.lineWidth = 1; ctx.strokeRect(mx0, my0, mw, mh);
     ctx.beginPath(); ctx.moveTo(mx0 + mw / 2, my0); ctx.lineTo(mx0 + mw / 2, my0 + mh); ctx.stroke();
-    for (const p of players) { const kit = M.kit[p.t]; ctx.fillStyle = p.role === 'GK' ? kit.gk : kit.c1; const hh = HU.find(h => h && h.ctrl === p); ctx.beginPath(); ctx.arc(mx0 + p.x * mk, my0 + p.y * mk, hh ? 3.2 : 2.3, 0, 7); ctx.fill(); if (hh) { ctx.strokeStyle = hh.col; ctx.lineWidth = 1.5; ctx.stroke(); } }
-    ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(mx0 + ball.x * mk, my0 + ball.y * mk, 2, 0, 7); ctx.fill();
+    for (const p of players) { const kit = M.kit[p.t]; ctx.fillStyle = p.role === 'GK' ? kit.gk : kit.c1; const hh = HU.find(h => h && h.ctrl === p); ctx.beginPath(); ctx.arc(mx0 + p.x * mk, my0 + p.y * mk, (hh ? 3.2 : 2.3) * ds, 0, 7); ctx.fill(); if (hh) { ctx.strokeStyle = hh.col; ctx.lineWidth = 1.5; ctx.stroke(); } }
+    ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(mx0 + ball.x * mk, my0 + ball.y * mk, 2 * ds, 0, 7); ctx.fill();
   }
 }

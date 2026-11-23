@@ -1,7 +1,7 @@
 /* Canvas 2D 렌더러 (Phase 2에서 Three.js로 교체 예정). 진짜 원근 투영(TV 중계 카메라):
    카메라는 조준점(cam.x, cam.y) 뒤쪽 CAM.D m, 높이 CAM.Hc m에서 조준점을 내려다본다.
    proj(x,y,z) → 화면 좌표와 그 깊이에서의 px/m 배율(s). 멀면 작게, 가까우면 크게 */
-import { miniPos } from './minimap';
+import { miniPos, miniScale } from './minimap';
 import { W, H, CX, CY, GH, GZ } from '../sim/consts';
 import { clamp } from '../sim/util';
 import { hexRgb, isLight, type Kit } from '../data/teams';
@@ -123,7 +123,7 @@ export class Renderer implements IRenderer {
       ctx.fillStyle = ad[0]; ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.lineTo(c.x, c.y); ctx.lineTo(d2.x, d2.y); ctx.closePath(); ctx.fill();
       ctx.fillStyle = 'rgba(0,0,0,.25)'; ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.lineTo(b.x, b.y - (b.y - c.y) * 0.12); ctx.lineTo(a.x, a.y - (a.y - d2.y) * 0.12); ctx.closePath(); ctx.fill();
       const hpx = a.y - d2.y;
-      if (hpx > 9) { ctx.fillStyle = ad[1]; ctx.font = `800 ${hpx * 0.55}px "Saira Condensed","Arial Narrow",sans-serif`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(ad[2], (a.x + b.x) / 2, (a.y + d2.y) / 2 - hpx * 0.06); }
+      if (hpx > 9) { ctx.fillStyle = ad[1]; ctx.font = `800 ${hpx * 0.55}px "Barlow Condensed","Arial Narrow",sans-serif`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(ad[2], (a.x + b.x) / 2, (a.y + d2.y) / 2 - hpx * 0.06); }
       ctx.strokeStyle = 'rgba(0,0,0,.35)'; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(b.x, b.y); ctx.lineTo(c.x, c.y); ctx.stroke();
     }
   }
@@ -188,7 +188,7 @@ export class Renderer implements IRenderer {
     ctx.fillStyle = 'rgba(0,0,0,.4)'; ctx.fillRect(-w * 0.44 - 1, -hgt * 0.91 - 1, w * 0.88 + 2, hgt * 0.36 + 2);
     this.kitFill(-w * 0.44, -hgt * 0.91, w * 0.88, hgt * 0.36, kit, gk);
     ctx.fillStyle = 'rgba(0,0,0,.16)'; ctx.fillRect(w * 0.1, -hgt * 0.91, w * 0.34, hgt * 0.36); ctx.fillStyle = 'rgba(255,255,255,.12)'; ctx.fillRect(-w * 0.44, -hgt * 0.91, w * 0.2, hgt * 0.36);
-    if (back && S > 11) { ctx.fillStyle = isLight(top) ? '#111' : '#fff'; ctx.font = `800 ${Math.max(7, hgt * 0.2)}px "Saira Condensed","Arial Narrow",sans-serif`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(String(p.num), 0, -hgt * 0.73); }
+    if (back && S > 11) { ctx.fillStyle = isLight(top) ? '#111' : '#fff'; ctx.font = `800 ${Math.max(7, hgt * 0.2)}px "Barlow Condensed","Arial Narrow",sans-serif`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(String(p.num), 0, -hgt * 0.73); }
     const shY = -hgt * 0.85;
     const arm = (side: number, sw: number) => {
       const sx0 = side * w * 0.44; let hx: number, hy: number;
@@ -257,12 +257,12 @@ export class Renderer implements IRenderer {
       if (!h || !h.ctrl) continue; const c = h.ctrl, pp = this.proj(c.x, c.y, 0), px = pp.x, py = pp.y, on = px > 8 && px < cw - 8 && py > 8 && py < ch - 8;
       if (on) {
         const ty2 = py - 1.75 * pp.s - pp.s * 0.45 - 12; ctx.fillStyle = h.col; ctx.beginPath(); ctx.moveTo(px, ty2 + 9); ctx.lineTo(px - 6, ty2); ctx.lineTo(px + 6, ty2); ctx.fill();
-        ctx.font = '800 13px "Saira Condensed","Arial Narrow",sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'bottom'; ctx.fillStyle = '#ffffff'; ctx.fillText((M.twoP ? h.tag + ' · ' : '') + c.num, px, ty2 - 1);
+        ctx.font = '800 13px "Barlow Condensed","Arial Narrow",sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'bottom'; ctx.fillStyle = '#ffffff'; ctx.fillText((M.twoP ? h.tag + ' · ' : '') + c.num, px, ty2 - 1);
         if (h.charging) { const bw = 40, bh = 6, bx = px - bw / 2, by = py + 8; ctx.fillStyle = 'rgba(9,17,27,.85)'; ctx.fillRect(bx - 1, by - 1, bw + 2, bh + 2); ctx.fillStyle = h.charge > 0.8 ? '#ff5a4e' : h.col; ctx.fillRect(bx, by, bw * h.charge, bh); ctx.fillStyle = '#fff'; ctx.fillRect(bx + bw * 0.8, by - 2, 1.5, bh + 4); }
       } else { const cx2 = clamp(px, 24, cw - 24), cy2 = clamp(py, 24 + ins.t, ch - 24 - ins.b), a = Math.atan2(py - cy2, px - cx2); ctx.save(); ctx.translate(cx2, cy2); ctx.rotate(a); ctx.fillStyle = h.col; ctx.beginPath(); ctx.moveTo(12, 0); ctx.lineTo(-6, -8); ctx.lineTo(-6, 8); ctx.fill(); ctx.restore(); }
     }
     // 미니맵
-    const mk = clamp(cw * 0.24 / W, 0.8, 1.5), mw = W * mk, mh = H * mk, mp = miniPos(cw, ch, mw, mh, ins), mx0 = mp.x, my0 = mp.y;
+    const mk = miniScale(cw, ch, 0.24, 0.8, 1.5), mw = W * mk, mh = H * mk, mp = miniPos(cw, ch, mw, mh, ins), mx0 = mp.x, my0 = mp.y;
     ctx.fillStyle = 'rgba(9,17,27,.62)'; ctx.fillRect(mx0 - 3, my0 - 3, mw + 6, mh + 6); ctx.strokeStyle = 'rgba(238,243,234,.35)'; ctx.lineWidth = 1; ctx.strokeRect(mx0, my0, mw, mh);
     ctx.beginPath(); ctx.moveTo(mx0 + mw / 2, my0); ctx.lineTo(mx0 + mw / 2, my0 + mh); ctx.stroke();
     for (const p of players) { const kit = M.kit[p.t]; ctx.fillStyle = p.role === 'GK' ? kit.gk : kit.c1; const hh = HU.find(h => h && h.ctrl === p); ctx.beginPath(); ctx.arc(mx0 + p.x * mk, my0 + p.y * mk, hh ? 3.2 : 2.3, 0, 7); ctx.fill(); if (hh) { ctx.strokeStyle = hh.col; ctx.lineWidth = 1.5; ctx.stroke(); } }

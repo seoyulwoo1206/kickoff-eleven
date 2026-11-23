@@ -125,12 +125,12 @@ function drawCell(ctx: CanvasRenderingContext2D, c: Cell, x0: number, y0: number
     }
   }
   ctx.fillStyle = 'rgba(255,255,255,.3)'; ctx.fillRect(x0, mid - 0.5, w, 1);
-  ctx.textBaseline = 'top'; ctx.textAlign = 'left'; ctx.font = `700 ${big ? 12 : 10.5}px "Saira Condensed","Arial Narrow",sans-serif`; ctx.fillStyle = 'rgba(238,243,234,.92)'; ctx.fillText(title, x0 + 5, y0 + 3);
+  ctx.textBaseline = 'top'; ctx.textAlign = 'left'; ctx.font = `700 ${big ? 12 : 10.5}px "Barlow Condensed","Arial Narrow",sans-serif`; ctx.fillStyle = 'rgba(238,243,234,.92)'; ctx.fillText(title, x0 + 5, y0 + 3);
   if (!c.ok) { ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillStyle = 'rgba(238,243,234,.5)'; ctx.fillText('표에 없음', x0 + w / 2, mid); return; }
   if (hf >= 0) { // 커서가 가리키는 시각의 값: 세로선 + 그 열의 팀별 값 (위·아래)
     const i = Math.min(n - 1, Math.floor(hf * n)), px = x0 + (i + 0.5) * cw, u = c.up[i], dv = c.dn[i];
     ctx.fillStyle = 'rgba(255,255,255,.85)'; ctx.fillRect(px - 0.5, y0, 1, h);
-    ctx.textAlign = 'right'; const fs = big ? 12 : 10.5; ctx.font = `800 ${fs}px "Saira Condensed","Arial Narrow",sans-serif`;
+    ctx.textAlign = 'right'; const fs = big ? 12 : 10.5; ctx.font = `800 ${fs}px "Barlow Condensed","Arial Narrow",sans-serif`;
     const lab = (txt: string, col: string, yy: number) => { const tw = ctx.measureText(txt).width + 8; ctx.fillStyle = 'rgba(9,17,27,.9)'; ctx.fillRect(x0 + w - tw - 2, yy - 1, tw, fs + 4); ctx.fillStyle = col; ctx.fillText(txt, x0 + w - 6, yy + 1); };
     if (u > 0) lab(`${codes[0]} ${pct(u)}`, C0, y0 + 2); if (dv > 0) lab(`${codes[1]} ${pct(dv)}`, C1, y0 + h - fs - 5); if (!(u > 0) && !(dv > 0)) lab('–', 'rgba(238,243,234,.7)', y0 + 2);
     return;
@@ -153,7 +153,7 @@ export function renderPanel(graph: HTMLCanvasElement, mapCv: HTMLCanvasElement, 
   const hTick = hf >= 0 ? t0 + (Math.floor(hf * n) + 0.5) / n * (t1 - t0) : -1;
   cells.forEach((c, i) => drawCell(ctx, c, (i % cols) * (cwid + gap), Math.floor(i / cols) * (chei + gap), cwid, chei, ymax, t0, t1, XT.all ? `${PART_NAME[c.part]} · ${MODEL_NAME[c.model]}` : `${PART_NAME[c.part]} · ${MODEL_NAME[c.model]} · T ${T_NAME[XT.T]}`, cur(c.part, c.model), !XT.all, hf, codes));
   // 범례: 위 = 팀 0, 아래 = 팀 1, 세로 눈금, 구간
-  ctx.font = '600 10.5px "Saira Condensed","Arial Narrow",sans-serif'; ctx.textBaseline = 'bottom'; ctx.textAlign = 'left'; const by = h - 1;
+  ctx.font = '600 10.5px "Barlow Condensed","Arial Narrow",sans-serif'; ctx.textBaseline = 'bottom'; ctx.textAlign = 'left'; const by = h - 1;
   ctx.fillStyle = C0; ctx.fillRect(0, by - 9, 8, 8); ctx.fillStyle = 'rgba(238,243,234,.8)'; ctx.fillText(`위 ${codes[0]}`, 11, by); const o = 16 + ctx.measureText(`위 ${codes[0]}`).width;
   ctx.fillStyle = C1; ctx.fillRect(o, by - 9, 8, 8); ctx.fillStyle = 'rgba(238,243,234,.8)'; ctx.fillText(`아래 ${codes[1]}`, o + 11, by);
   const mmss = (tk: number) => { const sec = Math.max(0, Math.floor(tk / 60)); return `${Math.floor(sec / 60)}:${String(sec % 60).padStart(2, '0')}`; };
@@ -173,10 +173,10 @@ export function renderPanel(graph: HTMLCanvasElement, mapCv: HTMLCanvasElement, 
     const hm = XT.hoverMap; if (hm && hm.x >= 0 && hm.x <= mw && hm.y >= 0 && hm.y <= mh) { // 지도 위 커서: 그 자리(지금 지도 방향 = 공 가진 팀 기준)의 구역 값
       const gx = hm.x / mw * 105, gy = hm.y / mh * 68, v = xtAt(tb, XT.part, XT.model, XT.T, gx, gy, XT.mapTeam), txt = isFinite(v) ? pct(v) : '–';
       c2.strokeStyle = 'rgba(255,255,255,.9)'; c2.lineWidth = 1; c2.beginPath(); c2.moveTo(hm.x - 7, hm.y); c2.lineTo(hm.x + 7, hm.y); c2.moveTo(hm.x, hm.y - 7); c2.lineTo(hm.x, hm.y + 7); c2.stroke();
-      c2.font = '800 12px "Saira Condensed","Arial Narrow",sans-serif'; c2.textBaseline = 'middle'; const tw = c2.measureText(txt).width + 10, lx = hm.x + 12 + tw > mw ? hm.x - 12 - tw : hm.x + 12, ly = Math.min(mh - 10, Math.max(10, hm.y - 12));
+      c2.font = '800 12px "Barlow Condensed","Arial Narrow",sans-serif'; c2.textBaseline = 'middle'; const tw = c2.measureText(txt).width + 10, lx = hm.x + 12 + tw > mw ? hm.x - 12 - tw : hm.x + 12, ly = Math.min(mh - 10, Math.max(10, hm.y - 12));
       c2.fillStyle = 'rgba(9,17,27,.9)'; c2.fillRect(lx, ly - 9, tw, 18); c2.fillStyle = '#fff'; c2.textAlign = 'left'; c2.fillText(txt, lx + 5, ly + 1);
     }
-    c2.font = '700 11px "Saira Condensed","Arial Narrow",sans-serif'; c2.textBaseline = 'bottom'; c2.fillStyle = 'rgba(255,255,255,.95)'; c2.textAlign = XT.mapTeam === 0 ? 'right' : 'left';
+    c2.font = '700 11px "Barlow Condensed","Arial Narrow",sans-serif'; c2.textBaseline = 'bottom'; c2.fillStyle = 'rgba(255,255,255,.95)'; c2.textAlign = XT.mapTeam === 0 ? 'right' : 'left';
     c2.fillText(XT.mapTeam === 0 ? `${codes[0]} 공격 →` : `← ${codes[1]} 공격`, XT.mapTeam === 0 ? mw - 5 : 5, mh - 3);
   }
   const v = cur(XT.part, XT.model);

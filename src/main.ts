@@ -21,7 +21,7 @@ import { audio, ensureAudio, crowdStart, crowdStop, crowdSwell, sfx, anthem, ant
 import { showIntro, hideIntro } from './ui/intro';
 import { NET, LOCAL, initPeer, netSend, netClose, netHost, netJoin, netPing } from './net/peer';
 import { makeSnap, netInterp, applyNetInput, encodeInput, type NetMsg, type StartCfg, type Snap, type SnapBuf } from './net/protocol';
-import { updateHud, resetHud, showBanner, hideBanner, touchAttack, relabelTouch } from './ui/hud';
+import { updateHud, resetHud, showBanner, hideBanner, touchAttack, relabelTouch, setHudTheme } from './ui/hud';
 import { initMenu, renderMenu, setSeg, bindSeg, netStatus, NET_IDLE_MSG } from './ui/menu';
 import { fillResult } from './ui/result';
 import { randomSeed } from './sim/rng';
@@ -113,6 +113,7 @@ function startMatch(cfg?: StartCfg) {
   R.reset(); acc = 0; simLast = 0; state = 'play';
   $('menu').hidden = true; $('result').hidden = true; $('pause').hidden = true; $('hud').hidden = false; $('pauseBtn').hidden = false; $('touch').hidden = !isTouch;
   $('hPing').hidden = !net; showPing(); xtSync();
+  setHudTheme(opts.mode === 'pk' ? 'pk' : net ? 'net' : cupMatch ? 'cup' : opts.mode === '2p' ? '2p' : 'league', opts.mode === 'pk' ? '승부차기' : net ? '온라인 대전' : cupMatch && cup ? '월드컵 · ' + ({ group: '조별리그', r16: '16강', qf: '8강', sf: '준결승', f: '결승' } as Record<string, string>)[cup.stage] : opts.mode === '2p' ? '2인 대전' : '친선 경기');
   resetHud(); drain(sim); updateHud(sim, LOCAL()); crowdStart();
   if (introT > 0) { showIntro(sim, opts.names, cupMatch && cup ? '월드컵' : '친선 경기'); anthem(); } else { hideIntro(); anthemStop(0.1); } // 입장: 선발 라인업 + 음악
   saveOpts();
