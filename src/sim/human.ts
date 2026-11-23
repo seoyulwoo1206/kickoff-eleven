@@ -86,6 +86,13 @@ export function triggerRun(s: Sim, h: Human, p: Player, aim: number) {
   const line = offsideLine(s, h.t), gy = gapY(s, h.t, best.y + clamp(CY - best.y, -12, 12) * 0.6, line), tx = wx(Math.min(Math.max(line, wx(best.x, h.t)) + 12, 102), h.t);
   best.runT = 3; best.runDir = Math.atan2(gy - best.y, tx - best.x); sfx(s, 'kick');
 }
+/** 주고 뛰기(50차, Q를 누른 채 패스 / 폰은 패스 버튼을 아래로 밀기 — FC의 Pass and Go): 패스를 준 선수가 2.5초 동안 골 쪽으로 뛰어 들어간다.
+    자동 주고 뛰기(43차, `passTo` — 미드필더·공격수가 자기 골 40m 밖에서 1.4초)와 달리 자리·역할을 가리지 않는다. 방향은 골 쪽에서 받는 선수 반대편으로 25° */
+function passGo(s: Sim, p: Player) {
+  const b = s.ball, m = b.passTarget; if (!m || m === p || b.owner === p || p.role === 'GK' || s.M.phase !== 'live') return;
+  const gx = p.t === 0 ? W : 0, ga = Math.atan2(CY - p.y, gx - p.x), side = Math.sin(Math.atan2(m.y - p.y, m.x - p.x) - ga) > 0 ? -1 : 1;
+  p.runT = 2.5; p.runDir = ga + side * 0.44;
+}
 /** 동료 호출(49차, 공격 때 jockey 키): 가까운 동료 하나가 `callT` 3.2초 동안 공 가진 선수 6.5m 앞까지 받으러 온다(teamAI) — 짧은 패스를 주고받을 상대를 만든다.
     대상: 4~34m 안 필드 선수 중 가까운 쪽, 방향키를 누르고 있으면 그쪽 동료 우대. 이미 부른 선수가 있으면 그 선수는 풀고 다른 선수를 부른다 */
 export function callSupport(s: Sim, h: Human, p: Player, aim: number | null) {
@@ -213,7 +220,7 @@ export function humanUpdate(s: Sim, h: Human, dt: number) {
       if (skillMove(s, p, sv.x, sv.y)) return;
     }
     // 패스는 떼는 순간, 누른 시간이 세기 (탭 = 보통). 우리 공일 때 누른 것만 (수비 때 누른 전환·슬라이딩 키를 공을 뺏은 뒤에 떼도 패스가 나가지 않는다)
-    if (I.rel.pass && h.armP) { const pw = clamp((I.holdT.pass - 0.12) / 0.45, 0, 1), tie = mag > 0.15 ? 0.2 : 0.4, cm = mag > 0.15 ? null : s.team[p.t].find(m => m.callT > 0 && !m.off && m !== p && Math.hypot(m.x - p.x, m.y - p.y) < 30) ?? null; /* 방향키 없이 누르면 방금 부른 동료에게 (49차) */ queueKick(s, p, () => cm ? passTo(s, p, cm, false, pw) : shortPass(s, p, aim, pw, tie), 0.04); h.charging = false; return; } // 방향키 없이 누르면 보는 쪽 넓게
+    if (I.rel.pass && h.armP) { const pw = clamp((I.holdT.pass - 0.12) / 0.45, 0, 1), tie = mag > 0.15 ? 0.2 : 0.4, cm = mag > 0.15 ? null : s.team[p.t].find(m => m.callT > 0 && !m.off && m !== p && Math.hypot(m.x - p.x, m.y - p.y) < 30) ?? null, go = I.down.run; /* 방향키 없이 누르면 방금 부른 동료에게 (49차). Q를 누른 채면 주고 뛰기 (50차) */ queueKick(s, p, () => { if (cm) passTo(s, p, cm, false, pw); else shortPass(s, p, aim, pw, tie); if (go) passGo(s, p); }, 0.04); h.charging = false; return; } // 방향키 없이 누르면 보는 쪽 넓게
     if (I.rel.lob && h.armL) { const pw = clamp((I.holdT.lob - 0.1) / 0.5, 0, 1); queueKick(s, p, () => longPass(s, p, aim, 0.35 + pw * 0.65)); h.charging = false; return; }
     if (I.press.through) { const pw = I.down.sprint ? 0.8 : 0; queueKick(s, p, () => throughPass(s, p, aim, pw), 0.04); h.charging = false; return; }
     if (I.rel.chip && !h.zUsed && !h.charging) { queueKick(s, p, () => chipShot(s, p)); return; } // Z만 눌렀다 떼면 칩슛 (Z를 누른 채 슛 = 감아차기)

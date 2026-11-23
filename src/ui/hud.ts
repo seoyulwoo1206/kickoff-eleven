@@ -36,7 +36,7 @@ export function updateHud(s: Sim, local: number) {
   if (lk !== labelCache) { labelCache = lk; // 글자와 밀기 안내(data-up/dn: 버튼 위·아래 작은 글자)
     const set = (id: string, text: string, up = '', dn = '') => { const el = $(id); el.textContent = text; el.dataset.up = up; el.dataset.dn = dn; };
     $('bAside').textContent = own ? '◀ 호출' : ''; // 패스 버튼을 옆으로 밀기 = 동료 호출 (버튼 안에 넣으면 글자가 겹쳐 왼쪽 바깥에)
-    if (own) { set('bA', '패스', '▲ 로빙', '▼ 침투'); if (clr) set('bB', '클리어'); else set('bB', '슛', '▲ 감아', '▼ 칩'); set('bD', '스루'); set('bC', '질주', '밀기 = 개인기'); }
+    if (own) { set('bA', '패스', '▲ 로빙', '▼ 주고뛰기'); if (clr) set('bB', '클리어'); else set('bB', '슛', '▲ 칩', '▼ 감아'); set('bD', '스루', '▲ 침투'); set('bC', '질주', '밀기 = 개인기'); }
     else { set('bA', '전환'); set('bB', '태클'); set('bD', '슬라이딩'); set('bC', '질주', '▲ 키퍼', '◀▶ 압박'); }
   }
 }

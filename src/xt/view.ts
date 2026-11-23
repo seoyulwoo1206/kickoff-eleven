@@ -120,8 +120,9 @@ function drawCell(ctx: CanvasRenderingContext2D, c: Cell, x0: number, y0: number
     ctx.fillStyle = C1; for (let i = 0; i < n; i++) if (c.dn[i] > 0) { const a = Math.max(1, Math.sqrt(c.dn[i] / ymax) * amp); ctx.fillRect(x0 + i * cw, mid, cw + 0.5, a); }
     for (const k of XT.marks) { // 슛(작은 세모)·골(세로선)
       if (k.tick < t0 || k.tick > t1) continue; const px = x0 + (k.tick - t0) / (t1 - t0 || 1) * w, top = k.t === 0;
-      if (k.kind === 'goal') { ctx.fillStyle = '#fff'; ctx.fillRect(px - 0.75, top ? y0 + 2 : mid, 1.5, h / 2 - 2); ctx.beginPath(); ctx.arc(px, top ? y0 + 5 : y0 + h - 5, 3, 0, 7); ctx.fill(); }
-      else { const ey = top ? y0 + 3 : y0 + h - 3, s = top ? 1 : -1; ctx.fillStyle = 'rgba(255,255,255,.75)'; ctx.beginPath(); ctx.moveTo(px - 3, ey); ctx.lineTo(px + 3, ey); ctx.lineTo(px, ey + 5 * s); ctx.fill(); }
+      const ty = y0 + (big ? 18 : 16); // 위쪽 표시는 제목 줄 아래에서 시작 (제목 글자와 겹쳤다)
+      if (k.kind === 'goal') { ctx.fillStyle = '#fff'; ctx.fillRect(px - 0.75, top ? ty : mid, 1.5, top ? mid - ty : h / 2 - 2); ctx.beginPath(); ctx.arc(px, top ? ty + 2 : y0 + h - 5, 3, 0, 7); ctx.fill(); }
+      else { const ey = top ? ty : y0 + h - 3, s = top ? 1 : -1; ctx.fillStyle = 'rgba(255,255,255,.75)'; ctx.beginPath(); ctx.moveTo(px - 3, ey); ctx.lineTo(px + 3, ey); ctx.lineTo(px, ey + 5 * s); ctx.fill(); }
     }
   }
   ctx.fillStyle = 'rgba(255,255,255,.3)'; ctx.fillRect(x0, mid - 0.5, w, 1);

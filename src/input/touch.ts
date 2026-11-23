@@ -1,4 +1,4 @@
-import { keyDown, keyUp, keyCancel, type Inp, type Act } from './actions';
+import { keyDown, keyUp, keyCancel, keyHold, type Inp, type Act } from './actions';
 
 /* 왼쪽 55% 화면 어디든 누르면 그 자리에 아날로그 조이스틱이 뜬다. 오른쪽은 질주·패스·스루·슛 버튼 (누른 채 밀면 다른 동작) */
 const $ = (id: string) => document.getElementById(id) as HTMLElement;
@@ -27,7 +27,7 @@ export function installTouch(I: Inp, onTouch: () => void, getOpts: () => TouchOp
   const stickEnd = (e: PointerEvent) => { if (e.pointerId !== stickId) return; stickId = null; stickEl.style.left = stickEl.style.top = stickEl.style.bottom = ''; stickEl.classList.add('rest'); /* 쉬는 자리(CSS)로 */ knob.style.transform = ''; I.tx = 0; I.ty = 0; if (stickSprintOn) { stickSprintOn = false; keyUp(I, 'sprint'); } };
   stickArea.addEventListener('pointerup', stickEnd); stickArea.addEventListener('pointercancel', stickEnd); stickArea.addEventListener('lostpointercapture', stickEnd);
   /* 버튼 4개(41차, FC 모바일 식): 패스·스루·슛이 질주 버튼을 둘러싼다. 버튼을 누른 채 SW px 넘게 밀면 그 방향의 다른 동작 —
-     패스 ↑ 로빙(롱패스·크로스)·↓ 침투 요청·옆으로 동료 호출(49차), 슛 ↑ 감아차기·↓ 칩슛, 질주 = 밀면 개인기(수비 땐 ↑ 키퍼 나오기·그 밖 동료 압박). 수비 땐 패스 = 전환, 스루 = 슬라이딩, 슛 = 태클.
+     패스 ↑ 로빙(롱패스·크로스)·↓ 주고 뛰기(50차, Q를 누른 채 패스)·옆으로 동료 호출(49차), 스루 ↑ 침투 요청(50차), 슛 ↑ 칩슛·↓ 감아차기(50차에 뒤집음 — FC 모바일 조작표), 질주 = 밀면 개인기(수비 땐 ↑ 키퍼 나오기·그 밖 동료 압박). 수비 땐 패스 = 전환, 스루 = 슬라이딩, 슛 = 태클.
      밀기는 기존 액션 키를 대신 눌러 주는 것이라 시뮬·온라인 입력은 그대로다 */
   const SW = 24;
   type Dir4 = 'u' | 'd' | 'l' | 'r';
@@ -44,23 +44,28 @@ export function installTouch(I: Inp, onTouch: () => void, getOpts: () => TouchOp
   };
   const tap = (k: Act, ms = 50) => { keyDown(I, k); window.setTimeout(() => keyUp(I, k), ms); };
   // 패스 / 전환
-  { let alt: Act | null = null;
-    bindBtn($('bA'), () => { alt = null; keyDown(I, 'pass'); }, () => { if (alt) { if (alt === 'lob') keyUp(I, 'lob'); } else keyUp(I, 'pass'); alt = null; }, dir => {
+  { let alt: Act | 'go' | null = null;
+    bindBtn($('bA'), () => { alt = null; keyDown(I, 'pass'); }, () => {
+      if (alt === 'go') { keyUp(I, 'pass'); window.setTimeout(() => keyUp(I, 'run'), 90); } // 패스가 나간 뒤에 Q를 뗀다
+      else if (alt) { if (alt === 'lob') keyUp(I, 'lob'); } else keyUp(I, 'pass'); alt = null;
+    }, dir => {
       if (!getOpts().attack) return;
+      if (dir === 'd') { alt = 'go'; keyHold(I, 'run'); return '주고뛰기'; } // 아래로: 주고 뛰기 — 패스는 떼는 순간 그대로 나가고 준 선수가 뛰어 들어간다
       const held = I.holdT.pass; keyCancel(I, 'pass');
       if (dir === 'l' || dir === 'r') { alt = 'jockey'; tap('jockey'); return '호출'; } // 옆으로: 동료 호출 (C 탭)
-      if (dir === 'u') { alt = 'lob'; keyDown(I, 'lob'); I.holdT.lob = held; return '로빙'; } // 누른 시간은 이어받는다 (길게 = 멀리)
-      alt = 'run'; tap('run'); return '침투';
+      alt = 'lob'; keyDown(I, 'lob'); I.holdT.lob = held; return '로빙'; // 위로: 누른 시간은 이어받는다 (길게 = 멀리)
     }); }
-  // 슛 / 태클: 공격 때 누른 채 ↑ 감아차기(Z를 누른 채 슛)·↓ 칩슛(Q를 누른 채 슛)
+  // 슛 / 태클: 공격 때 누른 채 ↑ 칩슛(Q를 누른 채 슛)·↓ 감아차기(Z를 누른 채 슛)
   { let mod: Act | null = null;
     bindBtn($('bB'), () => { mod = null; keyDown(I, 'shoot'); }, () => { keyUp(I, 'shoot'); if (mod) { const m = mod; window.setTimeout(() => keyUp(I, m), 90); } mod = null; }, dir => {
       if (!getOpts().attack || (dir !== 'u' && dir !== 'd')) return;
-      mod = dir === 'u' ? 'chip' : 'run'; keyDown(I, mod); return dir === 'u' ? '감아차기' : '칩슛';
+      mod = dir === 'u' ? 'run' : 'chip'; keyDown(I, mod); return dir === 'u' ? '칩슛' : '감아차기';
     }); }
-  // 스루 / 슬라이딩 (수비 땐 롱패스 키 = 슬라이딩)
-  { let k: Act = 'through';
-    bindBtn($('bD'), () => { k = getOpts().attack ? 'through' : 'lob'; keyDown(I, k); }, () => keyUp(I, k)); }
+  // 스루 / 슬라이딩 (수비 땐 롱패스 키 = 슬라이딩). 공격 땐 떼는 순간 스루패스 — 누른 채 위로 밀면 스루 대신 침투 요청(Q 탭)이라 누르는 순간엔 못 찬다
+  { let k: Act | null = null, run = false;
+    bindBtn($('bD'), () => { run = false; if (getOpts().attack) k = null; else { k = 'lob'; keyDown(I, k); } }, () => { if (k) keyUp(I, k); else if (!run && getOpts().attack) tap('through'); k = null; }, dir => {
+      if (k || dir !== 'u') return; run = true; tap('run'); return '침투';
+    }); }
   // 질주: 누른 채 밀면 — 공격: 개인기(달리는 쪽이면 치달), 수비: ↑ 키퍼 나오기(누르는 동안)·그 밖 동료 압박
   { let gk = false;
     bindBtn($('bC'), () => { gk = false; keyDown(I, 'sprint'); }, () => { keyUp(I, 'sprint'); if (gk) { gk = false; keyUp(I, 'gkRush'); } }, (dir, dx, dy) => {

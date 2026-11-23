@@ -435,14 +435,25 @@ function applyAuto() {
   else if (!want && autoHU) { sim.HU[0] = autoHU[0]; sim.HU[1] = autoHU[1]; autoHU = null; for (const h of sim.HU) if (h) { h.charging = false; h.charge = 0; if (!sim.M.so) switchPlayer(sim, h); } }
   $('touch').hidden = !isTouch || !!autoHU || state === 'menu' || state === 'over';
 }
-/** 패널이 열려 있으면 경기 화면(#cv·#ov)을 패널 오른쪽에 16:9 영상처럼 놓는다. 닫으면 전체 화면. 자리가 너무 좁으면(폰 세로 등) 그대로 둔다 */
+/** 패널이 열려 있으면 경기 화면(#cv·#ov)을 16:9 영상처럼 따로 놓는다. 닫으면 전체 화면.
+    가로로 넓은 화면(`body.xtd`): 패널은 왼쪽 맨 위, 경기 화면은 그 오른쪽 — 점수판(#hud)도 경기 화면 왼쪽 위로 옮긴다(`--stx/--sty`; 50차 — 전엔 패널이 점수판을 덮었다).
+    세로로 긴 화면(`body.xtv`, 폭 620px 미만): 경기 화면이 맨 위 화면 폭 전체, 패널은 그 아래(`--xt-top`). 둘 다 안 되게 좁으면 그대로 둔다 */
 function layoutStage() {
-  const cv = $('cv'), ov = $('ov'); let css = '';
-  if (XT.on && !$('xtPanel').hidden) {
-    const p = $('xtPanel').getBoundingClientRect(), m = 12, x0 = p.right + m, y0 = p.top, aw = window.innerWidth - m - x0, ah = window.innerHeight - m - y0;
-    if (aw >= 260 && ah >= 150) { let w = aw, h = w * 9 / 16; if (h > ah) { h = ah; w = h * 16 / 9; } css = `left:${Math.round(x0 + (aw - w) / 2)}px;top:${Math.round(y0)}px;width:${Math.round(w)}px;height:${Math.round(h)}px;right:auto;bottom:auto;border-radius:10px;`; }
+  const cv = $('cv'), ov = $('ov'), B = document.body, pn = $('xtPanel'); let css = '', dock = '';
+  if (XT.on && !pn.hidden) {
+    const W = window.innerWidth, Hh = window.innerHeight, m = 12;
+    if (W < 620 && Hh > W) { const h = Math.round(W * 9 / 16); dock = 'xtv'; css = `left:0;top:0;width:${W}px;height:${h}px;right:auto;bottom:auto;`; B.style.setProperty('--xt-top', `${h + 6}px`); }
+    else {
+      B.classList.add('xtd'); B.classList.remove('xtv'); // 패널을 맨 위로 올린 자리에서 잰다
+      const p = pn.getBoundingClientRect(), x0 = p.right + m, y0 = p.top, aw = W - m - x0, ah = Hh - m - y0;
+      if (aw >= 260 && ah >= 150) {
+        let w = aw, h = w * 9 / 16; if (h > ah) { h = ah; w = h * 16 / 9; } const left = Math.round(x0 + (aw - w) / 2); dock = 'xtd';
+        css = `left:${left}px;top:${Math.round(y0)}px;width:${Math.round(w)}px;height:${Math.round(h)}px;right:auto;bottom:auto;border-radius:10px;`; B.style.setProperty('--stx', `${left}px`); B.style.setProperty('--sty', `${Math.round(y0)}px`); B.style.setProperty('--stw', `${Math.round(w)}px`); B.style.setProperty('--hud-s', `${Math.max(0.66, Math.min(1, w / 620)).toFixed(2)}`);
+      }
+    }
   }
-  if (cv.style.cssText !== css || ov.style.cssText !== css) { cv.style.cssText = css; ov.style.cssText = css; R.resize(); }
+  B.classList.toggle('xtd', dock === 'xtd'); B.classList.toggle('xtv', dock === 'xtv');
+  if (cv.style.cssText !== css || ov.style.cssText !== css) { cv.style.cssText = css; ov.style.cssText = css; R.resize(); $('rotateTip').hidden = !(isTouch && R.ch > R.cw); }
 }
 function fillXtResult() {
   const el = $('rXt'); if (!sim || !XT.tb || NET.role === 'guest') { el.hidden = true; return; }

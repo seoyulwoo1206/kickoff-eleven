@@ -1,5 +1,5 @@
 /* 입력 액션. 키보드·게임패드·터치가 모두 같은 액션을 낸다.
-   FC 온라인 배치 (공격/수비): pass(S) 짧은패스/커서 전환 · lob(A) 롱패스·크로스/슬라이딩 · through(W) 스루/골키퍼 나오기 · shoot(D) 슛/태클·압박(누른 채) · chip(Z) 누른 채 슛 = 감아차기(탭 = 칩슛) · run(Q) 침투 요청, 누른 채 슛 = 칩슛/동료 압박 · gkRush(X) 개인기/골키퍼 나오기 · sprint(E) 질주 · switch(Shift) 치달/뒤쪽 수비수 · jockey(C) -/자세 낮춰 따라붙기
+   FC 온라인 배치 (공격/수비): pass(S) 짧은패스/커서 전환 · lob(A) 롱패스·크로스/슬라이딩 · through(W) 스루/골키퍼 나오기 · shoot(D) 슛/태클·압박(누른 채) · chip(Z) 누른 채 슛 = 감아차기(탭 = 칩슛) · run(Q) 침투 요청, 누른 채 슛 = 칩슛·누른 채 패스 = 주고 뛰기/동료 압박 · gkRush(X) 개인기/골키퍼 나오기 · sprint(E) 질주 · switch(Shift) 치달/뒤쪽 수비수 · jockey(C) -/자세 낮춰 따라붙기
    ACTS의 순서는 온라인 입력 비트마스크의 비트 순서이기도 하다 */
 export const ACTS = ['pass', 'lob', 'through', 'shoot', 'chip', 'gkRush', 'sprint', 'run', 'switch', 'jockey', 'tackle'] as const; // switch(Shift): 수비 때 뒤쪽 수비수로 커서 전환. // run(Q): 공격 침투 지시 / 수비 압박 지원
 export type Act = (typeof ACTS)[number];
@@ -27,6 +27,8 @@ export function keyDown(I: Inp, k: Act | Dir, repeat?: boolean) {
 }
 /** 누르고 있던 액션을 거둔다 — 뗀 것(rel)으로 치지 않으므로 떼는 순간 나가는 패스·슛이 안 나간다 (폰: 버튼을 밀어 다른 동작으로 바꿀 때) */
 export function keyCancel(I: Inp, k: Act) { I.down[k] = false; }
+/** '누르고 있음'만 켠다(눌린 것 press로는 안 친다) — 폰: 패스 버튼을 아래로 밀면 Q를 누른 채 패스(주고 뛰기)가 되되, Q 탭의 침투 요청은 안 나가게 */
+export function keyHold(I: Inp, k: Act) { I.down[k] = true; }
 export function keyUp(I: Inp, k: Act | Dir) {
   if (isAct(k)) { if (I.down[k]) I.rel[k] = true; I.down[k] = false; }
   else I.keys.delete(k);
