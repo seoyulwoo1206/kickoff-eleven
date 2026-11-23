@@ -143,19 +143,24 @@ body.touch .help .ph{order:-1}
 .fx span:last-child{text-align:right}.fx b{color:var(--chalk);font-size:14px}.fx.me{color:var(--amber)}.fx small{font-size:10px;color:var(--muted)}
 .keylist{display:grid;gap:6px}.keyrow{display:flex;justify-content:space-between;align-items:center;gap:10px;font-size:14px}
 .htstats{position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);z-index:6;background:var(--panel);border:1px solid var(--rule);border-radius:14px;padding:18px 24px;display:grid;gap:12px;min-width:280px;max-width:92vw;pointer-events:none}
-#stick{position:absolute;left:0;top:0;width:0;height:0;pointer-events:none}
-#stick .base{position:absolute;left:-64px;top:-64px;width:128px;height:128px;border-radius:50%;border:2px solid rgba(238,243,234,.35);background:rgba(9,17,27,.35)}
+/* 조이스틱은 쉬는 동안에도 왼쪽 아래 제자리에 보인다(.rest, 흐리게). 누르면 누른 자리로 옮겨 온다 (`touch.ts`가 left/top을 넣었다 뺀다) */
+#stick{position:absolute;left:calc(env(safe-area-inset-left,0px) + 104px);bottom:calc(env(safe-area-inset-bottom,0px) + 104px);width:0;height:0;pointer-events:none;transition:opacity .15s}
+#stick.rest{opacity:.5}
+#stick .base{position:absolute;left:-64px;top:-64px;width:128px;height:128px;border-radius:50%;border:2px solid rgba(238,243,234,.4);background:radial-gradient(circle,rgba(9,17,27,.2) 0 44%,rgba(9,17,27,.42) 46% 100%)}
 #stick .knob{position:absolute;left:-28px;top:-28px;width:56px;height:56px;border-radius:50%;background:rgba(238,243,234,.85);box-shadow:0 2px 10px rgba(0,0,0,.4)}
 .tbtns{position:absolute;right:max(16px,calc(env(safe-area-inset-right,0px) + 10px));bottom:calc(env(safe-area-inset-bottom,0px) + 20px);width:200px;height:180px}
-.tb{position:absolute;border-radius:50%;border:2px solid rgba(238,243,234,.5);background:rgba(9,17,27,.26);text-shadow:0 1px 3px rgba(0,0,0,.95),0 0 6px rgba(0,0,0,.6);font-weight:700;pointer-events:auto;touch-action:none;display:grid;place-items:center;font-size:15px;padding:0}
-.tb.down{background:var(--amber);color:var(--amber-ink);border-color:var(--amber);text-shadow:none}
+/* 42차: 버튼마다 색 테두리(패스 청록·스루 노랑·슛 빨강·질주 초록) + 어두운 반투명 바탕 — FC(FIFA) 모바일 화면을 참고 */
+.tb{position:absolute;border-radius:50%;border:3px solid var(--ring,rgba(238,243,234,.5));background:radial-gradient(circle at 50% 42%,rgba(26,40,50,.5),rgba(7,13,20,.6));box-shadow:0 0 12px -3px var(--ring,transparent),inset 0 0 14px -5px var(--ring,transparent);text-shadow:0 1px 3px rgba(0,0,0,.95),0 0 6px rgba(0,0,0,.6);font-weight:700;pointer-events:auto;touch-action:none;display:grid;place-items:center;font-size:15px;padding:0}
+.tb.down{background:var(--ring,var(--amber));color:#06121a;text-shadow:none;box-shadow:0 0 16px -2px var(--ring,transparent)}
+#bA{--ring:#35c8dc}#bD{--ring:#e3c544}#bB{--ring:#e5534a}#bC{--ring:#49cc6a}
 .tbtns{width:210px;height:200px}
 /* 버튼 4개(41차, FC 모바일 식): 질주가 모서리, 패스·스루·슛이 왼쪽 아래 → 위로 둘러싼다 */
-#bC{width:84px;height:84px;right:0;bottom:0}#bA{width:70px;height:70px;right:98px;bottom:4px}#bD{width:62px;height:62px;right:76px;bottom:82px;font-size:13px}#bB{width:74px;height:74px;right:2px;bottom:104px}
+#bC{width:88px;height:88px;right:0;bottom:0;font-size:16px}#bA{width:68px;height:68px;right:101px;bottom:7px}#bD{width:68px;height:68px;right:76px;bottom:78px}#bB{width:68px;height:68px;right:6px;bottom:106px}
 /* 밀기 안내: 버튼 위·아래 작은 글자(data-up/dn — `hud.ts`), 밀어서 고른 동작은 테두리 강조 */
-.tb::before,.tb::after{position:absolute;left:0;right:0;text-align:center;font-size:9px;font-weight:700;line-height:1;opacity:.82;white-space:nowrap;pointer-events:none}
+.tb::before,.tb::after{position:absolute;left:0;right:0;text-align:center;font-size:9px;font-weight:800;line-height:1;opacity:0;white-space:nowrap;pointer-events:none;text-shadow:none}
+.tb.down::before,.tb.down::after{opacity:.9} /* 밀기 안내는 버튼을 누르고 있는 동안만 (평소엔 글자 하나만 — 깔끔하게) */
 .tb::before{content:attr(data-up);top:8px}.tb::after{content:attr(data-dn);bottom:8px}
-.tb.alt{border-color:#fff;box-shadow:0 0 0 3px rgba(255,182,39,.55);font-size:13px}.tb.alt::before,.tb.alt::after{content:''}
+.tb.alt{border-color:#fff;box-shadow:0 0 0 3px rgba(255,255,255,.35),0 0 16px -2px var(--ring,transparent);font-size:13px}.tb.alt::before,.tb.alt::after{content:''}
 
 /* 입장 라인업 */
 #intro{position:fixed;inset:0;z-index:7;display:grid;grid-template-rows:auto 1fr;gap:clamp(8px,2vh,18px);padding:calc(env(safe-area-inset-top,0px) + clamp(52px,9vh,84px)) max(16px,env(safe-area-inset-right,0px)) calc(env(safe-area-inset-bottom,0px) + 16px) max(16px,env(safe-area-inset-left,0px));background:linear-gradient(180deg,rgba(5,11,18,.82),rgba(5,11,18,.5) 45%,rgba(5,11,18,.86));opacity:0;transition:opacity .45s;cursor:pointer;overflow:hidden}

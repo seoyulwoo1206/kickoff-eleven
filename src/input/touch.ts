@@ -21,10 +21,10 @@ export function installTouch(I: Inp, onTouch: () => void, getOpts: () => TouchOp
   };
   stickArea.addEventListener('pointerdown', e => {
     if (stickId !== null) return; e.preventDefault(); try { stickArea.setPointerCapture(e.pointerId); } catch { /* 합성 이벤트 */ }
-    stickId = e.pointerId; ox = e.clientX; oy = e.clientY; stickEl.style.left = ox + 'px'; stickEl.style.top = oy + 'px'; stickEl.hidden = false; I.touch = true; onTouch(); stickSet(e.clientX, e.clientY);
+    stickId = e.pointerId; ox = e.clientX; oy = e.clientY; stickEl.style.left = ox + 'px'; stickEl.style.top = oy + 'px'; stickEl.style.bottom = 'auto'; stickEl.classList.remove('rest'); I.touch = true; onTouch(); stickSet(e.clientX, e.clientY);
   });
   stickArea.addEventListener('pointermove', e => { if (e.pointerId === stickId) stickSet(e.clientX, e.clientY); });
-  const stickEnd = (e: PointerEvent) => { if (e.pointerId !== stickId) return; stickId = null; stickEl.hidden = true; knob.style.transform = ''; I.tx = 0; I.ty = 0; if (stickSprintOn) { stickSprintOn = false; keyUp(I, 'sprint'); } };
+  const stickEnd = (e: PointerEvent) => { if (e.pointerId !== stickId) return; stickId = null; stickEl.style.left = stickEl.style.top = stickEl.style.bottom = ''; stickEl.classList.add('rest'); /* 쉬는 자리(CSS)로 */ knob.style.transform = ''; I.tx = 0; I.ty = 0; if (stickSprintOn) { stickSprintOn = false; keyUp(I, 'sprint'); } };
   stickArea.addEventListener('pointerup', stickEnd); stickArea.addEventListener('pointercancel', stickEnd); stickArea.addEventListener('lostpointercapture', stickEnd);
   /* 버튼 4개(41차, FC 모바일 식): 패스·스루·슛이 질주 버튼을 둘러싼다. 버튼을 누른 채 SW px 넘게 밀면 그 방향의 다른 동작 —
      패스 ↑ 로빙(롱패스·크로스)·↓ 침투 요청, 슛 ↑ 감아차기·↓ 칩슛, 질주 = 밀면 개인기(수비 땐 ↑ 키퍼 나오기·그 밖 동료 압박). 수비 땐 패스 = 전환, 스루 = 슬라이딩, 슛 = 태클.
@@ -80,7 +80,7 @@ export function touchGauge(id: string, frac: number, hot = false) {
   const el = document.getElementById(id); if (!el) return;
   if (frac <= 0) { el.style.background = ''; return; }
   const col = hot ? '#ff5a4e' : '#ffb627';
-  el.style.background = `conic-gradient(${col} ${Math.round(frac * 360)}deg, rgba(9,17,27,.26) 0)`;
+  el.style.background = `conic-gradient(${col} ${Math.round(frac * 360)}deg, rgba(9,17,27,.5) 0)`;
 }
 /** 버튼 크기·투명도 (CSS 변수) */
 export function applyTouchStyle(size: 'small' | 'normal' | 'large', alpha: 'light' | 'normal' | 'solid') {

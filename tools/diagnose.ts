@@ -26,7 +26,7 @@ if (!ONLY || ONLY === '1') {
   for (const who of [[9, '공격수'], [6, '미드필더']] as const) for (const mode of MODES) {
     let ok = 0, lost = 0, tsum = 0, bites = 0; const why: Record<string, number> = {};
     for (let k = 0; k < N; k++) {
-      const s = mk(true, (rnd() * 1e9) >>> 0), I = s.INP[0], h = s.HU[0]!; s.M.phase = 'live'; s.M.protect = 0;
+      const s = mk(true, (rnd() * 1e9) >>> 0), I = s.INP[0], h = s.HU[0]!; s.M.phase = 'live'; s.M.protect = 0; s.M.dead = null; s.M.setTaker = null; s.M.spots = null; /* 킥오프 키커(공격수)는 찰 때까지 제자리라 이걸 안 풀면 시험이 전부 '막힘'으로 나온다 */
       const p = s.team[0][who[0]], o = s.team[1][2 + (k % 4)], gk = s.team[1][0];
       const park = () => { for (const q of s.players) { if (q === p || q === o || q === gk) continue; q.x = q.t === 0 ? 2 : 3; q.y = 2 + q.i * 2.5; q.vx = q.vy = 0; } };
       park(); p.x = 40; p.y = CY + (rnd() - 0.5) * 8; p.dir = 0; p.vx = p.vy = 0; o.x = 52; o.y = p.y + (rnd() - 0.5) * 3; o.vx = o.vy = 0; o.tackleCD = 0; o.bodyCD = 0;

@@ -32,12 +32,13 @@ export function tryTackle(s: Sim, p: Player, own: Player | null, rate: number) {
     const rush = soft && (p.vx * (own.x - p.x) + p.vy * (own.y - p.y)) / (q || 1) > 5.8; // 수비수 자신이 5.8m/s 넘게 달려들 때 (드리블러가 서 있는 수비에게 달려가는 건 해당 없음) // 달려들며 뻗는 발: 덜 정확하고, 헛디디면 그대로 지나친다
     p.tackleCD = 0.45; const side = Math.cos(own.dir) * (p.x - own.x) + Math.sin(own.dir) * (p.y - own.y) > -0.55 * q; // 옆(뒤 123° 밖)
     let r = rate * (front ? 1.3 : !hc ? 1 : wx(own.x, own.t) > 88 ? 0.9 : side ? 0.7 : 0.4) * (p.beatT > 0 ? 0.5 : 1) * (0.85 + n(p.attrs.stk) * 0.4) * (1 - n(own.attrs.bal) * 0.2) * expo * (loose ? 1.4 : 0.7); // 앞을 막고 선 수비가, 공이 발에서 떨어졌을 때 더 잘 뺏는다
-    const h = HU[own.t]; if (h && h.ctrl === own && INP[h.t].down.sprint) r *= 0.85;
+    /* 43차: 질주 중 태클 성공 ×.85를 없앴다 — 공을 차 놓고 달리는 드리블이 오히려 더 안 뺏겼다 */
     if (own.feint > 0) r *= 0.5; if (own.spin > 0) r *= 0.3; if (rush) r *= 0.7;
+    { const os = Math.hypot(own.vx, own.vy); if (hc && front && os > 7 && (own.vx * (p.x - own.x) + own.vy * (p.y - own.y)) / (os * (q || 1)) > 0.8) r *= 1 + 0.55 * clamp((os - 7) / 1.6, 0, 1); } // 43차: 막아선 수비에게 곧장 달려드는 질주 드리블은 발만 뻗어도 걸린다 (전엔 공격수가 그냥 질주만 해도 67% 돌파)
     if (soft && !loose && s.rnd() < 0.5) return; // 공이 발에 붙어 있으면 절반은 지켜본다 (덤비지 않고 기다림)
     p.lunge = 0.3;
     if (s.rnd() < r * (hc ? 1.35 : 1)) { gain(s, p); own.stun = 0.45; own.kickCD = 0.5; sfx(s, 'tackle'); }
-    else if (hc && (!HU[p.t] || HU[p.t]!.ctrl !== p)) { p.stun = Math.max(p.stun, rush ? 0.26 : 0.14); const os = Math.hypot(own.vx, own.vy); if (os > 2 && (own.vx * (p.x - own.x) + own.vy * (p.y - own.y)) / (os * (q || 1)) < 0.6) p.beatT = Math.max(p.beatT, 0.45); } // 발을 뻗었다 실패하면 잠깐 중심을 잃는다(제칠 틈). 드리블러가 수비 쪽이 아닌 방향(53° 넘게 비껴)으로 움직이고 있었으면 0.45초 역동작(추격 0.9배·다음 태클 절반) — 수비에게 곧장 달려드는 드리블엔 안 걸린다(걸면 직진 돌파 8 → 18%)
+    else if (hc && (!HU[p.t] || HU[p.t]!.ctrl !== p)) { const os = Math.hypot(own.vx, own.vy), fast = clamp((os - 7.8) / 0.7, 0, 1); p.stun = Math.max(p.stun, (rush ? 0.26 : 0.14) - 0.055 * fast); if (os > 2 && (own.vx * (p.x - own.x) + own.vy * (p.y - own.y)) / (os * (q || 1)) < 0.6) p.beatT = Math.max(p.beatT, 0.45 - 0.17 * fast); } // 43차: 아주 빠른 드리블러(7.8 → 8.5m/s)에겐 틈을 덜 준다 — 같은 틈이면 빠른 공격수만 유독 잘 빠져나갔다(공격수 78% vs 미드필더 38%) // 헛디딘 뒤의 틈(.26/.14·.45)은 그대로 — 43차에 .2/.1·.3으로 줄여 봤더니 미드필더의 헛다리 돌파가 38 → 2%로 무너졌다 // 발을 뻗었다 실패하면 잠깐 중심을 잃는다(제칠 틈). 드리블러가 수비 쪽이 아닌 방향(53° 넘게 비껴)으로 움직이고 있었으면 0.45초 역동작(추격 0.9배·다음 태클 절반) — 수비에게 곧장 달려드는 드리블엔 안 걸린다(걸면 직진 돌파 8 → 18%)
   }
   else if (q < 3.2 && !HU[p.t] && s.rnd() < rate * 0.02 && (own.kickCD > 0 || Math.hypot(own.vx, own.vy) > 6)) { // AI 슬라이딩: 공이 발에서 떨어졌을 때만, 앞에서
     const front = Math.cos(own.dir) * (p.x - own.x) + Math.sin(own.dir) * (p.y - own.y) > -0.3;

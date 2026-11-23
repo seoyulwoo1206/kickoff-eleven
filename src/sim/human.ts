@@ -116,6 +116,16 @@ export function humanUpdate(s: Sim, h: Human, dt: number) {
   else if (h.lockT > 0) { // 찰 때부터 누르고 있던 방향키는 받는 선수의 이동으로 치지 않는다 — 떼거나 방향을 바꾸면 풀린다 (전엔 던지자마자 받는 선수가 그 방향으로 공을 몰고 나갔다)
     h.lockT -= dt; if (mag < 0.15 || Math.abs(angDiff(Math.atan2(my, mx), h.lockA)) > 0.6) h.lockT = 0; else { mx = 0; my = 0; mag = 0; }
   }
+  // 치달 예약(43차): 질주 드리블로 공을 앞에 차 놓은 사이(주인 없음·`ball.knock`)에 누른 치달은 다시 닿는 순간까지 0.5초 기억했다가 친다.
+  // 전엔 누른 그 틱에 공이 2m 안·kickCD 0이어야만 먹어, 달리는 중엔 대부분 씹혔다. 폰의 '달리는 쪽으로 밀기'는 아예 이 경우를 안 봐서 키퍼 나오기로 샜다
+  if (!own && ball.knock === p) {
+    const fl = I.press.gkRush && I.skill && (Math.cos(p.dir) * I.skill.x + Math.sin(p.dir) * I.skill.y) / (Math.hypot(I.skill.x, I.skill.y) || 1) > 0.5; // 폰: 달리는 쪽으로 밀기
+    if (I.press.switch || fl) { h.chiT = 0.5; h.chiA = fl ? Math.atan2(I.skill!.y, I.skill!.x) : NaN; if (fl) { I.skill = null; I.press.gkRush = false; } }
+    if (h.chiT > 0 && d(p, ball) < 2.2 && ball.z < 0.6 && p.kickCD <= 0 && p.stun <= 0 && p.spin <= 0) {
+      gain(s, p); if (ball.owner === p) { h.chiT = 0; const sa = isNaN(h.chiA) ? (mag > 0.15 ? Math.atan2(my, mx) : p.dir) : h.chiA; bigKnock(s, p, Math.abs(angDiff(p.dir, sa)) < 1.75 ? sa : p.dir); return; }
+    }
+  }
+  h.chiT = Math.max(0, h.chiT - dt);
   if (!own && ball.knock === p && d(p, ball) < 2.0 && ball.z < 0.6 && (I.press.pass || I.press.shoot || I.press.lob || I.press.through || (I.press.switch && p.kickCD <= 0) || I.rel.chip || I.rel.pass || I.rel.lob)) { gain(s, p); own = ball.owner === p; } // 질주 드리블 중에도 바로 차거나 패스할 수 있다
   h.second = false; h.gkRush = false; h.pressT = Math.max(0, h.pressT - dt); h.lostT = Math.max(0, h.lostT - dt);
   if (p.slide > 0) { slideCheck(s, p); return; }
@@ -177,7 +187,7 @@ export function humanUpdate(s: Sim, h: Human, dt: number) {
       return;
     }
     if (dead && M.setT > 8 && !h.charging) { queueKick(s, p, () => shortPass(s, p, p.dir, 0.3), 0.04); return; }
-    const anyPress = I.press.pass || I.press.lob || I.press.through || I.press.shoot || I.press.switch || I.down.pass || I.down.lob || I.down.shoot || I.rel.pass || I.rel.lob || I.rel.shoot || I.rel.chip; // 떼는 틱(rel)도 입력 중: 빠지면 질주 중 패스가 노크온에 먹힌다
+    const anyPress = I.press.pass || I.press.lob || I.press.through || I.press.shoot || I.press.switch || I.press.gkRush || I.down.pass || I.down.lob || I.down.shoot || I.rel.pass || I.rel.lob || I.rel.shoot || I.rel.chip; // 떼는 틱(rel)도 입력 중: 빠지면 질주 중 패스가 노크온에 먹힌다
     // 치달 (Shift, 폰은 질주 중 앞으로 스와이프): 스틱 방향(없으면 보는 방향, 몸에서 100° 안)으로 공을 길게 차 놓고 달린다
     if (I.press.switch && !dead && !hands && !h.charging && p.spin <= 0 && p.stun <= 0) { const sa = mag > 0.15 ? Math.atan2(my, mx) : p.dir; bigKnock(s, p, Math.abs(angDiff(p.dir, sa)) < 1.75 ? sa : p.dir); return; }
     if (sprint && mag > 0.15 && Math.hypot(p.vx, p.vy) > 5.5 && !h.charging && !anyPress && p.spin <= 0 && Math.abs(angDiff(Math.atan2(p.vy, p.vx), Math.atan2(my, mx))) < 0.4 && !oppAhead(s, p) && !dead) { knockOn(s, p); return; } // 질주 드리블은 공을 앞에 차 놓고 달린다 (도는 중엔 발에 붙여 돈다)

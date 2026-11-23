@@ -35,6 +35,7 @@ export interface Ball {
 }
 export interface Human {
   t: number; ctrl: Player | null; lock: number; charge: number; charging: boolean;
+  /** 치달 예약: 남은 시간(초)과 방향(rad, NaN = 방향키) — 차 놓은 공에 다시 닿는 순간 친다 */ chiT: number; chiA: number;
   second: boolean; gkRush: boolean; pressT: number; lostT: number; swSeen: Player[]; swT: number; swHold: boolean; armP: boolean; armL: boolean; mod: number; zUsed: boolean; /** 키퍼가 공을 잡았을 때 조작 안내를 보여 준 횟수 (경기당 두 번까지) */ gkTips: number; /* armP·armL: 패스·롱패스 키를 우리 공일 때 눌렀는가 (수비 때 누른 키를 공을 뺏은 뒤 떼도 패스가 나가지 않게). mod: 슛을 모으는 동안 누른 보조 키 (1 감아차기, 2 칩슛) */ lockA: number; lockT: number; /* lockA·lockT: 세트피스를 찰 때 누르고 있던 방향키는 받는 선수의 이동으로 치지 않는다 (떼거나 방향을 바꿀 때까지, 최대 lockT초) */ /* 커서 전환: 방금 거쳐 간 선수들(1.2초 안에 다시 누르면 그다음 선수) */ /* lostT: 방금 공을 뺏긴 뒤 남은 시간 (그동안은 공을 돌아본다) */ col: string; tag: string; cursor: 'manual' | 'auto'; had: boolean; // pressT: 압박 지원(Q) 남은 시간
 }
 export interface Stats { shots: number[]; onT: number[]; poss: number[]; fouls: number[]; offs: number[]; yel: number[]; red: number[]; passA: number[]; passC: number[]; }

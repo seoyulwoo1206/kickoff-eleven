@@ -63,6 +63,8 @@ export function runPending(s: Sim, p: Player, dt: number) {
 }
 /** 드리블 방향 전환: 공 가진 선수가 달리던 방향에서 52° 넘게 꺾으면, 3.4m 안에서 따라 움직이던 AI 수비수는 속아 넘어갈 수 있다(잠깐 휘청임).
     (판정 각도는 지금 속도와 0.28초 늦은 속도 사이 39°.) 민첩·볼 컨트롤·개인기 등급이 높을수록, 헛다리 직후일수록 잘 속고, 수비수의 반응·민첩이 높으면 덜 속는다. 서 있는 수비수는 속지 않는다 */
+// 드리블 돌파(사람이 조작하는 선수의 방향 전환에 AI 수비가 속는 정도). 43차에 낮춤 — 전엔 .42·1.5초·.45초·0.7초라 공격수는 방향 전환·헛다리·치달의 75~80%, 그냥 질주만 해도 67%가 뚫려 '제치고 슛'만 하게 됐다
+const CUT_BASE = 0.37, CUT_BEAT = 1.2, CUT_STUN = 0.36, CUT_CD = 0.8;
 export function dribbleCut(s: Sim) {
   const { ball, M, HU } = s, c = ball.owner ?? (ball.knock && d(ball.knock, ball) < 2.2 ? ball.knock : null); // 질주로 차 놓은 상태도 드리블로 본다
   if (!c || c.role === 'GK' || c.cutCD > 0 || M.phase !== 'live') return;
@@ -70,13 +72,13 @@ export function dribbleCut(s: Sim) {
   const sp = Math.hypot(c.vx, c.vy), ls = Math.hypot(c.lagVx, c.lagVy); if (sp < 3.2 || ls < 2.2) return;
   if ((c.vx * c.lagVx + c.vy * c.lagVy) / (sp * ls) > 0.78) return;
   { const I = s.INP[c.t], m = Math.hypot(I.mx, I.my); if (m < 0.5 || (I.mx * c.lagVx + I.my * c.lagVy) / (m * ls) > 0.78 || (I.mx * c.vx + I.my * c.vy) / (m * sp) < 0.6) return; } // 스틱을 실제로 꺾었을 때만 (몸에 부딪혀 속도가 틀어진 건 방향 전환이 아니다 — 이게 없으면 직진만으로 2분에 1골) // 39° 넘게 꺾었을 때
-  c.cutCD = 0.7; let beat = false;
+  c.cutCD = CUT_CD; let beat = false;
   for (const o of s.team[1 - c.t]) {
     if (o.off || o.role === 'GK' || o.stun > 0 || o.beatT > 0 || d(o, c) > 3.4 || Math.hypot(o.vx, o.vy) < 2) continue; // 이미 제쳐진 수비수는 다시 속지 않는다 (연속 방향 전환으로 묶어 두는 것 방지)
     const h = HU[o.t]; if (h && h.ctrl === o) continue; // 사람이 조작하는 수비수는 스스로 판단한다
     const diff = HU[o.t] ? 1 : clamp(DIFF[M.diff].react / 0.28, 0.6, 1.4); // 쉬움은 더 잘 속고 어려움은 덜 속는다
-    const pb = clamp((0.42 + n(c.attrs.agi) * 0.25 + n(c.attrs.ctl) * 0.12 + (c.skill - 3) * 0.05 - n(o.attrs.rea) * 0.2 - n(o.attrs.agi) * 0.12 + (c.feint > 0 ? 0.25 : 0)) * diff, 0.08, 0.9);
-    if (s.rnd() < pb) { o.stun = Math.max(o.stun, c.feint > 0 ? 0.6 : 0.45); o.beatT = 1.5; beat = true; } // 속으면 잠깐 휘청이고, 그 뒤 1.5초는 따라가기 급급하다
+    const pb = clamp((CUT_BASE + n(c.attrs.agi) * 0.25 + n(c.attrs.ctl) * 0.12 + (c.skill - 3) * 0.05 - n(o.attrs.rea) * 0.2 - n(o.attrs.agi) * 0.12 + (c.feint > 0 ? 0.25 : 0)) * diff, 0.08, 0.9);
+    if (s.rnd() < pb) { o.stun = Math.max(o.stun, c.feint > 0 ? CUT_STUN + 0.12 : CUT_STUN); o.beatT = CUT_BEAT; beat = true; } // 속으면 잠깐 휘청이고, 그 뒤 1.5초는 따라가기 급급하다
   }
   if (beat) c.burst = Math.max(c.burst, 0.8); // 제친 순간 치고 나간다
 }
@@ -104,7 +106,7 @@ export function gain(s: Sim, p: Player) {
   xtEv(s, 'gain', p.t, p.num, p.x, p.y);
   ball.owner = p; ball.knock = null; ball.lastTouch = p.t; ball.passTarget = null; ball.isShot = false; ball.z = 0; ball.vz = 0; ball.curl = 0; p.holdT = 0; p.decT = Math.max(p.decT, 0.15); p.cutCD = Math.max(p.cutCD, 0.45);
   if (p.role === 'GK') p.dir = p.t === 0 ? 0 : Math.PI;
-  const h = HU[p.t]; if (h) { h.ctrl = p; h.lock = 0; if (wasPass) p.shield = Math.max(p.shield, 0.3); } // 공을 잡은 선수에게 커서 (키퍼 포함). 패스를 받은 직후 .3초는 뺏기지 않는다
+  const h = HU[p.t]; if (h) { h.ctrl = p; h.lock = 0; if (wasPass) p.shield = Math.max(p.shield, 0.4); } // 공을 잡은 선수에게 커서 (키퍼 포함). 패스를 받은 직후 .3초는 뺏기지 않는다
   const ho = HU[1 - p.t]; if (ho && prev && prev === ho.ctrl) ho.lostT = 0.6; // 사람이 방금 뺏겼다
 }
 
@@ -169,11 +171,18 @@ export function passTo(s: Sim, p: Player, m: Player, loft: boolean, power = 0) {
     for (let i = 0; i < 3; i++) { T = cross ? clamp(0.42 + q / 40, 0.75, 1.3) : loftTime(q, power); L = lead(m, T); q = Math.hypot(L.x - p.x, L.y - p.y) || 1; }
     const dx = L.x - p.x, dy = L.y - p.y, k = loftKick(q, T, cross ? 1.95 : 0.7); p.dir = Math.atan2(dy, dx) + e; const [kx, ky] = rot(dx / q * k.v, dy / q * k.v, e); kick(s, p, kx, ky, k.vz);
   } else { // 지면: 받는 자리에 11m/s(+세기)로 도착
-    const g = groundLead(p, m, 11 + power * 5), dx = g.x - p.x, dy = g.y - p.y, gv = Math.min(Math.max(14, g.v), 24); q = Math.hypot(dx, dy) || 1;
+    const hp = HU[p.t] ? 1.5 : 0; // 사람 팀의 숏패스는 받는 자리에 12.5m/s(+세기)로 — 빠른 공일수록 발을 뻗어 끊기 어렵다 (AI 팀은 11 그대로)
+    const g = groundLead(p, m, 11 + hp + power * 5), dx = g.x - p.x, dy = g.y - p.y, gv = Math.min(Math.max(14 + hp, g.v), 24); q = Math.hypot(dx, dy) || 1;
     p.dir = Math.atan2(dy, dx) + e; const [kx, ky] = rot(dx / q * gv, dy / q * gv, e); kick(s, p, kx, ky, 0);
   }
   ball.passTarget = m; s.M.stats.passA[p.t]++;
   const h = HU[p.t]; if (h && m.role !== 'GK') { h.ctrl = m; h.lock = 0.5; } // 커서는 차는 순간 받는 선수로
+  // 주고 뛰기(43차, 사람 팀): 상대 진영 쪽(자기 골 40m 밖)에서 땅볼 패스를 준 미드필더·공격수는 1.4초 동안 골 쪽 빈 곳으로 뛰어 들어간다 — 받은 동료가 바로 돌려주면 2대1 패스가 된다.
+  // 방향은 골 쪽에서 받는 선수 반대편으로 25° 벌린다(같은 길로 겹치지 않게). 오프사이드 라인은 `teamAI`의 침투 처리가 지킨다
+  if (h && !loft && q <= 28 && p.role !== 'DF' && p.role !== 'GK' && wx(p.x, p.t) > 40 && s.M.phase === 'live' && !s.M.dead) {
+    const gx = p.t === 0 ? W : 0, ga = Math.atan2(CY - p.y, gx - p.x), side = Math.sin(Math.atan2(m.y - p.y, m.x - p.x) - ga) > 0 ? -1 : 1;
+    p.runT = 1.4; p.runDir = ga + side * 0.44;
+  }
 }
 /** 숏패스가 갈 동료 (없으면 null) */
 export function shortPick(s: Sim, p: Player, ang: number, power = 0, tie = 0.2): Player | null { // tie: 조준에서 이 각(rad) 안은 동점 — 방향키 없이 누른 패스는 넓게(0.4)
@@ -564,6 +573,7 @@ export function ballControl(s: Sim) {
   if (!best) return;
   if (best.role !== 'GK' && ball.passTarget !== best && ball.knock !== best && sp > 8) { // 가로채기 판정: 빠른 공일수록·가로채기 능력이 낮을수록 헛발 (한 번 헛디디면 .25초 다시 못 뻗음)
     const pr = clamp(1.35 - sp / 30, 0.3, 1) * (0.9 + n(best.attrs.int) * 0.2) * (best.stun > 0 ? 0 : 1) + (s.HU[best.t]?.ctrl === best ? HUM_PR : 0);
+    if (!solid && !ball.isShot && M.react[best.t] > 0 && ball.kicker && ball.kicker.t !== best.t && !!s.HU[ball.kicker.t] && !s.HU[best.t]) return; // 사람 팀이 방금 찬 패스: AI 수비는 읽는 동안(반응 지연)엔 발을 못 뻗는다 — 빠르게 주고받으면 압박 사이로 빠진다. 길 위의 몸은 그대로 막는다
     if (!solid && s.rnd() >= pr) { best.kickCD = 0.25; return; }
     if (ball.isShot && ball.kicker && ball.kicker.t !== best.t && sp > 14) { // 슛 블록: 잡지 못하고 몸에 맞고 튄다 (코너킥·세컨드 볼)
       const a = Math.atan2(ball.vy, ball.vx) + (s.rnd() < 0.5 ? 1 : -1) * (0.5 + s.rnd() * 1.5), v = sp * (0.25 + s.rnd() * 0.2);
