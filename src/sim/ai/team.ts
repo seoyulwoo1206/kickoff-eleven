@@ -34,7 +34,9 @@ export function teamAI(s: Sim, t: number, dt: number) {
   const D = DIFF[M.diff], own = ball.owner, h = HU[t];
   // 노크온(질주 드리블로 공을 2~3m 앞에 차 놓은 상태)은 공 주인이 없지만 공 가진 것처럼 본다 — 안 그러면 질주 드리블에 수비 대형(커버·마크)이 풀린다
   const knocker = !own && ball.knock && !ball.knock.off && d(ball.knock, ball) < 2.5 ? ball.knock : null, carrier = own ?? knocker;
-  const att = !!carrier && carrier.t === t, def = !!carrier && carrier.t !== t;
+  // att: 우리 공격 중 — 47차부터 사람 팀은 우리 편에게 가는 패스가 굴러가는 동안도 공격으로 본다. 전엔 공 주인이 없는 그 0.5~1초마다 대형이 중립 자리(10m 넘게 뒤)로 돌아가려 해서, 패스할 때마다 동료들이 멈칫했고 AI 팀은 끝내 올라오지 못했다
+  M.ctr[t] = Math.max(0, M.ctr[t] - dt);
+  const att = !!carrier && carrier.t === t, def = !!carrier && carrier.t !== t, ownPass = !carrier && !!ball.passTarget && ball.passTarget.t === t && M.phase === 'live'; // ownPass(47차): 우리 편에게 가는 패스가 굴러가는 중 — 그동안에도 공격 자리를 유지하는 선수: 사람 팀은 공격수만(팀 전체면 스크립트 조작이 8경기 47골), AI 팀은 올라온 미드필더·수비수(안 그러면 패스마다 뒤로 물러나 끝내 못 올라온다). 아래 `targetFor` 호출 // 사람 팀만 — AI 팀까지 넣으면 AI끼리 패스 성공률 78 → 71%, AI 수비가 올라간 채로 있어 스크립트 조작이 8경기 44골
   const tac = M.tac[t], outs = team[t].filter(p => p.role !== 'GK' && p !== (h && h.ctrl) && !p.off);
   const humanOn = !!(h && h.ctrl && carrier && carrier.t !== t && d(h.ctrl, carrier) < 3); // 사람 커서 선수가 이미 붙어 있으면 수비수는 마크를 지킨다 (셋이 몰리면 뒷공간이 빈다)
   // 상대가 아직 차지 않은 세트피스: 아무도 공으로 가지 않고(추격·커버 없음) 9.15m(스로인 2.5m) 밖에서 마크·대형만, 벽은 그대로 선다. 전엔 가장 가까운 선수가 5.5m 앞까지 와서 서고 둘째가 그 뒤에 붙었다
@@ -47,6 +49,11 @@ export function teamAI(s: Sim, t: number, dt: number) {
     return { x: clamp(M.setX + ux * R, 1, W - 1), y: clamp(M.setY + uy * R, 1, H - 1) };
   };
   let chaser: Player | null = null, cover: Player | null = null; const marks = new Map<Player, Player>(), supports = new Map<Player, { x: number; y: number }>();
+  // 마크: 공 없는 상대를 위협 순(우리 골에 가까운 순)으로, 가까운 수비·미드필더가 골 쪽에서 막는다
+  const markUp = () => { const g = wx(0, t), threats = team[1 - t].filter(o => o !== carrier && o.role !== 'GK' && !o.off).sort((a, b) => Math.abs(a.x - g) - Math.abs(b.x - g)).slice(0, 6);
+    const free = outs.filter(p => p !== chaser && p !== cover && p.role !== 'FW');
+    for (const o of threats) { let best: Player | null = null, bd = tac.press === 2 ? 18 : 14; for (const p of free) { if (marks.has(p)) continue; const q = d(p, o); if (q < bd) { bd = q; best = p; } } if (best) marks.set(best, o); } };
+  // (47차에 '상대 패스가 굴러가는 동안도 마크 유지'를 시험했으나 뺐다: 벤치 숏패스 수신 79 → 60%, AI끼리 골 1.85 → 1.23)
   if (!carrier) {
     if (ball.passTarget && ball.passTarget.t === t) chaser = ball.passTarget;
     else if (ball.knock && ball.knock.t === t) chaser = (h && h.ctrl === ball.knock) ? null : ball.knock;
@@ -67,9 +74,7 @@ export function teamAI(s: Sim, t: number, dt: number) {
     if (h && h.second && so[2]) cover = so[2]; // 세컨드 디펜더: 둘째도 같이 압박
     if (dd || (own && gkHands(s, own))) { chaser = null; cover = null; } // 키퍼가 손에 든 공엔 달려들지 않는다 (뺏을 수 없다)
     // 마크: 공 없는 상대를 위협 순(우리 골에 가까운 순)으로, 가까운 수비·미드필더가 골 쪽에서 막는다
-    const g = wx(0, t), threats = team[1 - t].filter(o => o !== carrier && o.role !== 'GK' && !o.off).sort((a, b) => Math.abs(a.x - g) - Math.abs(b.x - g)).slice(0, 6);
-    const free = outs.filter(p => p !== chaser && p !== cover && p.role !== 'FW');
-    for (const o of threats) { let best: Player | null = null, bd = tac.press === 2 ? 18 : 14; for (const p of free) { if (marks.has(p)) continue; const q = d(p, o); if (q < bd) { bd = q; best = p; } } if (best) marks.set(best, o); }
+    markUp();
   } else if (att && carrier && carrier.role !== 'GK') {
     const fx = t === 0 ? 1 : -1, c0 = carrier;
     if (h) { // 사람 팀: 가까운 미드필더 둘이 안쪽 앞(원투 받을 자리)과 뒤(되돌려 받을 자리)에 선다. 공격수는 자기 역할대로, 박스 플레이 땐 각자 박스 자리로
@@ -93,7 +98,7 @@ export function teamAI(s: Sim, t: number, dt: number) {
       if (near[1]) supports.set(near[1], { x: th.x - fx * 3, y: clamp(th.y + sy * 10, 3, H - 3) });
     }
     // 자동 침투: 공격수·앞선 미드필더가 번갈아 뒷공간으로 뛴다 (Q 침투와 같은 runT). 공이 하프라인 근처를 넘었을 때만
-    if (M.lastAtt !== t) { M.lastAtt = t; M.autoRun[t] = Math.min(M.autoRun[t], 0.35); } // 공을 막 뺏었으면 곧바로 한 명이 뛴다
+    if (M.lastAtt !== t) { M.lastAtt = t; M.autoRun[t] = Math.min(M.autoRun[t], 0.35); if (wx(c0.x, t) < 56) M.ctr[t] = 4.5; } // 역습 시작(47차): 자기 진영에서 뺏으면 4.5초 동안 앞선 동료들이 내달린다 (`targetFor`) // 공을 막 뺏었으면 곧바로 한 명이 뛴다
     M.autoRun[t] -= dt;
     if (h && M.autoRun[t] <= 0 && wx(c0.x, t) > 38 && !(wx(c0.x, t) > 76 && Math.abs(c0.y - CY) > 9)) { // 사람 팀만: AI끼리는 침투하는 동료에게 주는 패스가 끊겨 패스 성공률이 73→58%로 떨어졌다
       const line = offsideLine(s, t), gx = t === 0 ? W : 0;
@@ -165,7 +170,7 @@ export function teamAI(s: Sim, t: number, dt: number) {
     }
     const mk = marks.get(p);
     if (mk) {
-      const g = wx(0, t), ux = g - mk.x, uy = CY - mk.y, L = Math.hypot(ux, uy) || 1, tg = targetFor(s, p, att, def);
+      const g = wx(0, t), ux = g - mk.x, uy = CY - mk.y, L = Math.hypot(ux, uy) || 1, tg = targetFor(s, p, att || (ownPass && (h ? p.role === 'FW' : p.role !== 'FW')), def);
       const md = tac.press === 2 ? 1.6 : tac.press === 0 ? 2.8 : 2.2, mx = mk.x + ux / L * md, my = mk.y + uy / L * md;
       let px = mx * 0.75 + tg.x * 0.25 + Math.sin(M.time * 1.3 + p.i * 2.1) * 0.6; const py = my * 0.75 + tg.y * 0.25 + Math.cos(M.time * 1.1 + p.i * 1.4) * 0.6;
       if (p.role === 'DF' && own) { const hold = defLine(wx(ball.x, t)) + tac.line * 3 - 1.5; if (wx(px, t) < hold) px = wx(Math.min(hold, Math.max(wx(ball.x, t) - 3, 6)), t); } // 마크를 따라가도 수비 라인 밑으로는 내려가지 않는다 (공이 발에 있는 동안. 패스가 뜨면 따라 내려감)
@@ -179,8 +184,8 @@ export function teamAI(s: Sim, t: number, dt: number) {
     if (p === M.aimMan && M.setTaker && M.setTaker.t === t) { const line = offsideLine(s, t); moveTo(p, wx(Math.min(wx(M.aimX, t), line - 0.6), t), M.aimY, 1.2, dt); continue; }
     const sp = supports.get(p);
     if (sp) { const line = offsideLine(s, t), lx = Math.min(wx(sp.x, t), line - 0.8), o = openLane(wx(lx, t), sp.y); moveTo(p, o.x, o.y, h && Math.hypot(o.x - p.x, o.y - p.y) > 6 ? 1.2 : 1.05, dt); continue; }
-    let tg = targetFor(s, p, att, def); if (att && carrier && p.role !== 'DF') tg = openLane(tg.x, tg.y); tg = keepOff(tg.x, tg.y);
+    let tg = targetFor(s, p, att || (ownPass && (h ? p.role === 'FW' : p.role !== 'FW')), def); if (att && carrier && p.role !== 'DF') tg = openLane(tg.x, tg.y); tg = keepOff(tg.x, tg.y);
     const q = Math.hypot(tg.x - p.x, tg.y - p.y), ahead = wx(tg.x, t) - wx(p.x, t);
-    moveTo(p, tg.x, tg.y, h && att && ahead > 5 ? (p.role === 'DF' && Math.abs(p.by - CY) <= 14 ? 1.1 : 1.2) : h && !att && p.role === 'DF' && ahead < -9 ? 1.2 : q > 7 ? 1.05 : 0.78, dt); // 공격 때 앞으로 멀리 가야 하면 질주로 따라붙는다 (풀백도). 올라갔던 수비수는 공을 뺏기면 질주로 돌아온다
+    moveTo(p, tg.x, tg.y, h && att && ahead > 5 ? (p.role === 'DF' && Math.abs(p.by - CY) <= 14 ? 1.1 : 1.2) : h && !att && p.role === 'DF' && ahead < -9 ? 1.2 : !h && !att && p.role !== 'FW' && ahead < -7 ? 1.2 /* 올라갔던 AI 수비·미드필더는 공을 뺏기면 전속으로 돌아온다 (없으면 뒤가 텅 비어 스크립트 조작이 8경기 32골) */ : q > 7 ? 1.05 : 0.78, dt); // 공격 때 앞으로 멀리 가야 하면 질주로 따라붙는다 (풀백도). 올라갔던 수비수는 공을 뺏기면 질주로 돌아온다
   }
 }

@@ -38,6 +38,9 @@ const TORSO: [number, number][] = [[0.15, -0.04], [0.149, 0.02], [0.143, 0.09], 
 const TORSO_V: [number, number][] = [[-0.04, 0], [0.05, 0.125], [0.14, 0.25], [0.22, 0.375], [0.3, 0.5], [0.38, 0.625], [0.44, 0.75], [0.495, 0.875], [0.535, 1]];
 const torsoV = (y: number) => { for (let i = 1; i < TORSO_V.length; i++) if (y <= TORSO_V[i][0]) { const [y0, v0] = TORSO_V[i - 1], [y1, v1] = TORSO_V[i]; return v0 + (v1 - v0) * clamp((y - y0) / (y1 - y0), 0, 1); } return 1; };
 
+/** 세리머니 고르기: team = 로컬 사람 팀(-1 없음), pick = 설정에서 고른 것(-1 자동), live = 이번 골에서 방향키로 고른 것(-1 없음). 0 두 팔 번쩍 · 1 비행기 · 2 주먹 */
+export const CELE = { team: -1, pick: -1, live: -1 };
+export const CELE_NAMES = ['두 팔 번쩍', '비행기', '주먹 불끈'];
 export class PlayerModel {
   root = new THREE.Group();
   private hips = new THREE.Group(); private torso = new THREE.Group(); private head = new THREE.Group();
@@ -200,7 +203,7 @@ export class PlayerModel {
       const drop = own && !gk && !outside && bz > 0.2 ? Math.min(1, bz / 2.2) : 0; // 머리·가슴으로 떨군 공이 발밑으로 내려오는 동안
       const hold = own && bz > 1.6 && outside, thrown = !hold && kickA >= 0 && outside; // 스로인 (터치라인 밖에서만)
       if (p.cele) { // 세리머니: 달리는 동안엔 두 팔을 들거나·비행기·주먹, 멈추면 제자리 뛰기
-        mode = 3; const v = this.p.i % 3;
+        mode = 3; const mine = this.p.t === CELE.team, v = mine && CELE.live >= 0 ? CELE.live : mine && CELE.pick >= 0 ? CELE.pick : this.p.i % 3; // 고른 세리머니(47차): 골 뒤 방향키 > 일시정지에서 고른 것 > 선수마다 다르게
         if (a > 0.5) { if (v === 1) { arm(0, 0, 1.45, 0.05); arm(1, 0, 1.45, 0.05); body.rotation.x += Math.sin(tGlobal * 2.4) * 0.2; } else if (v === 2) { arm(K, 2.6 + Math.sin(tGlobal * 11) * 0.25, 0.3, 0.9 + Math.sin(tGlobal * 11) * 0.4); } else { for (const i of [0, 1]) arm(i, 0.2, 2.7 + Math.sin(tGlobal * 9 + i) * 0.18, 0.3); } torso.rotation.z = -0.04; }
         else { const j = Math.abs(Math.sin(tGlobal * 7 + p.i)); hipAdd = j * 0.2; floorY = HIP_Y - 0.03; leg(0, 0.1, 0.3 + j * 0.35, -0.3 * j); leg(1, -0.05, 0.3 + j * 0.35, -0.3 * j); for (const i of [0, 1]) arm(i, 0.2, 2.9 - (v === 2 && i === S ? 2.4 : 0), 0.4); torso.rotation.z = 0.06; }
       } else if (wind > 0) { // 와인드업: 차는 발을 뒤로 젖히고 어깨를 튼다, 반대쪽 팔은 앞으로

@@ -15,6 +15,7 @@ import { loadKeys, renderKeys, installKeyCapture, keyOf } from './ui/keys';
 import { boo } from './audio';
 import { Renderer } from './render/canvas2d';
 import { ThreeRenderer } from './render/three/scene';
+import { CELE, CELE_NAMES } from './render/three/player';
 import type { IRenderer, CamMode } from './render/types';
 import { opts, loadOpts, saveOpts } from './options';
 import { audio, ensureAudio, crowdStart, crowdStop, crowdSwell, sfx, anthem, anthemStop, audioAway } from './audio';
@@ -371,6 +372,10 @@ $('restartBtn').addEventListener('click', () => startMatch());
 $('soundBtn').addEventListener('click', () => { audio.on = !audio.on; opts.sound = audio.on; CMT.sound = audio.on; if (!audio.on) cmtStop(); $('soundBtn').textContent = audio.on ? '소리 끄기' : '소리 켜기'; ensureAudio(); if (audio.on) crowdStart(); else crowdStop(); });
 $('quitBtn').addEventListener('click', () => toMenu());
 // 해설: 음성(자막 포함) → 자막만 → 끄기
+// 세리머니 고르기: 일시정지 버튼으로 기본값(자동 → 두 팔 번쩍 → 비행기 → 주먹), 골을 넣은 뒤엔 방향키 ↑ ← → 로 그 자리에서 바꾼다
+const celeLabel = () => { $('celeBtn').textContent = '세리머니: ' + (opts.cele < 0 ? '자동' : CELE_NAMES[opts.cele]); };
+CELE.pick = opts.cele; celeLabel();
+$('celeBtn').addEventListener('click', () => { opts.cele = opts.cele >= 2 ? -1 : opts.cele + 1; CELE.pick = opts.cele; celeLabel(); saveOpts(); });
 CMT.mode = opts.cmt; CMT.sound = opts.sound; CMT.voice = opts.voice;
 /** 해설 버튼 글자: 한국어 목소리가 둘 이상이면 몇 번째 목소리인지도 (목소리 목록은 늦게 오므로 일시정지를 열 때 다시 쓴다) */
 function cmtLabel() { const v = cmtVoiceInfo(); $('cmtBtn').textContent = '해설: ' + CMT_NAME[CMT.mode] + (CMT.mode === 'voice' && v.n > 1 ? ` ${v.i + 1}/${v.n}` : ''); }
@@ -483,7 +488,8 @@ function frame(ts: number) {
   if (state === 'play' && sim) {
     if (NET.role === 'guest') netInterpNow();
     else if (NET.role !== 'host' && introT <= 0) runSteps(dt);
-    if (sim) { updateHud(sim, LOCAL()); halftimePanel(sim); gauges(sim); skipHint(sim); cmtTick(state === 'play' && introT <= 0 && sim.M.phase !== 'full'); }
+    if (sim) { const sc = sim.M.scorer; CELE.team = sim.HU[LOCAL()] ? LOCAL() : -1; if (sim.M.phase !== 'goal') CELE.live = -1; else if (sc && sc.t === CELE.team) { const I = INP[0]; if (I.my < -0.5) CELE.live = 0; else if (I.mx < -0.5) CELE.live = 1; else if (I.mx > 0.5) CELE.live = 2; }
+      updateHud(sim, LOCAL()); halftimePanel(sim); gauges(sim); skipHint(sim); cmtTick(state === 'play' && introT <= 0 && sim.M.phase !== 'full'); }
   } else if (state === 'paused' && NET.role === 'guest' && sim) netInterpNow();
   netPing(perf);
   R.render(sim, dt, perf, state === 'paused');
@@ -509,7 +515,8 @@ function halftimePanel(s: Sim) {
 /** 골 세리머니·리플레이 중: '패스 키 길게 = 건너뛰기' 안내 (실제 건너뛰기는 시뮬 `step`의 goal 분기) */
 function skipHint(s: Sim) {
   const el = $('skipHint'), M = s.M, on = state === 'play' && M.phase === 'goal' && !M.so && !!s.HU[LOCAL()];
-  if (el.hidden === on) { el.hidden = !on; if (on) el.textContent = isTouch ? `${$('bA').textContent || '패스'} 버튼 길게 · 건너뛰기` /* 버튼 글자는 상황(공격 패스·수비 전환)에 따라 바뀐다 */ : `${keyOf('pass') || '패스 키'} 길게 · 건너뛰기`; }
+  const myGoal = on && !!M.scorer && M.scorer.t === LOCAL();
+  if (el.hidden === on) { el.hidden = !on; if (on) el.textContent = (myGoal ? (isTouch ? '스틱 ↑ ← → 세리머니 · ' : '방향키 ↑ ← → 세리머니 · ') : '') + (isTouch ? `${$('bA').textContent || '패스'} 버튼 길게 · 건너뛰기` /* 버튼 글자는 상황(공격 패스·수비 전환)에 따라 바뀐다 */ : `${keyOf('pass') || '패스 키'} 길게 · 건너뛰기`); }
   if (on) el.classList.toggle('on', INP[0].down.pass);
 }
 function gauges(s: Sim) {

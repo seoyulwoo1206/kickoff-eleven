@@ -40,6 +40,7 @@ export function assistDir(s: Sim, p: Player, ux: number, uy: number): [number, n
   if (!o) { const hs = headSpot(s, p); if (hs) { const L = Math.hypot(hs.x - p.x, hs.y - p.y); if (L < 0.4) return [0, 0]; if (L < 9) { const ua = Math.atan2(uy, ux), ra = ua + angDiff(ua, Math.atan2(hs.y - p.y, hs.x - p.x)) * 0.9; return [Math.cos(ra), Math.sin(ra)]; } } // 상대가 띄운 공: 머리 높이로 내려오는 자리로 (9m 안이면 방향키와 상관없이)
     const q = intercept(s, p), L = Math.hypot(q.x - p.x, q.y - p.y); tx = q.x; ty = q.y;
     if (ball.passTarget === p && ball.z > 1.0) { if (L < 0.5) return [0, 0]; const dx = (tx - p.x) / L, dy = (ty - p.y) / L, ua = Math.atan2(uy, ux), ra = ua + angDiff(ua, Math.atan2(dy, dx)) * 0.97; return [Math.cos(ra), Math.sin(ra)]; } // 나한테 오는 뜬 공: 떨어질 자리로 가서 기다린다 (전엔 자리에 다 오면 누르고 있던 방향키대로 달려 나가 크로스를 놓쳤다 — 탭 크로스 첫 터치 92→77%)
+    // (47차에 '방향키 쪽으로 나아가며 받기'를 시험했으나 뺐다: 공이 굴러가길 기다리는 사이 상대가 끊어 벤치 숏패스 수신 83 → 56%)
     w = ball.passTarget === p ? (L > 2.5 ? 0.97 : 0.6) : ball.knock === p && L < 11 ? 0.95 : clamp(1 - L / 10, 0, 0.9); } // 내가 차 놓은 공은 스틱을 돌려도 먼저 줍는다
   else if (o.t !== p.t) { tx = o.x + o.vx * 0.25; ty = o.y + o.vy * 0.25; const h = s.HU[p.t], just = !!(h && h.ctrl === p && h.lostT > 0 && d(p, o) < 3.5); w = just ? 0.85 : clamp(0.7 - d(p, o) / 10, 0, 0.7); if (just) { const dx = tx - p.x, dy = ty - p.y, L = Math.hypot(dx, dy) || 1, ua = Math.atan2(uy, ux), ta = Math.atan2(dy / L, dx / L); const ra = ua + angDiff(ua, ta) * w; return [Math.cos(ra), Math.sin(ra)]; } } // 방금 뺏긴 공은 스틱이 앞을 향해도 돌아본다
   else return [ux, uy];

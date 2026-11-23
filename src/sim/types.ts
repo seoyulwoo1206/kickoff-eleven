@@ -53,6 +53,7 @@ export interface MatchInfo {
   setAim: boolean; aimX: number; aimY: number; aimMan: Player | null; /* aimMan: 조준점으로 들어가 받을 동료 */ /* 사람 팀 코너킥·프리킥·골킥의 조준점 (방향키로 옮긴다) */
   setTaker: Player | null; setT: number; setX: number; setY: number; /* 사람 팀 코너킥·프리킥·골킥·페널티의 키커와 공을 놓고 선 시간: 찰 때까지 제자리 (몰고 나갈 수 없다) */
   throwIn: Player | null; throwT: number; /* 스로인을 던질 선수(공을 손에 들고 서 있다)와 든 시간 */
+  /** 역습 중 남은 시간(팀별, 초): 자기 진영에서 공을 뺏은 뒤 4.5초 — 사람 팀의 공격수·측면 미드필더가 앞으로 내달린다 */ ctr: [number, number];
   lastAtt: number; autoRun: [number, number]; // 다음 자동 침투까지 남은 시간 (팀별)
   tac: [Tactics, Tactics]; bench: [PlayerDef[], PlayerDef[]]; subs: [number, number]; stops: number; added: number[];
   /** 토너먼트: 비기면 연장(전·후반 3·4) → 승부차기. so는 승부차기 상태 */

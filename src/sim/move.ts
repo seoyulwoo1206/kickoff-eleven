@@ -44,7 +44,12 @@ export function targetFor(s: Sim, p: Player, att: boolean, def: boolean) {
   const { ball, M } = s;
   const t = p.t, lb = wx(ball.x, t), tac = M.tac[t];
   let x = p.bx + (lb - 52.5) * 0.62 + (att ? 10 : def ? -3 : 0) + (att && p.role === 'FW' ? 6 : 0) + tac.line * (p.role === 'DF' ? 6 : p.role === 'MF' ? 4 : 2); // 라인 높이
-  if (att && !s.HU[t]) { if (p.role === 'FW') x = Math.max(x, lb + 9); else if (p.role === 'MF') x = Math.max(x, lb - 4); } // AI 팀은 기존 대형 (리그 균형 유지)
+  if (att && !s.HU[t]) { // AI 팀의 공격 대형. 47차: 미드필더·수비수도 올라온다 — 전엔 미드필더가 공 4m 뒤·수비 넷이 공 35m 뒤(43m 선)에 남아, 공을 뺏는 순간 공보다 골 쪽에 상대가 8.1명이라 역습할 공간이 없었다
+    const wideP = Math.abs(p.by - CY) > 14, same = (p.by - CY) * (ball.y - CY) > 0;
+    if (p.role === 'FW') x = Math.max(x, lb + 9);
+    else if (p.role === 'MF') x = Math.max(x, wideP ? lb + (same ? 4 : 1) : p.i % 2 ? lb + 1 : lb - 7); // 측면은 공 앞, 가운데 둘은 하나가 앞·하나가 뒤를 받친다
+    else if (p.role === 'DF') x = Math.max(x, wideP ? Math.min(lb - (same ? 7 : 15), 80) : Math.min(lb - 25, 60)); // 풀백은 공 가까이까지, 센터백은 하프라인 너머까지
+  }
   let hy: number | null = null, overlap = false, fbUp = false; // 사람 팀 전용: y를 직접 정한 경우 / 풀백 오버래핑 중 / 풀백이 올라간 상태
   if (att && s.HU[t]) { // 사람 팀: 내가 공을 잡으면 동료들이 공을 따라 올라오고, 역할을 나눠 움직인다
     const line = offsideLine(s, t), wide = Math.abs(p.by - CY) > 14, bs = Math.sign(ball.y - CY) || 1, mine = ball.owner === p;
@@ -52,7 +57,8 @@ export function targetFor(s: Sim, p: Player, att: boolean, def: boolean) {
     if (p.role === 'FW') {
       const fws = s.team[t].filter(q => q.role === 'FW' && !q.off), idx = fws.indexOf(p), ph = Math.floor(M.tick / 270); // 4.5초마다 역할 교대
       const short = fws.length > 1 ? (idx + ph) % fws.length === 0 : ph % 3 === 0; // 한 명은 내려와 받아 주고, 나머지는 수비 뒤를 노린다
-      if (boxPlay) { const near = fws.length < 2 || (idx + ph) % 2 === 0; x = near ? 98 : 97; hy = CY + (near ? bs * 3.2 : -bs * 4.2); } // 니어 포스트 / 파 포스트
+      if (M.ctr[t] > 0 && !boxPlay && lb < 78) x = Math.max(x, Math.min(line - 0.6, lb + 22)); // 역습: 내려와 받지 않고 최종 라인까지 내달린다 (전엔 뺏은 지 3초 뒤 공보다 8m 넘게 앞선 동료가 0.4명뿐이었다)
+      else if (boxPlay) { const near = fws.length < 2 || (idx + ph) % 2 === 0; x = near ? 98 : 97; hy = CY + (near ? bs * 3.2 : -bs * 4.2); } // 니어 포스트 / 파 포스트
       else if (lb <= 30) x = Math.max(x, lb + 9);
       else if (short) { x = Math.max(lb + 7, Math.min(line - 0.8, lb + 9)); hy = clamp(ball.y + (Math.sign(p.by - ball.y) || 1) * 5, 6, H - 6); } // 내려와서 발밑으로 받을 자리 (공 옆 5m)
       else { x = Math.max(x, Math.min(line - 0.8, lb + 20)); hy = gapY(s, t, p.by + (ball.y - CY) * 0.2 - bs * 4, line) + Math.sin(M.time * 1.3 + p.i) * 2.2; } // 최종 라인에서 수비 사이 빈 틈으로
@@ -69,6 +75,7 @@ export function targetFor(s: Sim, p: Player, att: boolean, def: boolean) {
       else if (wide) { fbUp = true; x = Math.max(x, Math.min(lb - (mid ? 5 : 9), 80)); } // 반대쪽 풀백·가운데 공: 공 바로 뒤까지 올라와 넓게 선다
       else x = Math.max(x, Math.min(lb - 19 + tac.line * 3, 64)); // 센터백은 공 뒤 19m, 하프라인 조금 넘어서까지
     }
+    if (M.ctr[t] > 0 && !boxPlay && lb < 78 && p.role === 'MF' && !mine) x = Math.max(x, Math.min(line - 0.6, lb + (wide ? 11 : p.i % 2 ? 6 : 0))); // 역습: 측면 미드필더는 공보다 앞에서, 가운데 하나도 따라 올라간다
     if (!boxPlay && lb >= line - 1.5 && p.role !== 'DF') x = Math.max(x, lb - 1); // 공이 최종 라인을 넘었으면 옆에서 같이 뛴다
   }
   let y = hy ?? p.by + (ball.y - CY) * (p.role === 'DF' ? 0.3 : 0.45);
