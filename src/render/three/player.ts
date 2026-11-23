@@ -10,7 +10,7 @@ export interface PoseState { x: number; y: number; dir: number; vx: number; vy: 
 import type { Kit } from '../../data/teams';
 import { kitTextures, faceTexture } from './textures';
 import { clamp } from '../../sim/util';
-import { lookBit } from '../../data/looks';
+import { lookBit, lookOv } from '../../data/looks';
 
 const geoCache = new Map<string, THREE.BufferGeometry>();
 const matCache = new Map<string, THREE.Material>();
@@ -38,9 +38,9 @@ const TORSO: [number, number][] = [[0.15, -0.04], [0.149, 0.02], [0.143, 0.09], 
 const TORSO_V: [number, number][] = [[-0.04, 0], [0.05, 0.125], [0.14, 0.25], [0.22, 0.375], [0.3, 0.5], [0.38, 0.625], [0.44, 0.75], [0.495, 0.875], [0.535, 1]];
 const torsoV = (y: number) => { for (let i = 1; i < TORSO_V.length; i++) if (y <= TORSO_V[i][0]) { const [y0, v0] = TORSO_V[i - 1], [y1, v1] = TORSO_V[i]; return v0 + (v1 - v0) * clamp((y - y0) / (y1 - y0), 0, 1); } return 1; };
 
-/** 세리머니 고르기: team = 로컬 사람 팀(-1 없음), pick = 설정에서 고른 것(-1 자동), live = 이번 골에서 방향키로 고른 것(-1 없음). 0 두 팔 번쩍 · 1 비행기 · 2 주먹 */
+/** 세리머니 고르기: team = 로컬 사람 팀(-1 없음), pick = 설정에서 고른 것(-1 자동), live = 이번 골에서 방향키로 고른 것(-1 없음). 0 두 팔 번쩍 · 1 비행기 · 2 주먹 불끈 · 3 귀에 손. 고르는 법: 키보드 숫자 1~4, 폰은 골 뒤에 뜨는 버튼 (`main.ts`) */
 export const CELE = { team: -1, pick: -1, live: -1 };
-export const CELE_NAMES = ['두 팔 번쩍', '비행기', '주먹 불끈'];
+export const CELE_NAMES = ['두 팔 번쩍', '비행기', '주먹 불끈', '귀에 손'];
 export class PlayerModel {
   root = new THREE.Group();
   private hips = new THREE.Group(); private torso = new THREE.Group(); private head = new THREE.Group();
@@ -83,12 +83,13 @@ export class PlayerModel {
     // 머리: 턱이 좁아지는 머리통 + 얼굴 텍스처(선수마다 다른 생김새) + 코·귀·목 + 머리 모양 7가지
     // 머리 모양: 0 삭발 · 1 짧게 깎음 · 2 짧은 머리 · 3 앞을 세운 머리 · 4 긴 머리 · 5 곱슬(크게) · 6 묶은 머리
     const r3 = lookBit(p.look, 3), r2 = lookBit(p.look, 2);
-    const style = r3 < 0.04 ? 0 : p.tone >= 3 && r2 < 0.34 ? 5 : p.tone >= 3 && r2 < 0.62 ? 1 : r3 < 0.16 ? 1 : r3 < 0.55 ? 2 : r3 < 0.8 ? 3 : r3 < 0.93 ? 4 : 6;
+    const ov = lookOv(p.def?.nameEn); // 선수별 지정(머리 모양·수염)
+    const style = ov ? ov.style : r3 < 0.04 ? 0 : p.tone >= 3 && r2 < 0.34 ? 5 : p.tone >= 3 && r2 < 0.62 ? 1 : r3 < 0.16 ? 1 : r3 < 0.55 ? 2 : r3 < 0.8 ? 3 : r3 < 0.93 ? 4 : 6;
     const hairline = style === 0 ? 3 : style === 1 ? 2 : lookBit(p.look, 4) < 0.2 ? 1 : 0;
     const headG = geo('head3', () => { const g = new THREE.SphereGeometry(1, 20, 16), A = g.attributes.position;
       for (let k = 0; k < A.count; k++) { let x = A.getX(k); const y = A.getY(k); let z = A.getZ(k); const t = Math.pow(clamp((-y - 0.05) / 0.95, 0, 1), 1.4); z *= 1 - 0.3 * t; x = x * (1 - 0.16 * t) + 0.1 * t * (x > 0 ? 1 : 0.3); x *= x > 0 ? 0.97 : 1.06; A.setXYZ(k, x, y, z); }
       g.scale(0.1, 0.128, 0.092); g.computeVertexNormals(); return g; });
-    const headM = new THREE.Mesh(headG, mat('face' + [skin, p.hair, p.look, hairline].join(), () => new THREE.MeshLambertMaterial({ map: faceTexture(skin, p.hair, p.look, p.tone, hairline) }))); headM.castShadow = true;
+    const headM = new THREE.Mesh(headG, mat('face' + [skin, p.hair, p.look, hairline, ov ? ov.beard : -1].join(), () => new THREE.MeshLambertMaterial({ map: faceTexture(skin, p.hair, p.look, p.tone, hairline, ov?.beard) }))); headM.castShadow = true;
     const nw = 0.012 + lookBit(p.look, 23) * 0.005;
     const neck = new THREE.Mesh(merged('neck4' + skin + nw.toFixed(3), () => [tint(lathe([[0.062, -0.21], [0.053, -0.16], [0.048, -0.1], [0.049, -0.05]], 14), skin),
       tint(blobGeo(0.016, 0.028, 0.012, -0.004, -0.004, 0.09, 5, 4), skin), tint(blobGeo(0.016, 0.028, 0.012, -0.004, -0.004, -0.09, 5, 4), skin),
@@ -204,7 +205,7 @@ export class PlayerModel {
       const hold = own && bz > 1.6 && outside, thrown = !hold && kickA >= 0 && outside; // 스로인 (터치라인 밖에서만)
       if (p.cele) { // 세리머니: 달리는 동안엔 두 팔을 들거나·비행기·주먹, 멈추면 제자리 뛰기
         mode = 3; const mine = this.p.t === CELE.team, v = mine && CELE.live >= 0 ? CELE.live : mine && CELE.pick >= 0 ? CELE.pick : this.p.i % 3; // 고른 세리머니(47차): 골 뒤 방향키 > 일시정지에서 고른 것 > 선수마다 다르게
-        if (a > 0.5) { if (v === 1) { arm(0, 0, 1.45, 0.05); arm(1, 0, 1.45, 0.05); body.rotation.x += Math.sin(tGlobal * 2.4) * 0.2; } else if (v === 2) { arm(K, 2.6 + Math.sin(tGlobal * 11) * 0.25, 0.3, 0.9 + Math.sin(tGlobal * 11) * 0.4); } else { for (const i of [0, 1]) arm(i, 0.2, 2.7 + Math.sin(tGlobal * 9 + i) * 0.18, 0.3); } torso.rotation.z = -0.04; }
+        if (a > 0.5) { if (v === 1) { arm(0, 0, 1.45, 0.05); arm(1, 0, 1.45, 0.05); body.rotation.x += Math.sin(tGlobal * 2.4) * 0.2; } else if (v === 2) { arm(K, 2.6 + Math.sin(tGlobal * 11) * 0.25, 0.3, 0.9 + Math.sin(tGlobal * 11) * 0.4); } else if (v === 3) { arm(K, 0.35, 2.0, 2.3); arm(S, -0.15, 0.8, 0.15); head.rotation.x = (K ? -1 : 1) * 0.12; /* 귀에 손: 한 손을 귀에 대고 반대 팔은 옆으로 벌린다 */ } else { for (const i of [0, 1]) arm(i, 0.2, 2.7 + Math.sin(tGlobal * 9 + i) * 0.18, 0.3); } torso.rotation.z = -0.04; }
         else { const j = Math.abs(Math.sin(tGlobal * 7 + p.i)); hipAdd = j * 0.2; floorY = HIP_Y - 0.03; leg(0, 0.1, 0.3 + j * 0.35, -0.3 * j); leg(1, -0.05, 0.3 + j * 0.35, -0.3 * j); for (const i of [0, 1]) arm(i, 0.2, 2.9 - (v === 2 && i === S ? 2.4 : 0), 0.4); torso.rotation.z = 0.06; }
       } else if (wind > 0) { // 와인드업: 차는 발을 뒤로 젖히고 어깨를 튼다, 반대쪽 팔은 앞으로
         mode = 4; fade = 0.06;

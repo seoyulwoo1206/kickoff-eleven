@@ -74,7 +74,7 @@ export function kitTextures(kit: Kit, gk: boolean, num: number, name?: string) {
 }
 /** 머리(구)에 입힐 얼굴. 구의 u=0.5가 얼굴 정면, v는 위가 1. 생김새(눈·눈썹·코·입·수염·머리선)는 씨앗 seed에서 — 선수마다 다르다.
     tone 0(밝은)~5(어두운)는 눈동자·입술 색에, hairline 0 보통·1 M자·2 짧게 깎음·3 삭발 */
-export function faceTexture(skin: string, hair: string, seed: number, tone: number, hairline: number) {
+export function faceTexture(skin: string, hair: string, seed: number, tone: number, hairline: number, beardOv?: number) {
   const w = 256, h = 128, [c, g] = canvas(w, h), R = (n: number) => lookBit(seed, 10 + n), cx = 128;
   const sk = new THREE.Color(skin), sh = (k: number, a = 1) => `rgba(${Math.round(sk.r * 255 * k)},${Math.round(sk.g * 255 * k)},${Math.round(sk.b * 255 * k)},${a})`;
   g.fillStyle = skin; g.fillRect(0, 0, w, h);
@@ -83,7 +83,7 @@ export function faceTexture(skin: string, hair: string, seed: number, tone: numb
   for (const sx of [-1, 1]) { const gr = g.createRadialGradient(cx + sx * 27, 74, 2, cx + sx * 27, 74, 15); gr.addColorStop(0, `rgba(190,80,60,${tone >= 4 ? 0.05 : 0.11})`); gr.addColorStop(1, 'rgba(190,80,60,0)'); g.fillStyle = gr; g.fillRect(cx + sx * 27 - 16, 58, 32, 32); // 볼
     g.fillStyle = 'rgba(0,0,0,.10)'; g.beginPath(); g.ellipse(cx + sx * 41, 80, 9, 22, sx * 0.25, 0, 7); g.fill(); } // 광대 아래·턱선 그늘
   // 수염: 0 없음 · 1 까칠하게 · 2 턱수염 · 3 콧수염+턱 · 4 콧수염
-  const br = R(0), beard = br < 0.52 ? 0 : br < 0.72 ? 1 : br < 0.86 ? 2 : br < 0.94 ? 3 : 4;
+  const br = R(0), beard = beardOv ?? (br < 0.52 ? 0 : br < 0.72 ? 1 : br < 0.86 ? 2 : br < 0.94 ? 3 : 4); // 선수별 지정이 있으면 그것
   const hc = new THREE.Color(hair), hs = (a: number) => `rgba(${Math.round(hc.r * 255)},${Math.round(hc.g * 255)},${Math.round(hc.b * 255)},${a})`;
   if (beard === 1 || beard === 2) { g.fillStyle = hs(beard === 1 ? 0.16 : 0.6); g.beginPath(); g.moveTo(cx - 44, 62); g.quadraticCurveTo(cx - 40, 112, cx, 118); g.quadraticCurveTo(cx + 40, 112, cx + 44, 62); g.lineTo(cx + 30, 76); g.quadraticCurveTo(cx + 18, 80, cx + 13, 82); g.lineTo(cx - 13, 82); g.quadraticCurveTo(cx - 18, 80, cx - 30, 76); g.closePath(); g.fill(); }
   if (beard === 3) { g.fillStyle = hs(0.62); g.beginPath(); g.ellipse(cx, 104, 13, 9, 0, 0, 7); g.fill(); }

@@ -200,7 +200,7 @@ function resumeGame(remote?: boolean) { if (state !== 'paused') return; state = 
 function toMenu(remote?: boolean) {
   cmtStop();
   if (remote !== true && NET.ready && state !== 'menu') netSend({ t: 'quit' });
-  state = 'menu'; sim = null; $('skipHint').hidden = true; crowdStop(); XT.all = false; xtSync();
+  state = 'menu'; sim = null; $('skipHint').hidden = true; $('celeRow').hidden = true; crowdStop(); XT.all = false; xtSync();
   $('pause').hidden = true; $('result').hidden = true; $('hud').hidden = true; $('pauseBtn').hidden = true; $('touch').hidden = true; $('menu').hidden = false; hideBanner(); renderMenu();
 }
 function showPing() { const el = $('hPing'); if (NET.rtt >= 0) el.textContent = '핑 ' + NET.rtt + 'ms'; if (state === 'menu' && NET.ready) netStatus('연결됨' + (NET.rtt >= 0 ? ' · 핑 ' + NET.rtt + 'ms' : '') + (NET.role === 'host' ? ' · 팀을 고르고 킥오프를 누르세요.' : ' · 호스트가 킥오프하면 시작돼요.'), true); }
@@ -372,10 +372,14 @@ $('restartBtn').addEventListener('click', () => startMatch());
 $('soundBtn').addEventListener('click', () => { audio.on = !audio.on; opts.sound = audio.on; CMT.sound = audio.on; if (!audio.on) cmtStop(); $('soundBtn').textContent = audio.on ? '소리 끄기' : '소리 켜기'; ensureAudio(); if (audio.on) crowdStart(); else crowdStop(); });
 $('quitBtn').addEventListener('click', () => toMenu());
 // 해설: 음성(자막 포함) → 자막만 → 끄기
-// 세리머니 고르기: 일시정지 버튼으로 기본값(자동 → 두 팔 번쩍 → 비행기 → 주먹), 골을 넣은 뒤엔 방향키 ↑ ← → 로 그 자리에서 바꾼다
+// 세리머니 고르기 (FC 온라인 식): 골을 넣은 뒤 숫자 키 1~4 (폰은 골 뒤에 뜨는 버튼 `#celeRow`). 일시정지 버튼은 기본값(자동 → 두 팔 번쩍 → 비행기 → 주먹 불끈 → 귀에 손)
+const myGoalNow = () => state === 'play' && !!sim && sim.M.phase === 'goal' && !sim.M.so && !!sim.M.scorer && sim.M.scorer.t === CELE.team;
+window.addEventListener('keydown', e => { const m = /^(?:Digit|Numpad)([1-9])$/.exec(e.code); if (!m || e.repeat || !myGoalNow()) return; const n = +m[1] - 1; if (n < CELE_NAMES.length) CELE.live = n; });
+$('celeRow').innerHTML = CELE_NAMES.map((n, i) => `<button class="cb" data-i="${i}"><b>${i + 1}</b>${n}</button>`).join('');
+$('celeRow').addEventListener('pointerdown', e => { const b = (e.target as HTMLElement).closest<HTMLElement>('.cb'); if (b && myGoalNow()) { e.preventDefault(); CELE.live = +b.dataset.i!; } });
 const celeLabel = () => { $('celeBtn').textContent = '세리머니: ' + (opts.cele < 0 ? '자동' : CELE_NAMES[opts.cele]); };
 CELE.pick = opts.cele; celeLabel();
-$('celeBtn').addEventListener('click', () => { opts.cele = opts.cele >= 2 ? -1 : opts.cele + 1; CELE.pick = opts.cele; celeLabel(); saveOpts(); });
+$('celeBtn').addEventListener('click', () => { opts.cele = opts.cele >= CELE_NAMES.length - 1 ? -1 : opts.cele + 1; CELE.pick = opts.cele; celeLabel(); saveOpts(); });
 CMT.mode = opts.cmt; CMT.sound = opts.sound; CMT.voice = opts.voice;
 /** 해설 버튼 글자: 한국어 목소리가 둘 이상이면 몇 번째 목소리인지도 (목소리 목록은 늦게 오므로 일시정지를 열 때 다시 쓴다) */
 function cmtLabel() { const v = cmtVoiceInfo(); $('cmtBtn').textContent = '해설: ' + CMT_NAME[CMT.mode] + (CMT.mode === 'voice' && v.n > 1 ? ` ${v.i + 1}/${v.n}` : ''); }
@@ -488,7 +492,7 @@ function frame(ts: number) {
   if (state === 'play' && sim) {
     if (NET.role === 'guest') netInterpNow();
     else if (NET.role !== 'host' && introT <= 0) runSteps(dt);
-    if (sim) { const sc = sim.M.scorer; CELE.team = sim.HU[LOCAL()] ? LOCAL() : -1; if (sim.M.phase !== 'goal') CELE.live = -1; else if (sc && sc.t === CELE.team) { const I = INP[0]; if (I.my < -0.5) CELE.live = 0; else if (I.mx < -0.5) CELE.live = 1; else if (I.mx > 0.5) CELE.live = 2; }
+    if (sim) { CELE.team = sim.HU[LOCAL()] ? LOCAL() : -1; if (sim.M.phase !== 'goal') CELE.live = -1;
       updateHud(sim, LOCAL()); halftimePanel(sim); gauges(sim); skipHint(sim); cmtTick(state === 'play' && introT <= 0 && sim.M.phase !== 'full'); }
   } else if (state === 'paused' && NET.role === 'guest' && sim) netInterpNow();
   netPing(perf);
@@ -516,7 +520,8 @@ function halftimePanel(s: Sim) {
 function skipHint(s: Sim) {
   const el = $('skipHint'), M = s.M, on = state === 'play' && M.phase === 'goal' && !M.so && !!s.HU[LOCAL()];
   const myGoal = on && !!M.scorer && M.scorer.t === LOCAL();
-  if (el.hidden === on) { el.hidden = !on; if (on) el.textContent = (myGoal ? (isTouch ? '스틱 ↑ ← → 세리머니 · ' : '방향키 ↑ ← → 세리머니 · ') : '') + (isTouch ? `${$('bA').textContent || '패스'} 버튼 길게 · 건너뛰기` /* 버튼 글자는 상황(공격 패스·수비 전환)에 따라 바뀐다 */ : `${keyOf('pass') || '패스 키'} 길게 · 건너뛰기`); }
+  { const row = $('celeRow'), show = myGoal && isTouch; if (row.hidden === show) row.hidden = !show; if (show) row.querySelectorAll('.cb').forEach((b, i) => b.classList.toggle('on', CELE.live === i)); } // 폰: 내 골이면 세리머니 버튼 줄
+  if (el.hidden === on) { el.hidden = !on; if (on) el.textContent = (myGoal && !isTouch ? `숫자 1~${CELE_NAMES.length} 세리머니 · ` : '') + (isTouch ? `${$('bA').textContent || '패스'} 버튼 길게 · 건너뛰기` /* 버튼 글자는 상황(공격 패스·수비 전환)에 따라 바뀐다 */ : `${keyOf('pass') || '패스 키'} 길게 · 건너뛰기`); }
   if (on) el.classList.toggle('on', INP[0].down.pass);
 }
 function gauges(s: Sim) {

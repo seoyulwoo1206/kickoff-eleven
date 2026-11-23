@@ -18,7 +18,7 @@ export interface Options { sel: [number, number]; len: number; diff: DiffKey; mo
   cmt: 'voice' | 'text' | 'off';
   /** 고른 해설 목소리 (`commentary.ts` `CMT.voice`, '' = 알아서) */
   voice: string;
-  /** 세리머니: -1 자동(선수마다 다르게) · 0 두 팔 번쩍 · 1 비행기 · 2 주먹 불끈 */
+  /** 세리머니: -1 자동(선수마다 다르게) · 0 두 팔 번쩍 · 1 비행기 · 2 주먹 불끈 · 3 귀에 손 */
   cele: number; }
 export const opts: Options = { sel: [0, 2], len: 300, diff: 'normal', mode: 'ai', tempo: 'normal', cursor: 'manual', sound: true, gfx: (window.matchMedia && window.matchMedia('(pointer: coarse)').matches) ? 'mid' : 'high', names: 'real', stickSprint: true, vibrate: true, btnSize: 'normal', btnAlpha: 'normal', view: 1.35, camH: 0.5, xt: { part: 'tree', model: 'dtmc', T: '10' }, cmt: 'voice', voice: '', cele: -1 };
 const KEY = 'ko11v2';
@@ -27,7 +27,7 @@ export function loadOpts() {
     const s = JSON.parse(localStorage.getItem(KEY) || '{}');
     if (Array.isArray(s.sel)) { opts.sel = [s.sel[0] | 0, s.sel[1] | 0]; }
     if (s.len) opts.len = +s.len; if (s.diff) opts.diff = s.diff; if (s.mode && s.mode !== 'net') opts.mode = s.mode; if (s.snd === false) opts.sound = false;
-    if (s.view >= 1 && s.view <= 2.4) opts.view = +s.view; if (s.cmt === 'text' || s.cmt === 'off' || s.cmt === 'voice') opts.cmt = s.cmt; if (typeof s.voice === 'string') opts.voice = s.voice; if (s.cele === 0 || s.cele === 1 || s.cele === 2) opts.cele = s.cele;
+    if (s.view >= 1 && s.view <= 2.4) opts.view = +s.view; if (s.cmt === 'text' || s.cmt === 'off' || s.cmt === 'voice') opts.cmt = s.cmt; if (typeof s.voice === 'string') opts.voice = s.voice; if (s.cele === 0 || s.cele === 1 || s.cele === 2 || s.cele === 3) opts.cele = s.cele;
     if (s.xt && typeof s.xt === 'object') { for (const k of ['part', 'model', 'T'] as const) if (typeof s.xt[k] === 'string') opts.xt[k] = s.xt[k]; }
     if ((s.tempo as string) in TEMPO) opts.tempo = s.tempo; opts.cursor = (s.v2 && s.cursor === 'auto') ? 'auto' : 'manual'; if (s.gfx === 'low' || s.gfx === 'mid' || s.gfx === 'high') opts.gfx = s.gfx; if (s.names === 'alias') opts.names = 'alias'; if (s.stickSprint === false) opts.stickSprint = false; if (s.vibrate === false) opts.vibrate = false; if (['small', 'normal', 'large'].includes(s.btnSize)) opts.btnSize = s.btnSize; if (['light', 'normal', 'solid'].includes(s.btnAlpha)) opts.btnAlpha = s.btnAlpha;
   } catch { /* 저장값 없음 */ }

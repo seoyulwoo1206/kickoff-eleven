@@ -299,6 +299,11 @@ body.xto #result,body.xto #pause{justify-items:end}
 /* 골 세리머니·리플레이 건너뛰기 안내 (패스 키를 누르는 동안 테두리가 밝아진다) */
 #skipHint{position:fixed;right:max(16px,env(safe-area-inset-right,0px));bottom:max(16px,env(safe-area-inset-bottom,0px));z-index:6;padding:5px 12px;border-radius:999px;background:rgba(9,17,27,.7);border:1px solid var(--rule);font-size:13px;font-weight:600;color:var(--chalk);opacity:.85;pointer-events:none}
 #skipHint.on{border-color:var(--amber);color:#ffe7a8}
+/* 폰: 골을 넣은 뒤 세리머니 고르는 버튼 줄 (건너뛰기 안내 위) */
+#celeRow{position:fixed;left:50%;transform:translateX(-50%);bottom:max(40px,calc(env(safe-area-inset-bottom,0px) + 40px));z-index:6;display:flex;gap:6px}
+#celeRow .cb{display:flex;align-items:center;gap:5px;padding:7px 11px;border-radius:999px;border:1px solid rgba(238,243,234,.3);background:rgba(9,17,27,.72);color:var(--chalk);font-size:12px;font-weight:700;white-space:nowrap;touch-action:none}
+#celeRow .cb b{font-family:var(--f-num);font-weight:800;font-size:14px;color:var(--amber)}
+#celeRow .cb.on{border-color:var(--amber);background:rgba(255,182,39,.22)}
 @media (pointer:coarse){#skipHint{right:auto;left:50%;transform:translateX(-50%);bottom:max(8px,env(safe-area-inset-bottom,0px));font-size:11px}}
 #cmt.pundit{color:#cfe6ff}#cmt.pundit::before{content:'해설위원';color:var(--cyan)}
 #cmt::before{content:'캐스터';font-family:var(--f-num);font-weight:800;letter-spacing:.12em;font-size:11px;color:var(--amber);margin-right:8px}
