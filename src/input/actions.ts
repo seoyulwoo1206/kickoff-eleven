@@ -15,10 +15,12 @@ export interface Inp {
   holdT: Record<Act, number>;      // 누른 시간
   touch: boolean;                  // 터치 조작 중 (패스 버튼 길게 = 롱패스 등)
   skill: { x: number; y: number } | null; // 폰 스와이프 개인기 방향 (gkRush press와 함께)
+  aimA: number; aimT: number;      // 마지막 스틱 방향과 남은 기억 시간(51차): 스틱을 뗀 직후 0.25초 안에 누른 패스는 그 방향으로
+  hintP: number; hintK: number; hintT: number; // 온라인 게스트가 자기 화면에서 고른 받을 선수(선수 번호·1 패스/2 스루·남은 시간). 없으면 -1
 }
 const rec = <T,>(v: T) => Object.fromEntries(ACTS.map(a => [a, v])) as Record<Act, T>;
 export function newInp(): Inp {
-  return { mx: 0, my: 0, keys: new Set(), tx: 0, ty: 0, press: rec(false), down: rec(false), rel: rec(false), holdT: rec(0), touch: false, skill: null };
+  return { mx: 0, my: 0, keys: new Set(), tx: 0, ty: 0, press: rec(false), down: rec(false), rel: rec(false), holdT: rec(0), touch: false, skill: null, aimA: 0, aimT: 0, hintP: -1, hintK: 0, hintT: 0 };
 }
 export function isAct(k: string): k is Act { return (ACTS as readonly string[]).includes(k); }
 export function keyDown(I: Inp, k: Act | Dir, repeat?: boolean) {
@@ -39,6 +41,8 @@ export function readInput(I: Inp, dt: number) {
   if (I.keys.has('left')) x -= 1; if (I.keys.has('right')) x += 1; if (I.keys.has('up')) y -= 1; if (I.keys.has('down')) y += 1;
   const m = Math.hypot(x, y); if (m > 1) { x /= m; y /= m; }
   I.mx = x; I.my = y;
+  if (Math.hypot(x, y) > 0.15) { I.aimA = Math.atan2(y, x); I.aimT = 0.25; } else I.aimT = Math.max(0, I.aimT - dt);
+  if (I.hintT > 0) { I.hintT -= dt; if (I.hintT <= 0) I.hintP = -1; }
   for (const a of ACTS) if (I.down[a]) I.holdT[a] += dt;
 }
 export function clearPresses(I: Inp) { for (const a of ACTS) { I.press[a] = false; I.rel[a] = false; } }

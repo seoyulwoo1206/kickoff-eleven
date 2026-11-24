@@ -28,6 +28,10 @@ export interface Ball {
   x: number; y: number; z: number; vx: number; vy: number; vz: number;
   owner: Player | null; lastTouch: number; passTarget: Player | null; kicker: Player | null; thru: boolean; shotT: number; /* shotT: 슛이 골문까지 날아가는 시간 어림 (키퍼가 볼 시간) */ /* thru: 스루패스로 찬 공 (구르는 동안 더 먼저 닿는 동료가 있으면 받는 선수를 바꾼다) */
   shot: number; isShot: boolean; spin: number; knock: Player | null;
+  /** 땅볼 마찰 배율 (51차): 사람 팀의 땅볼 패스는 `WT`배 — 세게 나가서 받는 자리에선 느려진다. 다른 선수가 건드리거나 뜨면 1 */
+  wt: number;
+  /** 첫 터치 (51차): 잡은 순간의 공 자리와 발밑 자리의 차이(m)·그 속도. `updateBall`이 스프링으로 발밑까지 끌어온다 — 빠른 공일수록 크게 튀고 늦게 붙는다. sOwn = 이 값이 속한 선수 */
+  sx: number; sy: number; svx: number; svy: number; /** 들어온 속도(m/s)와 단계(0 굴러오는 중·1 튕김·2 붙음) */ sin: number; sph: number; sOwn: Player | null;
   /** 마그누스 휨 (진행 방향에 수직인 가속, 부호 = 방향) */
   curl: number;
   /** 세트피스(코너킥·프리킥·골킥)로 찬 공인가 — 공중볼 경합이 제대로 붙는다 */
@@ -36,7 +40,7 @@ export interface Ball {
 export interface Human {
   t: number; ctrl: Player | null; lock: number; charge: number; charging: boolean;
   /** 치달 예약: 남은 시간(초)과 방향(rad, NaN = 방향키) — 차 놓은 공에 다시 닿는 순간 친다 */ chiT: number; chiA: number;
-  second: boolean; gkRush: boolean; pressT: number; lostT: number; swSeen: Player[]; swT: number; swHold: boolean; armP: boolean; armL: boolean; mod: number; zUsed: boolean; /** 키퍼가 공을 잡았을 때 조작 안내를 보여 준 횟수 (경기당 두 번까지) */ gkTips: number; /* armP·armL: 패스·롱패스 키를 우리 공일 때 눌렀는가 (수비 때 누른 키를 공을 뺏은 뒤 떼도 패스가 나가지 않게). mod: 슛을 모으는 동안 누른 보조 키 (1 감아차기, 2 칩슛) */ lockA: number; lockT: number; /* lockA·lockT: 세트피스를 찰 때 누르고 있던 방향키는 받는 선수의 이동으로 치지 않는다 (떼거나 방향을 바꿀 때까지, 최대 lockT초) */ /* 커서 전환: 방금 거쳐 간 선수들(1.2초 안에 다시 누르면 그다음 선수) */ /* lostT: 방금 공을 뺏긴 뒤 남은 시간 (그동안은 공을 돌아본다) */ col: string; tag: string; cursor: 'manual' | 'auto'; had: boolean; // pressT: 압박 지원(Q) 남은 시간
+  second: boolean; gkRush: boolean; pressT: number; lostT: number; swSeen: Player[]; swT: number; swHold: boolean; armP: boolean; armL: boolean; /** 스루패스 키를 우리 공일 때 눌렀는가 (51차: 스루도 떼는 순간 나간다) */ armT: boolean; mod: number; zUsed: boolean; /** 키퍼가 공을 잡았을 때 조작 안내를 보여 준 횟수 (경기당 두 번까지) */ gkTips: number; /* armP·armL: 패스·롱패스 키를 우리 공일 때 눌렀는가 (수비 때 누른 키를 공을 뺏은 뒤 떼도 패스가 나가지 않게). mod: 슛을 모으는 동안 누른 보조 키 (1 감아차기, 2 칩슛) */ lockA: number; lockT: number; /* lockA·lockT: 세트피스를 찰 때 누르고 있던 방향키는 받는 선수의 이동으로 치지 않는다 (떼거나 방향을 바꿀 때까지, 최대 lockT초) */ /* 커서 전환: 방금 거쳐 간 선수들(1.2초 안에 다시 누르면 그다음 선수) */ /* lostT: 방금 공을 뺏긴 뒤 남은 시간 (그동안은 공을 돌아본다) */ col: string; tag: string; cursor: 'manual' | 'auto'; had: boolean; // pressT: 압박 지원(Q) 남은 시간
 }
 export interface Stats { shots: number[]; onT: number[]; poss: number[]; fouls: number[]; offs: number[]; yel: number[]; red: number[]; passA: number[]; passC: number[]; }
 export interface MatchInfo {

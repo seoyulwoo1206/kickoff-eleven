@@ -18,7 +18,7 @@ import { autoCursor, humanUpdate, oursBall } from './human';
 import { teamAI } from './ai/team';
 
 function makeHuman(t: number, c: HumanCfg | null): Human | null {
-  return c ? { t, ctrl: null, chiT: 0, chiA: NaN, lock: 0, charge: 0, charging: false, second: false, gkRush: false, pressT: 0, lostT: 0, swSeen: [], swT: 0, swHold: false, armP: false, armL: false, mod: 0, zUsed: false, gkTips: 0, lockA: 0, lockT: 0, col: c.col, tag: c.tag, cursor: c.cursor, had: false } : null;
+  return c ? { t, ctrl: null, chiT: 0, chiA: NaN, lock: 0, charge: 0, charging: false, second: false, gkRush: false, pressT: 0, lostT: 0, swSeen: [], swT: 0, swHold: false, armP: false, armL: false, armT: false, mod: 0, zUsed: false, gkTips: 0, lockA: 0, lockT: 0, col: c.col, tag: c.tag, cursor: c.cursor, had: false } : null;
 }
 /** 경기 생성. inp를 주면 그 입력 객체를 그대로 읽는다 (앱의 키보드/터치/네트워크 입력). */
 export function createMatch(cfg: MatchCfg, inp?: [Inp, Inp]): Sim {
@@ -31,7 +31,7 @@ export function createMatch(cfg: MatchCfg, inp?: [Inp, Inp]): Sim {
       overT: 0, dead: null, deadT: 0, deadR: 9.15, wall: [], spots: null, setAim: false, aimX: 0, aimY: 0, aimMan: null, setTaker: null, setT: 0, setX: 0, setY: 0, throwIn: null, throwT: 0, lastAtt: -1, ctr: [0, 0], autoRun: [1.5, 1.5], tac: [cfg.tactics?.[0] ?? defaultTactics(cfg.squads?.[0]?.formation), cfg.tactics?.[1] ?? defaultTactics(cfg.squads?.[1]?.formation)],
       bench: [[], []], subs: [0, 0], stops: 0, added: [0, 0, 0, 0], adv: null, knockout: !!cfg.knockout, so: null,
     },
-    ball: { x: CX, y: CY, z: 0, vx: 0, vy: 0, vz: 0, owner: null, lastTouch: 0, passTarget: null, kicker: null, thru: false, shotT: 0, shot: 0, isShot: false, spin: 0, knock: null, curl: 0, setp: false },
+    ball: { x: CX, y: CY, z: 0, vx: 0, vy: 0, vz: 0, owner: null, lastTouch: 0, passTarget: null, kicker: null, thru: false, shotT: 0, shot: 0, isShot: false, spin: 0, knock: null, curl: 0, setp: false, wt: 1, sx: 0, sy: 0, svx: 0, svy: 0, sin: 0, sph: 2, sOwn: null },
     players: [], team: [[], []], HU: [makeHuman(0, cfg.humans[0]), makeHuman(1, cfg.humans[1])], INP: inp ?? [newInp(), newInp()], pred: [],
     rnd: mulberry32(cfg.seed), ev: [],
   };
@@ -133,7 +133,7 @@ export function setPiece(s: Sim, type: SetPieceType, t: number, x: number, y: nu
   if (type === 'corner' && !M.so) M.spots = new Map(players.filter(p => !p.off && p !== tk && p.role !== 'GK').map(p => [p, { x: p.x, y: p.y }]));
   if (type === 'penalty' || type === 'corner') M.stops++;
   M.phase = 'setpiece'; M.spType = type; M.phaseT = type === 'penalty' ? 1.4 : 0.8; M.protect = 1.6; M.adv = null;
-  for (const h of HU) { if (!h) continue; h.charging = false; h.lock = 0; h.armP = h.armL = false; if (h.t === t) setCtrl(h, tk); else setCtrl(h, nearestOutfield(s, h.t, ball)); }
+  for (const h of HU) { if (!h) continue; h.charging = false; h.lock = 0; h.armP = h.armL = h.armT = false; if (h.t === t) setCtrl(h, tk); else setCtrl(h, nearestOutfield(s, h.t, ball)); }
   const hint = HU[t] ? ({ corner: ' · 방향키로 조준 · 롱패스 = 크로스 · 슛 = 낮고 빠르게', throw: ' · 패스 = 가까이 · 롱패스 = 멀리', goalkick: ' · 방향키로 조준 · 롱패스 = 길게 · 패스 = 가까운 동료에게 짧게', freekick: near ? ' · 방향키로 조준 · 슛 = 직접 슛(길게 = 높게) · 롱패스 = 띄우기' : ' · 방향키로 조준 · 롱패스 = 띄우기 · 패스 = 짧게', penalty: '' } as Record<string, string>)[type] : '';
   banner(s, type === 'penalty' ? 'PENALTY' : '', { corner: '코너킥', throw: '스로인', goalkick: '골킥', freekick: '파울 · 프리킥', penalty: '페널티킥' }[type] + hint, type === 'penalty' ? 1400 : hint ? 2400 : 900);
   if (type === 'freekick' || type === 'penalty') sfx(s, 'whistle');
@@ -209,7 +209,7 @@ export function step(s: Sim, dt: number) {
     if (M.phaseT <= 0) { if (M.so) soRecord(s, true); else kickoff(s, M.nextKick); } }
   else if (ph === 'halftime') { M.phaseT -= dt; if (M.phaseT <= 0) { if (M.half === 1) { M.half = 2; M.time = M.len / 2; } kickoff(s, (M.half === 2 || M.half === 4) ? 1 - M.firstKick : M.firstKick); } }
   else if (ph === 'full') return;
-  for (const h of HU) { if (!h) continue; const I = INP[h.t], ours = oursBall(s, h.t); if (I.press.pass) h.armP = ours; if (I.press.lob) h.armL = ours; } // 패스·롱패스는 우리 공일 때 누른 것만 (떼는 순간 나가므로)
+  for (const h of HU) { if (!h) continue; const I = INP[h.t], ours = oursBall(s, h.t); if (I.press.pass) h.armP = ours; if (I.press.lob) h.armL = ours; if (I.press.through) h.armT = ours; } // 패스·롱패스는 우리 공일 때 누른 것만 (떼는 순간 나가므로)
   if (M.dead) { const k = M.dead; if (ball.owner !== k || k.off || Math.hypot(ball.x - M.setX, ball.y - M.setY) > 2.5 || M.deadT > 14) { M.dead = null; M.wall = []; M.spots = null; } else if (M.phase === 'live') M.deadT += dt; } // 차거나 몰고 나가면 풀린다
   if (M.setTaker) { const k = M.setTaker, hk = HU[k.t]; if (ball.owner !== k || k.off || !hk || hk.ctrl !== k || M.setT > 12) M.setTaker = null; else { M.protect = Math.max(M.protect, 0.5); if (M.phase === 'live') M.setT += dt; } } // 차기 전엔 뺏을 수 없다
   if (M.throwIn) { if (ball.owner !== M.throwIn || M.throwIn.off) M.throwIn = null; else { M.protect = Math.max(M.protect, 0.5); if (M.phase === 'live') M.throwT += dt; } } // 던지기 전엔 뺏을 수 없다

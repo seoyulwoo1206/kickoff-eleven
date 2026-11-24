@@ -38,7 +38,8 @@ import { FORMATION_KEYS } from './data/formations';
 import { overall } from './data/squad';
 import { XT, loadXt, resetXt, xtEvent, xtSample, refreshMap, fixSelection, renderPanel, panelNote, resultHtml, SAMPLE_EVERY } from './xt/view';
 import { has, modelsOf, PARTS, MODELS, TKEYS, type Part, type Model, type TKey } from './xt/table';
-import { switchPlayer } from './sim/human';
+import { switchPlayer, passPreview } from './sim/human';
+import { AIM } from './render/aim';
 import type { Human } from './sim/types';
 
 const $ = (id: string) => document.getElementById(id) as HTMLElement;
@@ -254,10 +255,16 @@ function applyRemoteEv(k: string, a: unknown) {
 }
 function netInterpNow() { if (sim) netInterp(sim, snapBuf, perf, (x, y) => R.puff(x, y, 8, 3)); }
 // 게스트 입력은 프레임과 상관없이 60Hz 타이머로 보낸다 (프레임이 떨어져도 입력은 끊기지 않게)
-window.setInterval(() => { if (NET.role === 'guest' && state === 'play' && sim) { readInput(INP[0], STEP); const m = encodeInput(INP[0], inSt); if (m) netSend(m); clearPresses(INP[0]); } }, 1000 / 60);
+// 게스트: 패스·스루 키를 떼는 틱엔 '내 화면에서 고른 받을 선수'를 같이 보낸다(51차) — 호스트는 지연만큼 뒤의 자리로 다시 고르기 때문에 겨눈 동료와 다른 동료에게 가곤 했다(0.2초 지연에서 숏 62 → 56%)
+function guestHint(I: Inp): { g: number; gk: number } | null {
+  if (!sim || !(I.rel.pass || I.rel.through)) return null; const p = sim.ball.owner, h = sim.HU[LOCAL()]; if (!p || !h || p.t !== LOCAL() || h.ctrl !== p || sim.M.phase !== 'live' || sim.M.setTaker === p || sim.M.throwIn === p) return null;
+  const pv = passPreview(sim, p, I), m = I.rel.pass ? pv.short : pv.thru ? pv.thru.m : null; return m ? { g: sim.players.indexOf(m), gk: I.rel.pass ? 1 : 2 } : null;
+}
+window.setInterval(() => { if (NET.role === 'guest' && state === 'play' && sim) { readInput(INP[0], STEP); const m = encodeInput(INP[0], inSt, guestHint(INP[0])); if (m) netSend(m); clearPresses(INP[0]); } }, 1000 / 60);
 
 /* ---------- 입력 ---------- */
 installKeyboard({ inp: INP, isPlaying: () => state === 'play', hasLocalP2: () => !!(sim && sim.M.twoP && !NET.role), togglePause: () => { if (state === 'play') pauseGame(); else if (state === 'paused') resumeGame(); }, cycleCamera, cycleView, cycleCamH, toggleXt: () => toggleXt() });
+AIM.of = t => (NET.role ? (t === LOCAL() ? INP[0] : null) : INP[t] ?? null);
 installTouch(INP[0], () => { if (!isTouch) { isTouch = true; document.body.classList.add('touch'); if (state === 'play' || state === 'paused') $('touch').hidden = false; } }, () => ({ stickSprint: opts.stickSprint, attack: touchAttack(), relabel: relabelTouch }));
 if (isTouch) document.body.classList.add('touch');
 applyTouchStyle(opts.btnSize, opts.btnAlpha);
@@ -496,7 +503,7 @@ window.setInterval(() => {
   runSteps(dt);
 }, 1000 / 60);
 function frame(ts: number) {
-  requestAnimationFrame(frame); const now = ts / 1000; const rawDt = lastTs ? now - lastTs : STEP, dt = Math.min(0.1, rawDt); lastTs = now; perf = now;
+  requestAnimationFrame(frame); const now = ts / 1000; const rawDt = lastTs ? now - lastTs : STEP, dt = Math.max(0, Math.min(0.1, rawDt)); /* 시간이 거꾸로 간 프레임은 0으로 (음수면 카메라 보간이 발산한다) */ lastTs = now; perf = now;
   pollGamepads({ inp: INP[0], isPlaying: () => state === 'play', togglePause: () => { if (state === 'play') pauseGame(); else if (state === 'paused') resumeGame(); } });
   if (sim && sim.M.slow > 0 && !NET.role) sim.M.slow = Math.max(0, sim.M.slow - dt);
   if (introT > 0) { if (state === 'play') introT -= dt; if (introT <= 0) { endIntro(); lastTs = now; } }
@@ -538,6 +545,7 @@ function skipHint(s: Sim) {
 function gauges(s: Sim) {
   if (!isTouch) return; const h = s.HU[LOCAL()], I = INP[0]; if (!h) return;
   touchGauge('bB', h.charging ? h.charge : 0, h.charge > 0.8);
+  touchGauge('bD', I.down.through ? Math.min(1, Math.max(0, (I.holdT.through - 0.14) / 0.5)) : 0); // 스루패스 세기 (51차)
   touchGauge('bA', I.down.pass ? Math.min(1, Math.max(0, (I.holdT.pass - 0.12) / 0.45)) : I.down.lob ? Math.min(1, Math.max(0, (I.holdT.lob - 0.1) / 0.5)) : 0); // 패스 버튼을 위로 밀면 로빙 게이지
 }
 if (import.meta.env.PROD && 'serviceWorker' in navigator) window.addEventListener('load', () => { navigator.serviceWorker.register('./sw.js').catch(() => { /* http 등에선 불가 */ }); });

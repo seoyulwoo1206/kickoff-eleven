@@ -13,8 +13,9 @@ import { opts } from '../../options';
 import { displayName, shirtName } from '../../data/squads';
 import { lookOf } from '../../data/looks';
 import type { Kit } from '../../data/teams';
-import { backTarget } from '../../sim/human';
-import { setPreview } from '../../sim/ball';
+import { backTarget, passPreview } from '../../sim/human';
+import { setPreview, landSpot, type ThruPlan } from '../../sim/ball';
+import { AIM } from '../aim';
 import { XT, drawMap } from '../../xt/view';
 
 interface Puff { sp: THREE.Sprite; vx: number; vz: number; life: number; t: number; }
@@ -39,6 +40,7 @@ export class ThreeRenderer implements IRenderer {
   private celeCam = false; // 세리머니 클로즈업 중
   private elev = 0.5; // 중계 카메라가 내려다보는 각 (rad) — `setElev`, opts.camH
   private refs: Ref[] = []; private refCard = { t: 0, who: null as Player | null, x: 0, y: 0 }; /* 카드: 남은 시간·받는 선수·그 자리(퇴장이면 선수가 바로 빠지므로 마지막으로 그린 자리) */ private refFlag = [0, 0]; private cardMat = new THREE.MeshBasicMaterial({ color: 0xffd400, side: THREE.DoubleSide });
+  private airB = 0; /* 띄운 공: 카메라를 떨어질 자리 쪽으로 옮기는 정도 */ private pv: ({ o: Player; n: number; short: Player | null; thru: ThruPlan | null } | null)[] = [null, null]; /* 받을 선수 미리보기 (팀별, 2프레임마다 다시 계산) */
   private drib = { x: 0, y: 0 }; /* 드리블 터치로 공을 그릴 때 더하는 어긋남(m) */ private frames: Frame[] = []; private goalAt = -1; private replay = false; private replayT = 0; private pose: PoseState[] = []; private rBall = { x: 0, y: 0, z: 0, vx: 0, vy: 0, owner: null as Player | null };
   constructor(public cv: HTMLCanvasElement, private insetEl: HTMLElement, private ovCv: HTMLCanvasElement, quality: Quality) {
     this.gl = new THREE.WebGLRenderer({ canvas: cv, antialias: true, powerPreference: 'high-performance' });
@@ -186,6 +188,9 @@ export class ThreeRenderer implements IRenderer {
       this.lead += (tl - this.lead) * (1 - Math.pow(0.3, dtR));
       tx = ball.x + ball.vx * 0.22 + this.lead; ty = ball.y + ball.vy * 0.18;
       if (this.spB > 0.01) { const bx = ball.x > CX || this.spB < 1 && cam.x > CX ? W - 14 : 14, by = CY + (ball.y - CY) * 0.4; tx += (bx - tx) * this.spB; ty += (by - ty) * this.spB; }
+      // 띄운 공(51차): 떨어질 자리가 화면에 먼저 들어오게 조준점을 공과 낙하지점의 가운데로 — 전엔 공만 따라가 크로스가 다 내려올 때에야 받을 자리가 보였다
+      const ls = sim.M.phase === 'live' ? landSpot(ball) : null; this.airB += ((ls && ls.t > 0.25 ? 1 : 0) - this.airB) * (1 - Math.pow(0.02, dtR));
+      if (ls && this.airB > 0.01) { const f = 0.5 * this.airB * (1 - this.spB); tx += (ls.hx + this.lead - tx) * f; ty += (ls.hy - ty) * f; }
     }
     const vh = VW / aspect * 1.5;
     // 카메라는 비스듬히 내려다보므로 화면 아래쪽(가까운 터치라인)은 조준점에서 가까운 거리까지만 보인다 → 아래 여유를 따로 계산
@@ -266,7 +271,7 @@ export class ThreeRenderer implements IRenderer {
       else { ball = sim.ball; for (const m of this.models.values()) { m.root.visible = !m.p.off; if (!m.p.off) m.update(m.p, ball, perf); } }
       { // 드리블 터치(그림만 — 시뮬의 공은 몸 앞 0.75m에 붙어 있다): 차는 발이 앞으로 넘어올 때 공을 밀어 0.9m까지 굴러갔다가 따라잡혀 0.47m로 — 걸음에 맞춘 포물선. 평균 위치는 시뮬과 같다
         const D = this.drib, o = this.replay ? null : sim.ball.owner; let tx = 0, ty = 0;
-        if (o && !o.off && o.spin <= 0 && o.kickWind <= 0 && o.slide <= 0 && o.stun <= 0 && sim.ball.z < 0.05 && M.setTaker !== o && M.dead !== o) {
+        if (o && !o.off && o.spin <= 0 && o.kickWind <= 0 && o.slide <= 0 && o.stun <= 0 && sim.ball.z < 0.05 && M.setTaker !== o && M.dead !== o && Math.hypot(sim.ball.sx, sim.ball.sy) < 0.12) {
           const m = this.models.get(o), sp = Math.hypot(o.vx, o.vy);
           if (m && sp > 1.2) { const A = clamp((sp - 1.2) / 4.6, 0, 1.15) * 0.42, tau = (((m.stepPh + m.kickFoot * Math.PI - 1.1) / (Math.PI * 2)) % 1 + 1) % 1, f = A * (4 * tau * (1 - tau) - 2 / 3), lat = 0.1 * (m.kickFoot ? 1 : -1) * Math.min(1, sp / 4), c = Math.cos(o.dir), s = Math.sin(o.dir); tx = c * f - s * lat; ty = s * f + c * lat; }
         }
@@ -305,6 +310,21 @@ export class ThreeRenderer implements IRenderer {
         if (h.charging) { const fp = this.toScreen(c.x, c.y, 0), bw = 44, bh = 6, bx = fp.x - bw / 2, by = fp.y + 10; ctx.fillStyle = 'rgba(9,17,27,.85)'; ctx.fillRect(bx - 1, by - 1, bw + 2, bh + 2); ctx.fillStyle = h.charge > 0.8 ? '#ff5a4e' : h.col; ctx.fillRect(bx, by, bw * h.charge, bh); ctx.fillStyle = '#fff'; ctx.fillRect(bx + bw * 0.8, by - 2, 1.5, bh + 4); }
       } else { const cx2 = clamp(px, 24, cw - 24), cy2 = clamp(py, 24 + ins.t, ch - 24 - ins.b), a = Math.atan2(py - cy2, px - cx2); ctx.save(); ctx.translate(cx2, cy2); ctx.rotate(a); ctx.fillStyle = h.col; ctx.beginPath(); ctx.moveTo(12, 0); ctx.lineTo(-6, -8); ctx.lineTo(-6, 8); ctx.fill(); ctx.restore(); }
     }
+    // 받을 선수 표시(51차): 지금 패스를 누르면 받을 동료 머리 위에 빈 세모(청록 — 패스 키를 누르는 동안 채워짐), 스루패스가 닿을 자리에 땅 위 고리(노랑 — 스루 키를 누르는 동안 굵게, 누른 만큼 멀어진다).
+    // 실제 킥과 같은 식(`passPreview`)이고 온라인 게스트는 자기 화면 기준 — 그 선수를 호스트에 같이 보낸다
+    const ring = (x: number, y: number, r: number) => { ctx.beginPath(); for (let k = 0; k <= 18; k++) { const an = k / 18 * Math.PI * 2, a = this.toScreen(x + Math.cos(an) * r, y + Math.sin(an) * r, 0.03); if (k) ctx.lineTo(a.x, a.y); else ctx.moveTo(a.x, a.y); } };
+    if (M.phase === 'live' && !M.so) for (const h of HU) {
+      const I = h ? AIM.of(h.t) : null, o = ball.owner; if (!h || !I || !o || o.t !== h.t || h.ctrl !== o || o.off || M.setTaker === o || M.throwIn === o || M.dead === o) { if (h) this.pv[h.t] = null; continue; }
+      let pv = this.pv[h.t]; if (!pv || pv.o !== o || ++pv.n >= 2) { const q = passPreview(sim, o, I); pv = this.pv[h.t] = { o, n: 0, short: q.short, thru: q.thru }; }
+      const th = pv.thru && !pv.thru.cut ? pv.thru : null;
+      if (th) { const hold = I.down.through, c = this.toScreen(th.x, th.y, 0.03); if (c.on) { ctx.globalAlpha = hold ? 0.95 : 0.5; ctx.strokeStyle = 'rgba(9,17,27,.55)'; ctx.lineWidth = hold ? 5 : 3.5; ring(th.x, th.y, 1.05); ctx.stroke(); ctx.strokeStyle = '#ffd166'; ctx.lineWidth = hold ? 3 : 1.8; ring(th.x, th.y, 1.05); ctx.stroke();
+        if (hold) { const b = this.toScreen(ball.x, ball.y, 0.03); ctx.setLineDash([4, 6]); ctx.lineWidth = 1.6; ctx.beginPath(); ctx.moveTo(b.x, b.y); ctx.lineTo(c.x, c.y); ctx.stroke(); ctx.setLineDash([]); } ctx.globalAlpha = 1; } }
+      const sm = pv.short ?? (pv.thru && pv.thru.cut ? pv.thru.m : null);
+      if (sm && !sm.off) { const a = this.toScreen(sm.x, sm.y, 2.05); if (a.on) { const on = I.down.pass, k = on ? 1.25 : 1, y0 = a.y - 18; /* 이름표(머리 위 15px) 바로 위 */ ctx.globalAlpha = on ? 1 : 0.9; ctx.beginPath(); ctx.moveTo(a.x, y0); ctx.lineTo(a.x - 6 * k, y0 - 9 * k); ctx.lineTo(a.x + 6 * k, y0 - 9 * k); ctx.closePath(); ctx.lineJoin = 'round'; ctx.strokeStyle = 'rgba(9,17,27,.8)'; ctx.lineWidth = 3.5; ctx.stroke(); ctx.fillStyle = on ? '#ffffff' : '#5fd8ff'; ctx.fill(); ctx.strokeStyle = '#5fd8ff'; ctx.lineWidth = 1.5; ctx.stroke(); ctx.globalAlpha = 1; } }
+    }
+    // 낙하지점(51차): 띄운 공(슛 제외)이 머리 높이로 내려오는 자리에 고리 — 공이 다가올수록 좁아진다. 가운데 점은 땅에 닿는 자리
+    { const ls = M.phase === 'live' || M.phase === 'setpiece' ? landSpot(ball) : null;
+      if (ls && ls.t > 0.1) { const r = 0.75 + Math.min(ls.ht, 1.5) * 1.0, c = this.toScreen(ls.hx, ls.hy, 0.03); if (c.on) { ctx.globalAlpha = 0.9; ctx.strokeStyle = 'rgba(9,17,27,.6)'; ctx.lineWidth = 4.5; ring(ls.hx, ls.hy, r); ctx.stroke(); ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 2.2; ring(ls.hx, ls.hy, r); ctx.stroke(); ctx.fillStyle = '#ffffff'; ctx.beginPath(); ctx.arc(c.x, c.y, 2.2, 0, 7); ctx.fill(); ctx.globalAlpha = 1; } } }
     // 세트피스 조준: 지금 차면 날아갈 궤적(점)과 땅 그림자 선, 떨어질 자리(원)·골문을 지나는 자리(십자)
     { const pv = setPreview(sim), hh = pv && M.setTaker ? HU[M.setTaker.t] : null;
       if (pv && hh) {

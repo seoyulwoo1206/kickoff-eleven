@@ -63,8 +63,8 @@ export function installTouch(I: Inp, onTouch: () => void, getOpts: () => TouchOp
     }); }
   // 스루 / 슬라이딩 (수비 땐 롱패스 키 = 슬라이딩). 공격 땐 떼는 순간 스루패스 — 누른 채 위로 밀면 스루 대신 침투 요청(Q 탭)이라 누르는 순간엔 못 찬다
   { let k: Act | null = null, run = false;
-    bindBtn($('bD'), () => { run = false; if (getOpts().attack) k = null; else { k = 'lob'; keyDown(I, k); } }, () => { if (k) keyUp(I, k); else if (!run && getOpts().attack) tap('through'); k = null; }, dir => {
-      if (k || dir !== 'u') return; run = true; tap('run'); return '침투';
+    bindBtn($('bD'), () => { run = false; k = getOpts().attack ? 'through' : 'lob'; keyDown(I, k); }, () => { if (k) keyUp(I, k); k = null; }, dir => {
+      if (k !== 'through' || run || dir !== 'u') return; run = true; keyCancel(I, 'through'); k = null; tap('run'); return '침투'; // 51차: 스루패스는 누른 시간이 세기(떼는 순간 나간다) — 위로 밀면 스루를 거두고 침투 요청
     }); }
   // 질주: 누른 채 밀면 — 공격: 개인기(달리는 쪽이면 치달), 수비: ↑ 키퍼 나오기(누르는 동안)·그 밖 동료 압박
   { let gk = false;
