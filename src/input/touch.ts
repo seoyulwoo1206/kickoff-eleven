@@ -58,12 +58,14 @@ export function installTouch(I: Inp, onTouch: () => void, getOpts: () => TouchOp
   // 슛 / 태클: 공격 때 누른 채 ↑ 칩슛(Q를 누른 채 슛)·↓ 감아차기(Z를 누른 채 슛)
   { let mod: Act | null = null;
     bindBtn($('bB'), () => { mod = null; keyDown(I, 'shoot'); }, () => { keyUp(I, 'shoot'); if (mod) { const m = mod; window.setTimeout(() => keyUp(I, m), 90); } mod = null; }, dir => {
-      if (!getOpts().attack || (dir !== 'u' && dir !== 'd')) return;
+      if (!getOpts().attack) return;
+      if (dir === 'l' || dir === 'r') { keyDown(I, 'pass'); window.setTimeout(() => keyCancel(I, 'pass'), 60); return '페이크'; } // 옆으로: 페이크 슛(52차) — 슛을 모으는 중 패스 키. 뗀 것으로 치지 않게 거둔다(패스가 나가지 않게)
       mod = dir === 'u' ? 'run' : 'chip'; keyDown(I, mod); return dir === 'u' ? '칩슛' : '감아차기';
     }); }
   // 스루 / 슬라이딩 (수비 땐 롱패스 키 = 슬라이딩). 공격 땐 떼는 순간 스루패스 — 누른 채 위로 밀면 스루 대신 침투 요청(Q 탭)이라 누르는 순간엔 못 찬다
-  { let k: Act | null = null, run = false;
-    bindBtn($('bD'), () => { run = false; k = getOpts().attack ? 'through' : 'lob'; keyDown(I, k); }, () => { if (k) keyUp(I, k); k = null; }, dir => {
+  { let k: Act | null = null, run = false, low = false;
+    bindBtn($('bD'), () => { run = false; low = false; k = getOpts().attack ? 'through' : 'lob'; keyDown(I, k); }, () => { if (k) keyUp(I, k); k = null; if (low) { low = false; window.setTimeout(() => keyCancel(I, 'chip'), 90); } }, dir => {
+      if (k === 'through' && !run && dir === 'd') { const held = I.holdT.through; keyCancel(I, 'through'); keyHold(I, 'chip'); keyDown(I, 'lob'); I.holdT.lob = held; k = 'lob'; low = true; return '낮게'; } // 아래로(52차): 땅볼 크로스·낮은 롱패스 (감아차기 키를 누른 채 롱패스) — 떼는 순간 나간다
       if (k !== 'through' || run || dir !== 'u') return; run = true; keyCancel(I, 'through'); k = null; tap('run'); return '침투'; // 51차: 스루패스는 누른 시간이 세기(떼는 순간 나간다) — 위로 밀면 스루를 거두고 침투 요청
     }); }
   // 질주: 누른 채 밀면 — 공격: 개인기(달리는 쪽이면 치달), 수비: ↑ 키퍼 나오기(누르는 동안)·그 밖 동료 압박

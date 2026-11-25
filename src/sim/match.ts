@@ -18,7 +18,7 @@ import { autoCursor, humanUpdate, oursBall } from './human';
 import { teamAI } from './ai/team';
 
 function makeHuman(t: number, c: HumanCfg | null): Human | null {
-  return c ? { t, ctrl: null, chiT: 0, chiA: NaN, lock: 0, charge: 0, charging: false, second: false, gkRush: false, pressT: 0, lostT: 0, swSeen: [], swT: 0, swHold: false, armP: false, armL: false, armT: false, mod: 0, zUsed: false, gkTips: 0, lockA: 0, lockT: 0, col: c.col, tag: c.tag, cursor: c.cursor, had: false } : null;
+  return c ? { t, ctrl: null, chiT: 0, chiA: NaN, lock: 0, charge: 0, charging: false, second: false, gkRush: false, pressT: 0, lostT: 0, swSeen: [], swT: 0, swHold: false, armP: false, armL: false, armT: false, bufK: 0, bufT: 0, bufPw: 0, bufOpt: 0, bufM: null, preShot: false, fakeT: 0, callAt: 0, mod: 0, zUsed: false, gkTips: 0, lockA: 0, lockT: 0, col: c.col, tag: c.tag, cursor: c.cursor, had: false } : null;
 }
 /** 경기 생성. inp를 주면 그 입력 객체를 그대로 읽는다 (앱의 키보드/터치/네트워크 입력). */
 export function createMatch(cfg: MatchCfg, inp?: [Inp, Inp]): Sim {
@@ -133,7 +133,7 @@ export function setPiece(s: Sim, type: SetPieceType, t: number, x: number, y: nu
   if (type === 'corner' && !M.so) M.spots = new Map(players.filter(p => !p.off && p !== tk && p.role !== 'GK').map(p => [p, { x: p.x, y: p.y }]));
   if (type === 'penalty' || type === 'corner') M.stops++;
   M.phase = 'setpiece'; M.spType = type; M.phaseT = type === 'penalty' ? 1.4 : 0.8; M.protect = 1.6; M.adv = null;
-  for (const h of HU) { if (!h) continue; h.charging = false; h.lock = 0; h.armP = h.armL = h.armT = false; if (h.t === t) setCtrl(h, tk); else setCtrl(h, nearestOutfield(s, h.t, ball)); }
+  for (const h of HU) { if (!h) continue; h.charging = false; h.lock = 0; h.armP = h.armL = h.armT = false; h.bufK = 0; h.bufT = 0; h.preShot = false; if (h.t === t) setCtrl(h, tk); else setCtrl(h, nearestOutfield(s, h.t, ball)); }
   const hint = HU[t] ? ({ corner: ' · 방향키로 조준 · 롱패스 = 크로스 · 슛 = 낮고 빠르게', throw: ' · 패스 = 가까이 · 롱패스 = 멀리', goalkick: ' · 방향키로 조준 · 롱패스 = 길게 · 패스 = 가까운 동료에게 짧게', freekick: near ? ' · 방향키로 조준 · 슛 = 직접 슛(길게 = 높게) · 롱패스 = 띄우기' : ' · 방향키로 조준 · 롱패스 = 띄우기 · 패스 = 짧게', penalty: '' } as Record<string, string>)[type] : '';
   banner(s, type === 'penalty' ? 'PENALTY' : '', { corner: '코너킥', throw: '스로인', goalkick: '골킥', freekick: '파울 · 프리킥', penalty: '페널티킥' }[type] + hint, type === 'penalty' ? 1400 : hint ? 2400 : 900);
   if (type === 'freekick' || type === 'penalty') sfx(s, 'whistle');

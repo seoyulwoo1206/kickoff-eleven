@@ -3,7 +3,7 @@ import { W, H, CY } from './consts';
 import type { Sim, Human, Player } from './types';
 import type { Inp } from '../input/actions';
 import { sfx, banner } from './events';
-import { gkHands, headSpot, passTo, kick, throwTo, throwPick, offsideLine, gain, knockOn, bigKnock, setKick, setShotAim, shortPass, shortPick, longPass, throughPass, throughPlan, type ThruPlan, chipShot, shoot, slideTackle, slideCheck, standTackle, intercept, interceptT, queueKick, n } from './ball';
+import { gkHands, headSpot, passTo, kick, throwTo, throwPick, offsideLine, gain, knockOn, bigKnock, setKick, setShotAim, shortPass, shortPick, longPass, fakeShot, throughPass, throughPlan, type ThruPlan, chipShot, shoot, slideTackle, slideCheck, standTackle, intercept, interceptT, queueKick, n } from './ball';
 import { steer, chase, moveTo, gapY } from './move';
 import { bestAIPass } from './ai/carrier';
 
@@ -97,13 +97,14 @@ function passGo(s: Sim, p: Player) {
 /** 동료 호출(49차, 공격 때 jockey 키): 가까운 동료 하나가 `callT` 3.2초 동안 공 가진 선수 6.5m 앞까지 받으러 온다(teamAI) — 짧은 패스를 주고받을 상대를 만든다.
     대상: 4~34m 안 필드 선수 중 가까운 쪽, 방향키를 누르고 있으면 그쪽 동료 우대. 이미 부른 선수가 있으면 그 선수는 풀고 다른 선수를 부른다 */
 export function callSupport(s: Sim, h: Human, p: Player, aim: number | null) {
+  const two = h.callAt > 0 && s.team[h.t].some(m => m.callT > 0 && !m.off); h.callAt = two ? 0 : 0.5; // 52차: 0.5초 안에 한 번 더 누르면 먼저 부른 동료는 그대로 두고 둘째 동료도 부른다 (FC의 Double Teammate Support)
   let best: Player | null = null, bs = -1e9;
   for (const m of s.team[h.t]) {
-    if (m === p || m.role === 'GK' || m.off) continue; const dx = m.x - p.x, dy = m.y - p.y, q = Math.hypot(dx, dy); if (q < 4 || q > 34) continue;
+    if (m === p || m.role === 'GK' || m.off || (two && m.callT > 0)) continue; const dx = m.x - p.x, dy = m.y - p.y, q = Math.hypot(dx, dy); if (q < 4 || q > 34) continue;
     const c = aim === null ? 0 : (dx * Math.cos(aim) + dy * Math.sin(aim)) / q;
     const sc = -q / 7 + c * 2.5 - (m.callT > 0 ? 3 : 0); if (sc > bs) { bs = sc; best = m; }
   }
-  for (const m of s.team[h.t]) m.callT = 0;
+  for (const m of s.team[h.t]) m.callT = two && m.callT > 0 ? 3.2 : 0;
   if (!best) return;
   best.callT = 3.2; best.runT = 0; sfx(s, 'kick');
 }
@@ -140,6 +141,10 @@ export function humanUpdate(s: Sim, h: Human, dt: number) {
   const I = INP[h.t], p = h.ctrl; if (!p) return; if (p.off) { switchPlayer(s, h); return; }
   let mx = I.mx, my = I.my, mag = Math.hypot(mx, my); const sprint = I.down.sprint; let own = ball.owner === p;
   h.swT = Math.max(0, h.swT - dt); if (!I.down.pass) h.swHold = false; if (I.press.chip) h.zUsed = false;
+  h.callAt = Math.max(0, h.callAt - dt); h.fakeT = Math.max(0, h.fakeT - dt);
+  { const mineIn = own || (!ball.owner && (ball.passTarget === p || ball.knock === p)); // 원터치(52차): 미리 뗀 키는 공이 나한테 오는 동안만 기억한다 (끊기거나 커서가 바뀌면 버린다)
+    if (h.bufT > 0) { h.bufT -= dt; if (h.bufT <= 0 || !mineIn) { h.bufT = 0; h.bufK = 0; h.bufM = null; } }
+    if (h.preShot && (!mineIn || !(I.down.shoot || I.rel.shoot))) h.preShot = false; }
   if (M.throwIn === p) { // 스로인: 움직일 수 없고 스틱으로 방향만. 패스·스루 = 가까운 동료, 롱패스 = 먼 동료. 6초 넘기면 알아서 던진다
     steer(p, 0, 0, dt); p.vx = p.vy = 0; h.second = false; h.gkRush = false; h.charging = false;
     if (mag > 0.15) { h.lockA = Math.atan2(my, mx); h.lockT = 1.5; } else h.lockT = 0;
@@ -226,6 +231,16 @@ export function humanUpdate(s: Sim, h: Human, dt: number) {
       return;
     }
     if (dead && M.setT > 8 && !h.charging) { queueKick(s, p, () => shortPass(s, p, p.dir, 0.3), 0.04); return; }
+    // 킥 묶음: 떼는 순간과 원터치(미리 뗀 키)가 같은 식을 쓴다
+    const kPass = (pw: number, go: boolean, hm: Player | null) => { const am = aimOf(I, p), tie = am.free ? 0.4 : am.sharp ? 0.1 : 0.2, cm = hm ?? (am.free ? calledMate(s, p) : null); /* 방향키 없이 누르면 방금 부른 동료에게 (49차). Q를 누른 채면 주고 뛰기 (50차). 온라인 게스트가 자기 화면에서 고른 동료가 있으면 그 동료에게 (51차) */ queueKick(s, p, () => { if (cm && !cm.off) passTo(s, p, cm, false, pw); else shortPass(s, p, am.a, pw, tie, am.sharp); if (go) passGo(s, p); }, 0.04); };
+    const kLob = (pw: number, low: boolean) => queueKick(s, p, () => longPass(s, p, aim, 0.35 + pw * 0.65, low));
+    const kThru = (pw: number, hm: Player | null) => { const am = aimOf(I, p); /* 스루패스(51차): 떼는 순간 나가고 누른 시간이 세기 — 탭은 받는 선수 3m 앞, 끝까지 누르면 11m 앞·먼 동료 */ queueKick(s, p, () => throughPass(s, p, am.a, pw, undefined, { only: hm && !hm.off ? hm : null, sharp: am.sharp }), 0.04); };
+    // 원터치(52차): 나한테 오는 패스가 닿기 전에 뗀 패스·롱패스·스루·슛은 닿자마자 나간다. 슛 키를 누른 채 받으면 누른 시간만큼 이미 모은 것으로 친다. 전엔 닿기 전에 뗀 키는 버려져, 받은 뒤 다시 눌러야 했다
+    if (h.bufK && !dead && !hands) { const k = h.bufK, pw = h.bufPw, op = h.bufOpt, bm = h.bufM && h.bufM !== p ? h.bufM : null; h.bufK = 0; h.bufT = 0; h.bufM = null; p.shield = Math.max(p.shield, 0.16);
+      if (k === 1) kPass(pw, op === 1, bm); else if (k === 2) kLob(pw, op === 1); else if (k === 3) kThru(pw, bm);
+      else { const ay = mag > 0.15 ? my / mag : 0; queueKick(s, p, op === 2 ? () => chipShot(s, p) : () => shoot(s, p, 0.5 + pw * 0.5, ay, op === 1)); }
+      h.charging = false; return; }
+    if (h.preShot && I.down.shoot && !h.charging && !dead && !hands) { h.preShot = false; h.charging = true; h.charge = Math.min(1, I.holdT.shoot / 0.8); h.mod = 0; p.shield = Math.max(p.shield, 0.4); }
     const anyPress = I.press.pass || I.press.lob || I.press.through || I.press.shoot || I.press.switch || I.press.gkRush || I.down.pass || I.down.lob || I.down.shoot || I.down.through || I.rel.pass || I.rel.lob || I.rel.shoot || I.rel.chip || I.rel.through; // 떼는 틱(rel)도 입력 중: 빠지면 질주 중 패스가 노크온에 먹힌다
     // 치달 (Shift, 폰은 질주 중 앞으로 스와이프): 스틱 방향(없으면 보는 방향, 몸에서 100° 안)으로 공을 길게 차 놓고 달린다
     if (I.press.switch && !dead && !hands && !h.charging && p.spin <= 0 && p.stun <= 0) { const sa = mag > 0.15 ? Math.atan2(my, mx) : p.dir; bigKnock(s, p, Math.abs(angDiff(p.dir, sa)) < 1.75 ? sa : p.dir); return; }
@@ -237,11 +252,12 @@ export function humanUpdate(s: Sim, h: Human, dt: number) {
       if (skillMove(s, p, sv.x, sv.y)) return;
     }
     // 패스는 떼는 순간, 누른 시간이 세기 (탭 = 보통). 우리 공일 때 누른 것만 (수비 때 누른 전환·슬라이딩 키를 공을 뺏은 뒤에 떼도 패스가 나가지 않는다)
-    if (I.rel.pass && h.armP) { const am = aimOf(I, p), pw = passPw(I), tie = am.free ? 0.4 : am.sharp ? 0.1 : 0.2, cm = hinted(s, I, p, 1) ?? (am.free ? calledMate(s, p) : null), go = I.down.run; /* 방향키 없이 누르면 방금 부른 동료에게 (49차). Q를 누른 채면 주고 뛰기 (50차). 온라인 게스트가 자기 화면에서 고른 동료가 있으면 그 동료에게 (51차) */ queueKick(s, p, () => { if (cm && !cm.off) passTo(s, p, cm, false, pw); else shortPass(s, p, am.a, pw, tie, am.sharp); if (go) passGo(s, p); }, 0.04); h.charging = false; return; } // 방향키 없이 누르면 보는 쪽 넓게
-    if (I.rel.lob && h.armL) { const pw = clamp((I.holdT.lob - 0.1) / 0.5, 0, 1); queueKick(s, p, () => longPass(s, p, aim, 0.35 + pw * 0.65)); h.charging = false; return; }
-    if (I.rel.through && h.armT) { const am = aimOf(I, p), pw = thruPw(I), only = hinted(s, I, p, 2); /* 스루패스(51차): 떼는 순간 나가고 누른 시간이 세기 — 탭은 받는 선수 3m 앞, 끝까지 누르면 11m 앞·먼 동료 */ queueKick(s, p, () => throughPass(s, p, am.a, pw, undefined, { only: only && !only.off ? only : null, sharp: am.sharp }), 0.04); h.charging = false; return; }
+    if (I.rel.pass && h.armP) { kPass(passPw(I), I.down.run, hinted(s, I, p, 1)); h.charging = false; return; } // 방향키 없이 누르면 보는 쪽 넓게
+    if (I.rel.lob && h.armL) { const low = I.down.chip; if (low) h.zUsed = true; /* 감아차기 키(Z)를 누른 채 롱패스 = 땅볼 크로스·낮은 롱패스 (52차) — Z를 떼도 칩슛은 안 나간다 */ kLob(clamp((I.holdT.lob - 0.1) / 0.5, 0, 1), low); h.charging = false; return; }
+    if (I.rel.through && h.armT) { kThru(thruPw(I), hinted(s, I, p, 2)); h.charging = false; return; }
     if (I.rel.chip && !h.zUsed && !h.charging) { queueKick(s, p, () => chipShot(s, p)); return; } // Z만 눌렀다 떼면 칩슛 (Z를 누른 채 슛 = 감아차기)
     if (I.press.shoot) { h.charging = true; h.charge = 0; h.mod = 0; p.shield = Math.max(p.shield, 0.4); } // 슛은 누른 뒤 0.4초까지 지켜 준다: 게이지 절반 이하의 슛은 반드시 나간다 (.16초로는 모으는 사이 3번 중 2번을 뺏겼다). 끝까지 모으려면 공간이 있어야 한다
+    if (h.charging && I.press.pass && !dead && !hands) { h.armP = false; h.charging = false; h.charge = 0; fakeShot(s, p, h); return; } // 페이크 슛(52차): 슛을 모으는 중 패스 키 — 차는 척만 하고 방향키 쪽으로 꺾는다 (떼도 패스는 안 나간다)
     if (h.charging) {
       if (I.down.run) h.mod = 2; else if ((I.down.chip || I.down.gkRush) && h.mod < 1) h.mod = 1; // Q를 누른 채 슛 = 칩슛, Z(또는 X)를 누른 채 슛 = 감아차기 (FC 온라인)
       if (I.down.chip) h.zUsed = true;
@@ -252,7 +268,17 @@ export function humanUpdate(s: Sim, h: Human, dt: number) {
     if (h.charging) { h.charging = false; h.charge = 0; }
     const o0 = ball.owner, theirs = !!o0 && o0.t !== p.t, inbound = (!!o0 && o0.t === p.t) || (!o0 && !!ball.passTarget && ball.passTarget.t === p.t); // inbound: 우리 편이 갖고 있거나 우리 편에게 가는 패스 — 그동안 누른 패스·롱패스는 미리 누른 것이지 전환·슬라이딩이 아니다
     // 수비 (FC 온라인): 슛 키 = 태클(탭)·압박(누른 채), 롱패스 키 = 슬라이딩, 패스 키 = 커서 전환, 스루 키 = 골키퍼 나오기, Q = 동료 압박
-    const tk = I.press.shoot || I.press.tackle; // 태클: 슛 키 탭 또는 태클 키(Space)
+    // 원터치(52차): 나한테 오는 패스(내가 차 놓은 공도)가 닿기 전에 뗀 키를 기억해 둔다 — 닿는 순간 `own` 쪽에서 실행
+    const mineIn = !o0 && (ball.passTarget === p || ball.knock === p) && M.phase === 'live' && !M.dead;
+    if (mineIn) {
+      const buf = (k: number, pw: number, op: number, hm: Player | null) => { h.bufK = k; h.bufPw = pw; h.bufOpt = op; h.bufT = 1.2; h.bufM = hm; };
+      if (I.rel.pass && h.armP) buf(1, passPw(I), I.down.run ? 1 : 0, hinted(s, I, p, 1));
+      else if (I.rel.lob && h.armL) { const low = I.down.chip; if (low) h.zUsed = true; buf(2, clamp((I.holdT.lob - 0.1) / 0.5, 0, 1), low ? 1 : 0, null); }
+      else if (I.rel.through && h.armT) buf(3, thruPw(I), 0, hinted(s, I, p, 2));
+      if (I.press.shoot) h.preShot = true;
+      else if (I.rel.shoot && h.preShot) { h.preShot = false; if (I.down.chip) h.zUsed = true; buf(4, clamp(I.holdT.shoot / 0.8, 0, 1), I.down.run ? 2 : I.down.chip || I.down.gkRush ? 1 : 0, null); }
+    }
+    const tk = (I.press.shoot && !mineIn) || I.press.tackle; // 태클: 슛 키 탭 또는 태클 키(Space)
     if (tk && !ball.owner && ball.z < 1.3 && d(p, ball) < 1.7 && p.kickCD <= 0 && !(ball.passTarget === p)) { p.lunge = 0.3; // 가로채기 런지: 지나가는 공에 발을 뻗는다
       const sp = Math.hypot(ball.vx, ball.vy), dx = ball.x - p.x, dy = ball.y - p.y, q = Math.hypot(dx, dy) || 1; p.vx = dx / q * p.speed * 1.2; p.vy = dy / q * p.speed * 1.2; p.dir = Math.atan2(dy, dx);
       if (s.rnd() < clamp(1.4 - sp / 30, 0.4, 1) * (0.9 + n(p.attrs.int) * 0.2)) { gain(s, p); sfx(s, 'tackle'); } else p.kickCD = 0.3;
@@ -263,7 +289,7 @@ export function humanUpdate(s: Sim, h: Human, dt: number) {
     if (I.press.pass && !inbound) switchPlayer(s, h); // 공에 가장 가까운 선수 (연달아 누르면 그다음 가까운 선수)
     else if ((I.press.switch && !inbound && ball.knock !== p) || (I.down.pass && I.holdT.pass > 0.32 && !h.swHold && !inbound)) { h.swHold = true; switchBack(s, h); } // Shift(또는 전환 길게): 공과 우리 골 사이를 지키는 뒤쪽 수비수
     if (I.down.run && I.holdT.run > 0.2) h.second = true; // Q를 누르고 있으면 둘째 수비수도 같이 압박
-    if (I.down.gkRush || (I.down.through && (!I.touch || I.holdT.through > 0.12))) h.gkRush = true;
+    if (!inbound && (I.down.gkRush || (I.down.through && (!I.touch || I.holdT.through > 0.12)))) h.gkRush = true; // 우리 공일 때 누르고 있는 스루 키는 미리 누른 패스다 (52차 — 키퍼를 내보내지 않는다)
     // 몸싸움: 공 가진 상대와 부딪히면 버튼 없이도 어깨 싸움으로 공을 뺏을 수 있다 (피지컬·밸런스 대결)
     const o = ball.owner;
     if (o && o.t !== p.t && !(o.role === 'GK' && !o.atFeet) && M.protect <= 0 && p.stun <= 0 && o.spin <= 0 && o.shield <= 0) {

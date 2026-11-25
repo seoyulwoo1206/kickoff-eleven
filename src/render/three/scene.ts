@@ -314,7 +314,7 @@ export class ThreeRenderer implements IRenderer {
     // 실제 킥과 같은 식(`passPreview`)이고 온라인 게스트는 자기 화면 기준 — 그 선수를 호스트에 같이 보낸다
     const ring = (x: number, y: number, r: number) => { ctx.beginPath(); for (let k = 0; k <= 18; k++) { const an = k / 18 * Math.PI * 2, a = this.toScreen(x + Math.cos(an) * r, y + Math.sin(an) * r, 0.03); if (k) ctx.lineTo(a.x, a.y); else ctx.moveTo(a.x, a.y); } };
     if (M.phase === 'live' && !M.so) for (const h of HU) {
-      const I = h ? AIM.of(h.t) : null, o = ball.owner; if (!h || !I || !o || o.t !== h.t || h.ctrl !== o || o.off || M.setTaker === o || M.throwIn === o || M.dead === o) { if (h) this.pv[h.t] = null; continue; }
+      const I = h ? AIM.of(h.t) : null, o = ball.owner ?? (h && h.ctrl && ball.passTarget === h.ctrl ? h.ctrl : null); /* 52차: 나한테 오는 패스 동안에도 — 미리 누른 패스(원터치)가 누구에게 갈지 */ if (!h || !I || !o || o.t !== h.t || h.ctrl !== o || o.off || M.setTaker === o || M.throwIn === o || M.dead === o) { if (h) this.pv[h.t] = null; continue; }
       let pv = this.pv[h.t]; if (!pv || pv.o !== o || ++pv.n >= 2) { const q = passPreview(sim, o, I); pv = this.pv[h.t] = { o, n: 0, short: q.short, thru: q.thru }; }
       const th = pv.thru && !pv.thru.cut ? pv.thru : null;
       if (th) { const hold = I.down.through, c = this.toScreen(th.x, th.y, 0.03); if (c.on) { ctx.globalAlpha = hold ? 0.95 : 0.5; ctx.strokeStyle = 'rgba(9,17,27,.55)'; ctx.lineWidth = hold ? 5 : 3.5; ring(th.x, th.y, 1.05); ctx.stroke(); ctx.strokeStyle = '#ffd166'; ctx.lineWidth = hold ? 3 : 1.8; ring(th.x, th.y, 1.05); ctx.stroke();

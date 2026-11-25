@@ -56,6 +56,7 @@ export function gkAI(s: Sim, k: Player, dt: number) {
       let pr = dy <= 0.6 ? BD : dy >= R ? 0.04 : (BD - 0.06 - (dy - 0.6) / (R - 0.6) * SL) * Math.min(1.12, skill / 0.7) * spF;
       if (dy < R) pr += (0.93 - pr) * tB * TB; // 닿는 범위 안이면, 볼 시간이 길수록 확실히 막는다 (닿지 않는 구석은 시간이 있어도 못 막는다)
       if (ball.isShot && ball.shotT < 0.3 && dy > 0.6) pr *= 0.6 + ball.shotT / 0.3 * 0.4; // 코앞에서 찬 공은 반응할 틈이 없다
+      if (k.stun > 0) pr *= 0.4; // 페이크 슛에 속아 이미 몸을 던졌다 (52차)
       k.dive = 0.5; k.diveDir = Math.sign(ball.y - k.y) || 1;
       if (M.spType === 'penalty' && M.protect > 0) { // 페널티: 한쪽을 찍고 몸을 던진다 (사람 팀 키퍼는 스틱 방향)
         const I = h ? s.INP[t] : null; const guess = I && Math.abs(I.my) > 0.3 ? Math.sign(I.my) : I ? 0 : (s.rnd() < 0.5 ? 1 : -1);

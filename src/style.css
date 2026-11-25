@@ -183,7 +183,8 @@ body.touch .help .ph{order:-1}
 .tb::before,.tb::after{position:absolute;left:0;right:0;text-align:center;font-size:9px;font-weight:800;line-height:1;opacity:0;white-space:nowrap;pointer-events:none;text-shadow:none}
 .tb.down::before,.tb.down::after{opacity:.9} /* 밀기 안내는 버튼을 누르고 있는 동안만 (평소엔 글자 하나만 — 깔끔하게) */
 .tbside{position:absolute;right:173px;bottom:36px;font-size:10px;font-weight:800;line-height:1;white-space:nowrap;opacity:0;pointer-events:none;color:#eef3ea;text-shadow:0 1px 3px rgba(0,0,0,.95),0 0 6px rgba(0,0,0,.6)}
-#bA.down + .tbside{opacity:.95}
+#bA.down + .tbside,#bB.down + .tbside{opacity:.95}
+#bBside{right:14px;bottom:180px} /* 슛 버튼 위 바깥: 옆으로 밀기 = 페이크 슛 (52차) */
 .tb::before{content:attr(data-up);top:8px}.tb::after{content:attr(data-dn);bottom:8px}
 .tb.alt{border-color:#fff;box-shadow:0 0 0 3px rgba(255,255,255,.35),0 0 16px -2px var(--ring,transparent);font-size:13px}.tb.alt::before,.tb.alt::after{content:''}
 
