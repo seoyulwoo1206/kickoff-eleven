@@ -2,6 +2,7 @@ import { W, H, CY } from './consts';
 import { clamp, wx, angApproach, angDiff } from './util';
 import type { Sim, Player } from './types';
 import { offsideLine } from './ball';
+import { TRAP_UP } from './quick';
 
 /* 움직임 모델: 정지에서 8.5m/s²로 가속(빠를수록 둔해짐), 감속은 11m/s². 회전 속도는 빠를수록 느려 전력질주 중엔 크게 돈다.
    가려는 방향과 현재 방향이 많이 다르면 속도를 줄여서 돈다 */
@@ -42,7 +43,7 @@ export function gapY(s: Sim, t: number, y0: number, line: number) {
 const FWU = 14; // 수비 중 가장 앞선 공격수가 공보다 앞에 서는 거리 (20이면 스크립트 조작 8경기 17:4·슈팅 68개로 너무 쉬웠다)
 export function targetFor(s: Sim, p: Player, att: boolean, def: boolean) {
   const { ball, M } = s;
-  const t = p.t, lb = wx(ball.x, t), tac = M.tac[t];
+  const t = p.t, lb = wx(ball.x, t), tac = M.tac[t], Q = M.qt[t]; // Q: 퀵 전술(53차)
   let x = p.bx + (lb - 52.5) * 0.62 + (att ? 10 : def ? -3 : 0) + (att && p.role === 'FW' ? 6 : 0) + tac.line * (p.role === 'DF' ? 6 : p.role === 'MF' ? 4 : 2); // 라인 높이
   if (att && !s.HU[t]) { // AI 팀의 공격 대형. 47차: 미드필더·수비수도 올라온다 — 전엔 미드필더가 공 4m 뒤·수비 넷이 공 35m 뒤(43m 선)에 남아, 공을 뺏는 순간 공보다 골 쪽에 상대가 8.1명이라 역습할 공간이 없었다
     const wideP = Math.abs(p.by - CY) > 14, same = (p.by - CY) * (ball.y - CY) > 0;
@@ -53,7 +54,7 @@ export function targetFor(s: Sim, p: Player, att: boolean, def: boolean) {
   let hy: number | null = null, overlap = false, fbUp = false; // 사람 팀 전용: y를 직접 정한 경우 / 풀백 오버래핑 중 / 풀백이 올라간 상태
   if (att && s.HU[t]) { // 사람 팀: 내가 공을 잡으면 동료들이 공을 따라 올라오고, 역할을 나눠 움직인다
     const line = offsideLine(s, t), wide = Math.abs(p.by - CY) > 14, bs = Math.sign(ball.y - CY) || 1, mine = ball.owner === p;
-    const boxPlay = lb > 76 && Math.abs(ball.y - CY) > 9; // 공이 상대 진영 측면 깊숙이: 크로스·컷백을 받을 자리로
+    const boxPlay = lb > (Q.box > 0 ? 66 : 76) && Math.abs(ball.y - CY) > 9; // '박스로'(53차)면 10m 일찍 // 공이 상대 진영 측면 깊숙이: 크로스·컷백을 받을 자리로
     if (p.role === 'FW') {
       const fws = s.team[t].filter(q => q.role === 'FW' && !q.off), idx = fws.indexOf(p), ph = Math.floor(M.tick / 270); // 4.5초마다 역할 교대
       const short = fws.length > 1 ? (idx + ph) % fws.length === 0 : ph % 3 === 0; // 한 명은 내려와 받아 주고, 나머지는 수비 뒤를 노린다
@@ -65,6 +66,7 @@ export function targetFor(s: Sim, p: Player, att: boolean, def: boolean) {
     } else if (p.role === 'MF') {
       const adv = p.bx >= 48 || wide;
       if (boxPlay && adv) { const far = (p.by - CY) * bs < 0; x = far ? 95 : 93; hy = far ? CY - bs * 8 : CY + bs * 1.5; } // 반대쪽 윙어는 파 포스트 뒤, 가운데는 컷백 자리
+      else if (boxPlay && Q.box > 0) { if (p.i % 2 === 0) { x = 96; hy = CY + bs * 1.2; } else { x = 91; hy = CY - bs * 3.5; } } // 박스로(53차): 수비형 미드필더 둘도 골문 앞·페널티 스폿으로 들어간다
       else if (boxPlay) { if (p.i % 2 === 0) { x = 92; hy = CY + bs * 1.5; } else { x = 84; hy = CY - bs * 3; } } // 수비형 둘 중 하나는 컷백 자리, 하나는 박스 앞 세컨드 볼
       else x = Math.max(x, adv ? lb + 5 : lb - 6); // 공격형·측면 미드필더는 공보다 앞, 수비형은 공 바로 뒤
     } else if (p.role === 'DF') {
@@ -93,7 +95,7 @@ export function targetFor(s: Sim, p: Player, att: boolean, def: boolean) {
   if (!att && p.role === 'MF' && Math.abs(p.by - CY) > 14) x = Math.max(x, Math.min(lb - 1, 56)); // 측면 미드필더는 풀백 줄까지 내려가지 않고 공 높이에서 버틴다 (뺏으면 바로 측면 출구)
   if (att && p.role === 'FW' && tac.style === 'counter') x += 4;
   if (!att && tac.style === 'possession' && p.role === 'MF') x -= 2;
-  if (!att && p.role === 'DF') { const hold = defLine(lb); x = Math.min(Math.max(x, hold + tac.line * 3), Math.max(lb - 3, 6)); } // 수비 라인은 공 거리에 맞춰 올라온다 (공보다는 항상 골 쪽)
+  if (!att && p.role === 'DF') { const tr = Q.trap > 0, hold = defLine(lb) + (tr ? TRAP_UP : 0); x = Math.min(Math.max(x, hold + tac.line * 3), Math.max(lb - (tr ? 1 : 3), 6)); } // 오프사이드 트랩(53차): 3초 동안 라인을 9m 끌어올린다 // 수비 라인은 공 거리에 맞춰 올라온다 (공보다는 항상 골 쪽)
   // 제자리에 서 있지 않고 조금씩 움직인다 (걷는 속도의 느린 흔들림 둘을 겹침)
   x += Math.sin(M.time * 1.15 + p.i * 1.7) * 1.3 + Math.sin(M.time * 0.41 + p.i * 0.9) * 0.9; y += Math.cos(M.time * 0.97 + p.i * 2.3) * 1.5 + Math.cos(M.time * 0.33 + p.i * 1.3) * 1.0;
   if (att || (!ball.owner && ball.lastTouch === t)) { const line = offsideLine(s, t); if (x > line - 0.8) x = line - 0.8; }

@@ -6,7 +6,7 @@ import type { Sim, Phase } from '../sim/types';
 
 export const r1 = (v: number) => Math.round(v * 10) / 10, r2 = (v: number) => Math.round(v * 100) / 100, r3 = (v: number) => Math.round(v * 1000) / 1000;
 export interface Snap { t: 's'; tm: number; P: number[]; B: number[]; M: [number, number, number, number, Phase, number, number]; S: number[]; H: ([number, number, number] | null)[]; sh: number; }
-export interface InputMsg { t: 'i'; x: number; y: number; d: number; p: number; r: number; tc: number; /** 게스트가 자기 화면에서 고른 받을 선수(선수 번호)와 종류(1 패스·2 스루) — 패스 키를 떼는 틱에만 (51차) */ g?: number; gk?: number; }
+export interface InputMsg { t: 'i'; x: number; y: number; d: number; p: number; r: number; tc: number; /** 게스트가 자기 화면에서 고른 받을 선수(선수 번호)와 종류(1 패스·2 스루) — 패스 키를 떼는 틱에만 (51차) */ g?: number; gk?: number; /** 숫자 키 1~4 (53차: 코너킥 작전·퀵 전술) — 누른 틱에만 */ c?: number; }
 export type StartCfg = { sel: [number, number]; len: number; fk: number; tempo: string; seed: number };
 export type NetMsg = Snap | InputMsg | { t: 'lobby'; sel: number; len?: number } | { t: 'start'; c: StartCfg } | { t: 'ev'; k: string; a?: unknown }
   | { t: 'pause' } | { t: 'resume' } | { t: 'quit' } | { t: 'pg'; ts: number } | { t: 'po'; ts: number };
@@ -53,6 +53,7 @@ export function netInterp(s: Sim, nb: SnapBuf, perf: number, onSlide: (x: number
 export function applyNetInput(I: Inp, m: InputMsg) {
   I.tx = +m.x || 0; I.ty = +m.y || 0; I.keys.clear(); I.touch = !!m.tc;
   ACTS.forEach((a, i) => { const b = 1 << i; const dn = !!(m.d & b); if (m.p & b) { I.press[a] = true; I.holdT[a] = 0; } if (m.r & b) I.rel[a] = true; I.down[a] = dn; });
+  if (typeof m.c === 'number' && m.c >= 1 && m.c <= 4) I.cmd = m.c | 0;
   if (typeof m.g === 'number' && m.g >= 0) { I.hintP = m.g | 0; I.hintK = m.gk === 2 ? 2 : 1; I.hintT = 0.25; }
 }
 /** 바뀐 게 있거나 6틱마다 입력을 보낸다. 반환값이 null이면 보낼 필요 없음 */
@@ -61,6 +62,6 @@ export function encodeInput(I: Inp, st: { lastIn: string; hb: number }, hint?: {
   ACTS.forEach((a, i) => { if (I.down[a]) dbits |= 1 << i; if (I.press[a]) pbits |= 1 << i; if (I.rel[a]) rbits |= 1 << i; });
   const x = r2(I.mx), y = r2(I.my), key = x + ',' + y + ',' + dbits + ',' + I.touch;
   st.hb++;
-  if (pbits || rbits || key !== st.lastIn || st.hb >= 6) { st.lastIn = key; st.hb = 0; const m: InputMsg = { t: 'i', x, y, d: dbits, p: pbits, r: rbits, tc: I.touch ? 1 : 0 }; if (hint) { m.g = hint.g; m.gk = hint.gk; } return m; }
+  if (pbits || rbits || I.cmd || key !== st.lastIn || st.hb >= 6) { st.lastIn = key; st.hb = 0; const m: InputMsg = { t: 'i', x, y, d: dbits, p: pbits, r: rbits, tc: I.touch ? 1 : 0 }; if (hint) { m.g = hint.g; m.gk = hint.gk; } if (I.cmd) m.c = I.cmd; return m; }
   return null;
 }

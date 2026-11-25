@@ -16,11 +16,12 @@ export interface Inp {
   touch: boolean;                  // 터치 조작 중 (패스 버튼 길게 = 롱패스 등)
   skill: { x: number; y: number } | null; // 폰 스와이프 개인기 방향 (gkRush press와 함께)
   aimA: number; aimT: number;      // 마지막 스틱 방향과 남은 기억 시간(51차): 스틱을 뗀 직후 0.25초 안에 누른 패스는 그 방향으로
+  cmd: number;                     // 숫자 키 1~4 (53차: 코너킥 작전·퀵 전술). 시뮬이 한 번 읽고 0으로
   hintP: number; hintK: number; hintT: number; // 온라인 게스트가 자기 화면에서 고른 받을 선수(선수 번호·1 패스/2 스루·남은 시간). 없으면 -1
 }
 const rec = <T,>(v: T) => Object.fromEntries(ACTS.map(a => [a, v])) as Record<Act, T>;
 export function newInp(): Inp {
-  return { mx: 0, my: 0, keys: new Set(), tx: 0, ty: 0, press: rec(false), down: rec(false), rel: rec(false), holdT: rec(0), touch: false, skill: null, aimA: 0, aimT: 0, hintP: -1, hintK: 0, hintT: 0 };
+  return { mx: 0, my: 0, keys: new Set(), tx: 0, ty: 0, press: rec(false), down: rec(false), rel: rec(false), holdT: rec(0), touch: false, skill: null, aimA: 0, aimT: 0, cmd: 0, hintP: -1, hintK: 0, hintT: 0 };
 }
 export function isAct(k: string): k is Act { return (ACTS as readonly string[]).includes(k); }
 export function keyDown(I: Inp, k: Act | Dir, repeat?: boolean) {

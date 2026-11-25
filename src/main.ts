@@ -5,7 +5,8 @@ import { STEP, TEMPO } from './sim/consts';
 import { createMatch, step } from './sim/match';
 import type { Sim, SimEvent } from './sim/types';
 import { newInp, readInput, clearPresses, dropKeys, type Inp } from './input/actions';
-import { installKeyboard } from './input/keyboard';
+import { installKeyboard, K1 } from './input/keyboard';
+import { QT_NAMES, CNR_NAMES } from './sim/quick';
 import { pollGamepads } from './input/gamepad';
 import { installTouch, touchGauge, applyTouchStyle } from './input/touch';
 import { openLineup, closeLineup } from './ui/lineup';
@@ -201,7 +202,7 @@ function resumeGame(remote?: boolean) { if (state !== 'paused') return; state = 
 function toMenu(remote?: boolean) {
   cmtStop();
   if (remote !== true && NET.ready && state !== 'menu') netSend({ t: 'quit' });
-  state = 'menu'; sim = null; $('skipHint').hidden = true; $('celeRow').hidden = true; crowdStop(); XT.all = false; xtSync();
+  state = 'menu'; sim = null; $('skipHint').hidden = true; $('celeRow').hidden = true; $('cmdRow').hidden = true; $('cmdBtn').hidden = true; $('qtInfo').hidden = true; cmdKey = ''; cmdOpen = false; crowdStop(); XT.all = false; xtSync();
   $('pause').hidden = true; $('result').hidden = true; $('hud').hidden = true; $('pauseBtn').hidden = true; $('touch').hidden = true; $('menu').hidden = false; hideBanner(); renderMenu();
 }
 function showPing() { const el = $('hPing'); if (NET.rtt >= 0) el.textContent = '핑 ' + NET.rtt + 'ms'; if (state === 'menu' && NET.ready) netStatus('연결됨' + (NET.rtt >= 0 ? ' · 핑 ' + NET.rtt + 'ms' : '') + (NET.role === 'host' ? ' · 팀을 고르고 킥오프를 누르세요.' : ' · 호스트가 킥오프하면 시작돼요.'), true); }
@@ -260,7 +261,7 @@ function guestHint(I: Inp): { g: number; gk: number } | null {
   if (!sim || !(I.rel.pass || I.rel.through)) return null; const p = sim.ball.owner, h = sim.HU[LOCAL()]; if (!p || !h || p.t !== LOCAL() || h.ctrl !== p || sim.M.phase !== 'live' || sim.M.setTaker === p || sim.M.throwIn === p) return null;
   const pv = passPreview(sim, p, I), m = I.rel.pass ? pv.short : pv.thru ? pv.thru.m : null; return m ? { g: sim.players.indexOf(m), gk: I.rel.pass ? 1 : 2 } : null;
 }
-window.setInterval(() => { if (NET.role === 'guest' && state === 'play' && sim) { readInput(INP[0], STEP); const m = encodeInput(INP[0], inSt, guestHint(INP[0])); if (m) netSend(m); clearPresses(INP[0]); } }, 1000 / 60);
+window.setInterval(() => { if (NET.role === 'guest' && state === 'play' && sim) { readInput(INP[0], STEP); const m = encodeInput(INP[0], inSt, guestHint(INP[0])); if (m) netSend(m); clearPresses(INP[0]); INP[0].cmd = 0; } }, 1000 / 60);
 
 /* ---------- 입력 ---------- */
 installKeyboard({ inp: INP, isPlaying: () => state === 'play', hasLocalP2: () => !!(sim && sim.M.twoP && !NET.role), togglePause: () => { if (state === 'play') pauseGame(); else if (state === 'paused') resumeGame(); }, cycleCamera, cycleView, cycleCamH, toggleXt: () => toggleXt() });
@@ -381,7 +382,29 @@ $('quitBtn').addEventListener('click', () => toMenu());
 // 해설: 음성(자막 포함) → 자막만 → 끄기
 // 세리머니 고르기 (FC 온라인 식): 골을 넣은 뒤 숫자 키 1~4 (폰은 골 뒤에 뜨는 버튼 `#celeRow`). 일시정지 버튼은 기본값(자동 → 두 팔 번쩍 → 비행기 → 주먹 불끈 → 귀에 손)
 const myGoalNow = () => state === 'play' && !!sim && sim.M.phase === 'goal' && !sim.M.so && !!sim.M.scorer && sim.M.scorer.t === CELE.team;
-window.addEventListener('keydown', e => { const m = /^(?:Digit|Numpad)([1-9])$/.exec(e.code); if (!m || e.repeat || !myGoalNow()) return; const n = +m[1] - 1; if (n < CELE_NAMES.length) CELE.live = n; });
+window.addEventListener('keydown', e => { const m = /^(?:Digit|Numpad)([0-9])$/.exec(e.code); if (!m || e.repeat) return; const dg = +m[1];
+  if (myGoalNow()) { const n = dg - 1; if (n >= 0 && n < CELE_NAMES.length) CELE.live = n; return; }
+  if (state !== 'play' || !sim || introT > 0 || K1[e.code]) return; // 53차: 경기 중 숫자 1~4 = 내 코너킥이면 작전, 그 밖엔 퀵 전술 (같은 키보드 2인의 P2는 7·8·9·0)
+  if (dg >= 1 && dg <= 4) sendCmd(0, dg); else if (sim.M.twoP && !NET.role && (dg >= 7 || dg === 0)) sendCmd(1, dg === 0 ? 4 : dg - 6); });
+/** 숫자 키 1~4를 시뮬에 넣는다 (`Inp.cmd` — `step`이 읽고 지운다, 게스트는 입력 메시지로 호스트에 간다) */
+function sendCmd(i: number, n: number) { if (state === 'play' && sim && introT <= 0) INP[i].cmd = n; }
+// 작전 버튼 줄 `#cmdRow`: 내 코너킥을 차기 전엔 늘 보이고(코너킥 작전), 폰은 `#cmdBtn`(작전)으로 열면 퀵 전술. 진행 중인 퀵 전술은 `#qtInfo`에 남은 초와 함께
+let cmdOpen = false, cmdKey = '';
+$('cmdRow').addEventListener('pointerdown', e => { const b = (e.target as HTMLElement).closest<HTMLElement>('.cb'); if (!b) return; e.preventDefault(); sendCmd(0, +b.dataset.i! + 1); cmdOpen = false; });
+$('cmdBtn').addEventListener('pointerdown', e => { e.preventDefault(); cmdOpen = !cmdOpen; });
+function cmdRow(s: Sim) {
+  const row = $('cmdRow'), btn = $('cmdBtn'), info = $('qtInfo'), t = LOCAL(), M = s.M, b = s.ball, mine = state === 'play' && introT <= 0 && !!s.HU[t] && !M.so && M.phase !== 'goal' && M.phase !== 'full' && M.phase !== 'halftime';
+  // 내 코너킥인가: 호스트·혼자 할 땐 시뮬 상태, 게스트는 스냅샷뿐이라 공이 내 선수 발밑에서 깃발 자리에 서 있는지로 본다
+  const o = b.owner, corner = mine && (NET.role === 'guest' ? !!o && o.t === t && (b.x < 1.2 || b.x > 103.8) && (b.y < 1.2 || b.y > 66.8) && Math.hypot(b.vx, b.vy) < 0.5 : !!M.dead && M.dead.t === t && M.spType === 'corner' && M.setTaker === M.dead);
+  if (!mine) cmdOpen = false;
+  const q = M.qt[t], show = corner || (mine && cmdOpen), key = !show ? '' : corner ? 'c' + M.cnr[t] : 'q' + (q.press > 0 ? 1 : 0) + (q.trap > 0 ? 1 : 0) + (q.fwd > 0 ? 1 : 0) + (q.box > 0 ? 1 : 0) + (q.trapCD > 0 ? 1 : 0);
+  if (key !== cmdKey) { cmdKey = key; row.hidden = !show;
+    if (show) { const on = corner ? [1, 2, 3, 4].map(n => M.cnr[t] === n) : [q.press > 0, q.trap > 0, q.fwd > 0, q.box > 0], names = corner ? CNR_NAMES : QT_NAMES;
+      row.innerHTML = `<span class="ct">${corner ? '코너킥 작전' : '퀵 전술'}</span>` + names.map((n, i) => `<button class="cb${on[i] ? ' on' : ''}${!corner && i === 1 && q.trapCD > 0 && q.trap <= 0 ? ' off' : ''}" data-i="${i}"><b>${i + 1}</b>${n}</button>`).join(''); } }
+  const bs = mine && isTouch && !corner; if (btn.hidden === bs) btn.hidden = !bs; btn.classList.toggle('on', cmdOpen);
+  const act = mine && NET.role !== 'guest' ? [q.press > 0 ? `압박 ${Math.ceil(q.press)}` : '', q.trap > 0 ? '트랩' : '', q.fwd > 0 ? `공격수+ ${Math.ceil(q.fwd)}` : '', q.box > 0 ? `박스로 ${Math.ceil(q.box)}` : ''].filter(Boolean).join(' · ') : '';
+  if (info.textContent !== act) { info.textContent = act; info.hidden = !act; }
+}
 $('celeRow').innerHTML = CELE_NAMES.map((n, i) => `<button class="cb" data-i="${i}"><b>${i + 1}</b>${n}</button>`).join('');
 $('celeRow').addEventListener('pointerdown', e => { const b = (e.target as HTMLElement).closest<HTMLElement>('.cb'); if (b && myGoalNow()) { e.preventDefault(); CELE.live = +b.dataset.i!; } });
 const celeLabel = () => { $('celeBtn').textContent = '세리머니: ' + (opts.cele < 0 ? '자동' : CELE_NAMES[opts.cele]); };
@@ -511,7 +534,7 @@ function frame(ts: number) {
     if (NET.role === 'guest') netInterpNow();
     else if (NET.role !== 'host' && introT <= 0) runSteps(dt);
     if (sim) { CELE.team = sim.HU[LOCAL()] ? LOCAL() : -1; if (sim.M.phase !== 'goal') CELE.live = -1;
-      updateHud(sim, LOCAL()); halftimePanel(sim); gauges(sim); skipHint(sim); cmtTick(state === 'play' && introT <= 0 && sim.M.phase !== 'full'); }
+      updateHud(sim, LOCAL()); halftimePanel(sim); gauges(sim); skipHint(sim); cmdRow(sim); cmtTick(state === 'play' && introT <= 0 && sim.M.phase !== 'full'); }
   } else if (state === 'paused' && NET.role === 'guest' && sim) netInterpNow();
   netPing(perf);
   R.render(sim, dt, perf, state === 'paused');

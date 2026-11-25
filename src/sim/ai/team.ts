@@ -2,10 +2,11 @@ import { W, H, CY } from '../consts';
 import { clamp, d, wx } from '../util';
 import { DIFF } from '../../data/teams';
 import type { Sim, Player } from '../types';
-import { gkHands, slideCheck, intercept, interceptT, offsideLine } from '../ball';
+import { gkHands, slideCheck, intercept, interceptT, offsideLine, landSpot } from '../ball';
 import { steer, chase, moveTo, targetFor, gapY, defLine } from '../move';
 import { tryTackle, aiCarrier } from './carrier';
 import { gkAI } from './gk';
+import { TRAP_UP } from '../quick';
 const LANE_R = 1.8, LANE_T = 0.7; // 길목 끊기: 패스가 이 거리(m) 안을, 이 시간(초) 안에 지나가면 나간다
 
 /* 팀 AI: 공 없을 땐 가장 빨리 닿는 선수가 추격. 수비 땐 가장 가까운 AI가 (사람과 별개로) 항상 압박, 둘째는 골 쪽 커버,
@@ -31,7 +32,8 @@ function jockey(s: Sim, p: Player, c: Player, v: number) {
 }
 export function teamAI(s: Sim, t: number, dt: number) {
   const { ball, M, team, HU } = s;
-  const D = DIFF[M.diff], own = ball.owner, h = HU[t];
+  const D = DIFF[M.diff], own = ball.owner, h = HU[t], Q = M.qt[t]; // Q: 퀵 전술(53차)
+  let planHold: Player | null = null; // 코너킥 작전의 주 목표 선수: 조준점이 그 선수의 뛸 자리에 있으면 차기 전엔 시작 자리에서 기다린다
   // 노크온(질주 드리블로 공을 2~3m 앞에 차 놓은 상태)은 공 주인이 없지만 공 가진 것처럼 본다 — 안 그러면 질주 드리블에 수비 대형(커버·마크)이 풀린다
   const knocker = !own && ball.knock && !ball.knock.off && d(ball.knock, ball) < 2.5 ? ball.knock : null, carrier = own ?? knocker;
   // att: 우리 공격 중 — 47차부터 사람 팀은 우리 편에게 가는 패스가 굴러가는 동안도 공격으로 본다. 전엔 공 주인이 없는 그 0.5~1초마다 대형이 중립 자리(10m 넘게 뒤)로 돌아가려 해서, 패스할 때마다 동료들이 멈칫했고 AI 팀은 끝내 올라오지 못했다
@@ -52,7 +54,7 @@ export function teamAI(s: Sim, t: number, dt: number) {
   // 마크: 공 없는 상대를 위협 순(우리 골에 가까운 순)으로, 가까운 수비·미드필더가 골 쪽에서 막는다
   const markUp = () => { const g = wx(0, t), threats = team[1 - t].filter(o => o !== carrier && o.role !== 'GK' && !o.off).sort((a, b) => Math.abs(a.x - g) - Math.abs(b.x - g)).slice(0, 6);
     const free = outs.filter(p => p !== chaser && p !== cover && p.role !== 'FW');
-    for (const o of threats) { let best: Player | null = null, bd = tac.press === 2 ? 18 : 14; for (const p of free) { if (marks.has(p)) continue; const q = d(p, o); if (q < bd) { bd = q; best = p; } } if (best) marks.set(best, o); } };
+    for (const o of threats) { let best: Player | null = null, bd = tac.press === 2 || Q.press > 0 ? 18 : 14; for (const p of free) { if (marks.has(p)) continue; const q = d(p, o); if (q < bd) { bd = q; best = p; } } if (best) marks.set(best, o); } };
   // (47차에 '상대 패스가 굴러가는 동안도 마크 유지'를 시험했으나 뺐다: 벤치 숏패스 수신 79 → 60%, AI끼리 골 1.85 → 1.23)
   if (!carrier) {
     if (ball.passTarget && ball.passTarget.t === t) chaser = ball.passTarget;
@@ -78,7 +80,7 @@ export function teamAI(s: Sim, t: number, dt: number) {
   } else if (att && carrier && carrier.role !== 'GK') {
     const fx = t === 0 ? 1 : -1, c0 = carrier;
     if (h) { // 사람 팀: 가까운 미드필더 둘이 안쪽 앞(원투 받을 자리)과 뒤(되돌려 받을 자리)에 선다. 공격수는 자기 역할대로, 박스 플레이 땐 각자 박스 자리로
-      const bs = Math.sign(c0.y - CY) || 1, box = wx(c0.x, t) > 76 && Math.abs(c0.y - CY) > 9;
+      const bs = Math.sign(c0.y - CY) || 1, box = wx(c0.x, t) > (Q.box > 0 ? 66 : 76) && Math.abs(c0.y - CY) > 9;
       if (!box) { const ms = outs.filter(p => p !== c0 && p.role === 'MF' && p.runT <= 0 && Math.abs(p.by - CY) <= 14).sort((a, b) => d(a, c0) - d(b, c0)); // 가운데 미드필더만 (윙어는 폭을 지킨다)
         if (ms[0]) supports.set(ms[0], { x: c0.x + fx * 6, y: clamp(c0.y - bs * 8, 4, H - 4) });
         if (ms[1]) supports.set(ms[1], { x: c0.x - fx * 7, y: clamp(c0.y - bs * 5, 4, H - 4) }); }
@@ -90,7 +92,8 @@ export function teamAI(s: Sim, t: number, dt: number) {
     if (M.setTaker && M.setTaker.t === t && M.setAim && M.dead === M.setTaker) { // 세트피스 조준: 조준점에 가장 가까운 동료 하나가 그 자리로 들어가 받는다 (3m 넘게 더 가까운 동료가 생기면 바뀜). 골문을 조준(직접 슛)하면 없음
       const goalAim = wx(M.aimX, t) > W - 6 && Math.abs(M.aimY - CY) < 5.7; let best: Player | null = null, bd = 20;
       if (!goalAim) for (const p of outs) { if (p === M.setTaker) continue; const q = Math.hypot(p.x - M.aimX, p.y - M.aimY) - (p === M.aimMan ? 3 : 0); if (q < bd) { bd = q; best = p; } }
-      M.aimMan = best;
+      const cm = M.cnr[t] > 0 && M.cnr[t] < 5 ? M.cnrMain[t] : null; // 코너킥 작전(53차): 조준점이 작전 자리(주 목표 선수가 뛰어들 자리 5m 안)에 있으면 그 선수가 받는다
+      if (cm && !cm.off && cm.spT !== 0 && Math.hypot(cm.spX - M.aimX, cm.spY - M.aimY) < 5) { M.aimMan = cm; planHold = cm; } else M.aimMan = best;
     }
     if (M.throwIn && M.throwIn.t === t) { // 스로인: 가까운 둘이 받으러 온다 (터치라인 따라 앞 7m, 안쪽 뒤 10m) — 없으면 30m 안에 던질 곳이 없을 때가 있었다
       const th = M.throwIn, sy = th.y < CY ? 1 : -1, near = outs.filter(p => p !== th).sort((a, b) => d(a, th) - d(b, th)).slice(0, 2); supports.clear();
@@ -132,27 +135,28 @@ export function teamAI(s: Sim, t: number, dt: number) {
     const L = Math.sqrt(L2), nx = ay / L, ny = -ax / L; // 선로의 수직 방향 (cr > 0 쪽)
     return { x: clamp(x - nx * sideSum * 3.5, 1, W - 1), y: clamp(y - ny * sideSum * 3.5, 2, H - 2) };
   };
-  const pressing = !!(h && h.pressT > 0); // Q 압박 지원: 추격자는 더 빠르고 세게, 커버도 같이 붙는다
+  const pressing = !!(h && h.pressT > 0) || Q.press > 0; // 팀 압박(53차, 퀵 전술): 20초 동안 같은 효과 + 마크 간격 좁힘 // Q 압박 지원: 추격자는 더 빠르고 세게, 커버도 같이 붙는다
   const pressMul = (tac.press === 0 ? 0.88 : tac.press === 2 ? 1.12 : 1) * (pressing ? 1.15 : 1), tk = (h ? 0.4 : D.tackle) * (tac.press === 2 ? 1.15 : tac.press === 0 ? 0.85 : 1) * (pressing ? 1.3 : 1), press = (h ? 1.18 : D.press) * pressMul;
   // 압박 트리거: 공 가진 상대가 자기 골을 보고 있거나 터치가 커졌을 때 더 세게 달라붙는다
   const trig = carrier && carrier.t !== t && (carrier.kickCD > 0 || Math.cos(carrier.dir) * (t === 0 ? -1 : 1) > 0.3) ? 1.12 : 1;
   // 상대의 낮은 패스가 굴러가는 중(반응 지연 뒤): 속도² (아니면 0). 전엔 쫓는 선수 한 명과 받는 선수의 마커만 움직여, 길목 옆에 선 나머지는 공이 지나가는 걸 보고만 있었다
   const lane = h && !ball.owner && ball.kicker && ball.kicker.t !== t && !ball.isShot && ball.z < 0.8 && M.phase === 'live' && !M.dead && M.react[t] <= 0 ? ((v2: number) => v2 > 64 ? v2 : 0)(ball.vx * ball.vx + ball.vy * ball.vy) : 0;
   // 49차 박스 안 경합: 상대가 띄운 공이 받는 선수에게 날아오는 중이면, 그 선수에게 가장 가까운(7m 안) 우리 필드 선수 하나가 골 쪽 0.5m로 붙어 같이 뜬다 (`ballControl`의 공중볼 경합·헤딩 방해는 1.3m·2.2m 안이라야 걸린다 — 전엔 자기 자리에 서서 구경해 코너킥의 절반이 자유 헤딩이었다)
-  let air: Player | null = null; const airT = ball.passTarget;
-  if (!ball.owner && airT && airT.t !== t && !ball.isShot && (ball.z > 1.5 || ball.vz > 3) && M.phase === 'live') { let bd = 7; for (const p of team[t]) { if (p.off || p.role === 'GK' || p.stun > 0 || p.slide > 0 || (h && p === h.ctrl)) continue; const q = d(p, airT); if (q < bd) { bd = q; air = p; } } }
+  let air: Player | null = null, airX = 0, airY = 0; const airT = ball.passTarget;
+  if (!ball.owner && airT && airT.t !== t && !ball.isShot && (ball.z > 1.5 || ball.vz > 3) && M.phase === 'live') { const ls = ball.setp ? landSpot(ball) : null; airX = ls ? ls.hx : airT.x; airY = ls ? ls.hy : airT.y; /* 53차: 세트피스로 띄운 공은 받는 선수가 지금 선 자리가 아니라 머리 높이로 내려올 자리에서 맞는다 — 뛰어드는 선수(코너킥 작전)를 뒤쫓기만 하면 늘 자유 헤딩이었다 */ let bd = 7; for (const p of team[t]) { if (p.off || p.role === 'GK' || p.stun > 0 || p.slide > 0 || (h && p === h.ctrl)) continue; const q = Math.hypot(p.x - airX, p.y - airY); if (q < bd) { bd = q; air = p; } } }
   for (const p of team[t]) {
     if (p.off) continue;
     if (h && p === h.ctrl) continue;
     if (p.slide > 0) { slideCheck(s, p); continue; }
     if (p.role === 'GK') { gkAI(s, p, dt); continue; }
     if (own === p) { aiCarrier(s, p, dt); continue; }
-    if (M.spots && M.dead && p !== M.aimMan) { const sp = M.spots.get(p); if (sp) { moveTo(p, sp.x + Math.sin(M.time * 1.3 + p.i * 2.1) * 0.5, sp.y + Math.cos(M.time * 1.1 + p.i * 1.4) * 0.5, 0.8, dt); continue; } } // 골킥: 찰 때까지 배치 자리
+    if (p.spT > 0 && p !== ball.passTarget && !(own && own.t !== t)) { moveTo(p, p.spX, p.spY, 1.25, dt); continue; } // 코너킥 작전(53차): 차는 순간 약속된 자리로 뛴다 (받는 선수는 공으로)
+    if (M.spots && M.dead && (p !== M.aimMan || p === planHold)) { const sp = M.spots.get(p); if (sp) { moveTo(p, sp.x + Math.sin(M.time * 1.3 + p.i * 2.1) * 0.5, sp.y + Math.cos(M.time * 1.1 + p.i * 1.4) * 0.5, 0.8, dt); continue; } } // 골킥: 찰 때까지 배치 자리
     if (p.callT > 0 && own && own.t === t && own !== p) { // 동료 호출(49차): 공 가진 동료 쪽으로 6.5m 앞까지 와서 받는다 (패스 길에 상대가 서 있으면 옆으로 비킨다)
       const dx = p.x - own.x, dy = p.y - own.y, q = Math.hypot(dx, dy) || 1, R = 6.5, g = openLane(own.x + dx / q * R, own.y + dy / q * R);
       moveTo(p, clamp(g.x, 1, W - 1), clamp(g.y, 1.5, H - 1.5), q > R + 2 ? 1.2 : 0.9, dt); continue;
     }
-    if (p === air && airT) { moveTo(p, airT.x + (t === 0 ? -0.5 : 0.5), airT.y, 1.15, dt); continue; }
+    if (p === air && airT) { moveTo(p, airX + (t === 0 ? -0.5 : 0.5), airY, 1.15, dt); continue; }
     if (dd && M.wall.includes(p)) { steer(p, 0, 0, dt); p.dir = Math.atan2(M.setY - p.y, M.setX - p.x); continue; } // 벽은 찰 때까지 서 있는다
     if (p.runT > 0 && (att || (!own && ball.lastTouch === t))) { // 침투 지시: 지시 방향으로 질주하되 오프사이드 라인 안에서
       const line = offsideLine(s, t); let tx = p.x + Math.cos(p.runDir) * 12, ty = clamp(p.y + Math.sin(p.runDir) * 12, 2, H - 2);
@@ -179,9 +183,9 @@ export function teamAI(s: Sim, t: number, dt: number) {
     const mk = marks.get(p);
     if (mk) {
       const g = wx(0, t), ux = g - mk.x, uy = CY - mk.y, L = Math.hypot(ux, uy) || 1, tg = targetFor(s, p, att || (ownPass && (h ? p.role === 'FW' : p.role !== 'FW')), def);
-      const md = tac.press === 2 ? 1.6 : tac.press === 0 ? 2.8 : 2.2, mx = mk.x + ux / L * md, my = mk.y + uy / L * md;
+      const md = tac.press === 2 || Q.press > 0 ? 1.6 : tac.press === 0 ? 2.8 : 2.2, mx = mk.x + ux / L * md, my = mk.y + uy / L * md;
       let px = mx * 0.75 + tg.x * 0.25 + Math.sin(M.time * 1.3 + p.i * 2.1) * 0.6; const py = my * 0.75 + tg.y * 0.25 + Math.cos(M.time * 1.1 + p.i * 1.4) * 0.6;
-      if (p.role === 'DF' && own) { const hold = defLine(wx(ball.x, t)) + tac.line * 3 - 1.5; if (wx(px, t) < hold) px = wx(Math.min(hold, Math.max(wx(ball.x, t) - 3, 6)), t); } // 마크를 따라가도 수비 라인 밑으로는 내려가지 않는다 (공이 발에 있는 동안. 패스가 뜨면 따라 내려감)
+      if (p.role === 'DF' && (own || Q.trap > 0)) { const hold = defLine(wx(ball.x, t)) + tac.line * 3 - 1.5 + (Q.trap > 0 ? TRAP_UP : 0); /* 오프사이드 트랩(53차): 마크를 버리고 라인을 끌어올린다 */ if (wx(px, t) < hold) px = wx(Math.min(hold, Math.max(wx(ball.x, t) - 3, 6)), t); } // 마크를 따라가도 수비 라인 밑으로는 내려가지 않는다 (공이 발에 있는 동안. 패스가 뜨면 따라 내려감)
       { const k = keepOff(px, py); moveTo(p, k.x, k.y, 1.05, dt); }
       if (ball.passTarget === mk && !ball.owner) { // 마크 상대에게 오는 패스: 받기 전에 닿을 수 있으면 선로로 나가 끊는다
         const bs = Math.hypot(ball.vx, ball.vy) || 1, tm = d(ball, mk) / bs, ti = interceptT(s, p);

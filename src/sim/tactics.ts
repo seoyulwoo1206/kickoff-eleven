@@ -2,6 +2,7 @@
 import { FORMATIONS, type Slot } from '../data/formations';
 import type { Pos } from '../data/squad';
 import type { Player, Sim } from './types';
+import { quickReset } from './quick';
 
 export type Style = 'balanced' | 'possession' | 'counter' | 'wide';
 export interface Tactics { form: string; line: -1 | 0 | 1; style: Style; press: 0 | 1 | 2; }
@@ -19,6 +20,7 @@ const SAME: Record<Pos, Pos[]> = {
 /** 포메이션을 바꾸면 현재 11명을 새 슬롯에 재배치 (자연 포지션이 맞는 선수부터). bx/by/role만 바뀐다 */
 export function applyFormation(s: Sim, t: number, form: string) {
   const slots: Slot[] = FORMATIONS[form]; if (!slots) return;
+  quickReset(s, t); // 퀵 전술로 올라간 센터백은 수비수로 되돌린 뒤 다시 배치
   const list = s.team[t].filter(p => !p.off), used = new Set<Player>();
   const pick = (slot: Slot): Player | undefined => {
     if (slot.pos === 'GK') return list.find(p => p.role === 'GK' && !used.has(p));

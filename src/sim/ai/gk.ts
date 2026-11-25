@@ -8,6 +8,9 @@ import { steer, moveTo } from '../move';
 import { bestAIPass } from './carrier';
 
 const RB = 2.05, RT = 0.9, SL = 0.65, TB = 0.45, BD = 0.95; // 선방: 기본 다이빙 한계(m), 시간 여유로 늘어나는 한계, 한계까지의 확률 하락폭, 볼 시간 가산, 몸 정면 확률
+const GK_BLOCK = 0.35;
+/** 53차: 세트피스로 띄운 공(못 나가는 공)은 떨어질 자리 쪽으로 이만큼만 옮긴다(흐르는 경기의 크로스는 0.5). 0.5면 니어 포스트 7m로 올린 코너킥에 키퍼가 니어 쪽 3m에 서 있어, 반대쪽 구석으로 돌린 헤딩의 34%가 들어갔다 */
+const GK_SETP = 0.3;
 export function gkAI(s: Sim, k: Player, dt: number) {
   const { ball, M, team, HU } = s;
   const t = k.t, gx = t === 0 ? 0 : W, sg = t === 0 ? 1 : -1, own = ball.owner;
@@ -21,6 +24,7 @@ export function gkAI(s: Sim, k: Player, dt: number) {
   }
   const lb = wx(ball.x, t), lk = wx(k.x, t), dG = Math.hypot(ball.x - gx, ball.y - CY);
   let tx = 1.3 + Math.max(0, (32 - dG) / 32) * (3.0 + n(G.pos) * 1.2), ty = clamp(CY + (ball.y - CY) * (0.3 + n(G.pos) * 0.08), CY - 3.3, CY + 3.3), f = 0.8 + n(G.pos) * 0.15;
+  if (M.dead && M.dead.t !== t && M.spType === 'corner') ty = CY + (M.setY < CY ? -0.8 : 0.8); // 53차: 상대 코너킥을 기다릴 땐 골문 가운데 쪽(배치 자리)에 선다 — 전엔 깃발 쪽 포스트(3.3m)에 붙어 섰다
   const h = HU[t];
   if (h && h.gkRush && lb < 30) { // 골키퍼 돌진
     moveTo(k, ball.x, ball.y, 1.3, dt);
@@ -36,14 +40,15 @@ export function gkAI(s: Sim, k: Player, dt: number) {
     }
     if (!ball.isShot && (ball.z > 1.6 || ball.vz > 3) && lb < 45) { // 공중볼 (전엔 선에 서서 구경했다): ① 손 닿는 높이(2.7m)로 내려오는 자리에 공보다 먼저 가 있을 수 있으면 나가서 잡는다 — 골라인 5.5m 안은 늘, 11m 안은 그 자리 2.2m 안으로 올 상대가 없을 때만. ② 박스 안에 떨어질 공은 상대보다 먼저 닿으면 주우러 나간다
       const oppT = (x: number, y: number, r: number) => { let b = 1e9; for (const o of team[1 - t]) if (!o.off) b = Math.min(b, Math.max(0, Math.hypot(o.x - x, o.y - y) - r) / (o.speed * 1.15)); return b; };
+      let blk = 0; if (ball.setp && M.gkBlock) { for (const o of team[1 - t]) if (!o.off && d(o, k) < 2.0) blk += GK_BLOCK; blk = Math.min(blk, GK_BLOCK * 3); } // 53차 코너킥 작전 '키퍼 앞': 키퍼 곁(2m 안)에 붙어 선 상대가 나오는 길을 막는다 (한 명당 이 시간만큼 늦는다). 막히면 거의 못 나와 골문 5m 헤딩의 21%가 들어가므로, 작전을 걸 때 절반은 키퍼가 뿌리친 것(`M.gkBlock` false)으로 정한다
       let up = ball.z > 2.7, first = true, went = false, land: { x: number; y: number } | null = null;
       for (const q of s.pred) { if (q.z > 2.7) { up = true; continue; } if (!up) continue;
-        const lq = wx(q.x, t), cy = Math.abs(q.y - CY), kt = Math.max(0, Math.hypot(q.x - k.x, q.y - k.y) - 1.0) / (k.speed * 1.05) + 0.12;
+        const lq = wx(q.x, t), cy = Math.abs(q.y - CY), kt = Math.max(0, Math.hypot(q.x - k.x, q.y - k.y) - 1.0) / (k.speed * 1.05) + 0.12 + blk;
         if (first) { first = false; land = q; if (q.z > 0.7 && lq > -0.3 && cy < 9 && kt < q.t && (lq < 5.5 || (lq < 11 && oppT(q.x, q.y, 2.2) > q.t))) { tx = lq; ty = q.y; f = 1.35; went = true; break; } }
         if (q.z < 0.4) { if (lq > 0.5 && lq < 15.5 && cy < 18 && kt < oppT(q.x, q.y, 1) - 0.25) { tx = lq; ty = q.y; f = 1.3; went = true; } break; }
       }
       // 49차: 못 나가는 크로스는 떨어질 자리 쪽으로 골라인 가까이에서 자리를 옮긴다 — 전엔 날아오는 공(코너 깃발 쪽)을 따라 니어 포스트 쪽 3.5m 앞에 서 있어, 파 포스트로 넘어간 공의 헤딩은 빈 골문이었다
-      if (!went && land && wx(land.x, t) < 16.5 && Math.abs(land.y - CY) < 16) { tx = Math.min(tx, 1.6); ty = clamp(CY + (land.y - CY) * 0.5, CY - 3.3, CY + 3.3); f = Math.max(f, 1.15); }
+      if (!went && land && wx(land.x, t) < 16.5 && Math.abs(land.y - CY) < 16) { tx = Math.min(tx, 1.6); ty = clamp(CY + (land.y - CY) * (ball.setp ? GK_SETP : 0.5), CY - 3.3, CY + 3.3); f = Math.max(f, 1.15); }
     }
     if (ball.kicker && ball.kicker.t !== t && ball.shot !== k.lastSave && vlx < -4 && lb <= lk + 0.5 && lb > lk - 1.8 && Math.abs(ball.y - k.y) < 2.9 && ball.z < 2.7) { // 선방 판정
       k.lastSave = ball.shot; const dy0 = Math.abs(ball.y - k.y), sp = Math.hypot(ball.vx, ball.vy), hi = ball.z > 1.6;

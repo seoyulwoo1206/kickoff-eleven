@@ -313,6 +313,20 @@ body.xto #result,body.xto #pause{justify-items:end}
 #celeRow .cb{display:flex;align-items:center;gap:5px;padding:7px 11px;border-radius:999px;border:1px solid rgba(238,243,234,.3);background:rgba(9,17,27,.72);color:var(--chalk);font-size:12px;font-weight:700;white-space:nowrap;touch-action:none}
 #celeRow .cb b{font-family:var(--f-num);font-weight:800;font-size:14px;color:var(--amber)}
 #celeRow .cb.on{border-color:var(--amber);background:rgba(255,182,39,.22)}
+/* 53차 작전 버튼 줄: 코너킥 작전(차기 전 늘)·퀵 전술(폰은 '작전' 버튼으로 연다). 진행 중인 퀵 전술은 점수판 아래 #qtInfo */
+#cmdRow{position:fixed;left:calc(var(--stx,0px) + var(--stw,100vw) / 2);transform:translateX(-50%);bottom:max(56px,calc(env(safe-area-inset-bottom,0px) + 56px));z-index:6;display:flex;align-items:center;gap:6px;max-width:96vw}
+#cmdRow .ct{font-size:11px;font-weight:800;letter-spacing:.04em;color:var(--chalk);opacity:.8;white-space:nowrap;text-shadow:0 1px 3px rgba(0,0,0,.7)}
+#cmdRow .cb{display:flex;align-items:center;gap:5px;padding:7px 11px;border-radius:999px;border:1px solid rgba(238,243,234,.3);background:rgba(9,17,27,.72);color:var(--chalk);font-size:12px;font-weight:700;white-space:nowrap;touch-action:none}
+#cmdRow .cb b{font-family:var(--f-num);font-weight:800;font-size:14px;color:var(--amber)}
+#cmdRow .cb.on{border-color:var(--amber);background:rgba(255,182,39,.22)}
+#cmdRow .cb.off{opacity:.45}
+#cmdBtn{position:fixed;top:calc(env(safe-area-inset-top,0px) + 6px);right:calc(max(12px,env(safe-area-inset-right,0px)) + 48px);z-index:5;height:40px;padding:0 11px;border-radius:8px;border:1px solid var(--rule);background:var(--panel);color:var(--chalk);font-size:12px;font-weight:700;touch-action:none}
+#xtBtn:not([hidden]) ~ #cmdBtn{right:calc(max(12px,env(safe-area-inset-right,0px)) + 112px)}
+#cmdBtn.on{background:var(--amber);color:var(--amber-ink);border-color:var(--amber)}
+#qtInfo{position:fixed;left:max(12px,env(safe-area-inset-left,0px));top:calc(env(safe-area-inset-top,0px) + 74px);z-index:5;padding:3px 10px;border-radius:999px;background:rgba(9,17,27,.72);border:1px solid var(--amber);color:#ffe7a8;font-size:12px;font-weight:700;white-space:nowrap}
+body.xtd #qtInfo{left:calc(var(--stx,12px) + 10px);top:calc(var(--sty,10px) + 74px)}
+@media (pointer:coarse){#cmdRow{bottom:auto;top:max(92px,calc(env(safe-area-inset-top,0px) + 92px));gap:4px}#cmdRow .cb{padding:6px 9px;font-size:11px}#cmdRow .ct{display:none}#qtInfo{top:calc(env(safe-area-inset-top,0px) + 52px);font-size:11px}}
+@media (pointer:coarse) and (orientation:portrait){#cmdRow{flex-wrap:wrap;justify-content:center}}
 @media (pointer:coarse){#skipHint{right:auto;left:50%;transform:translateX(-50%);bottom:max(8px,env(safe-area-inset-bottom,0px));font-size:11px}}
 #cmt.pundit{color:#cfe6ff}#cmt.pundit::before{content:'해설위원';color:var(--cyan)}
 #cmt::before{content:'캐스터';font-family:var(--f-num);font-weight:800;letter-spacing:.12em;font-size:11px;color:var(--amber);margin-right:8px}

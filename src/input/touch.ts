@@ -64,9 +64,9 @@ export function installTouch(I: Inp, onTouch: () => void, getOpts: () => TouchOp
     }); }
   // 스루 / 슬라이딩 (수비 땐 롱패스 키 = 슬라이딩). 공격 땐 떼는 순간 스루패스 — 누른 채 위로 밀면 스루 대신 침투 요청(Q 탭)이라 누르는 순간엔 못 찬다
   { let k: Act | null = null, run = false, low = false;
-    bindBtn($('bD'), () => { run = false; low = false; k = getOpts().attack ? 'through' : 'lob'; keyDown(I, k); }, () => { if (k) keyUp(I, k); k = null; if (low) { low = false; window.setTimeout(() => keyCancel(I, 'chip'), 90); } }, dir => {
+    bindBtn($('bD'), () => { run = false; low = false; k = getOpts().attack ? 'through' : 'lob'; keyDown(I, k); }, () => { if (run) keyUp(I, 'run'); /* 53차: 침투 요청은 버튼을 뗄 때까지 Q를 누른 것 — 0.25초 넘게 누르다 떼면 그때 조이스틱 쪽으로 뛴다 */ if (k) keyUp(I, k); k = null; if (low) { low = false; window.setTimeout(() => keyCancel(I, 'chip'), 90); } }, dir => {
       if (k === 'through' && !run && dir === 'd') { const held = I.holdT.through; keyCancel(I, 'through'); keyHold(I, 'chip'); keyDown(I, 'lob'); I.holdT.lob = held; k = 'lob'; low = true; return '낮게'; } // 아래로(52차): 땅볼 크로스·낮은 롱패스 (감아차기 키를 누른 채 롱패스) — 떼는 순간 나간다
-      if (k !== 'through' || run || dir !== 'u') return; run = true; keyCancel(I, 'through'); k = null; tap('run'); return '침투'; // 51차: 스루패스는 누른 시간이 세기(떼는 순간 나간다) — 위로 밀면 스루를 거두고 침투 요청
+      if (k !== 'through' || run || dir !== 'u') return; run = true; keyCancel(I, 'through'); k = null; keyDown(I, 'run'); return '침투'; // 51차: 스루패스는 누른 시간이 세기(떼는 순간 나간다) — 위로 밀면 스루를 거두고 침투 요청
     }); }
   // 질주: 누른 채 밀면 — 공격: 개인기(달리는 쪽이면 치달), 수비: ↑ 키퍼 나오기(누르는 동안)·그 밖 동료 압박
   { let gk = false;

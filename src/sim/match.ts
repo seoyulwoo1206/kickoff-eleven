@@ -5,6 +5,7 @@ import { DIFF, FORM, NUMS, kitFor, kitsClash } from '../data/teams';
 import { lookOf } from '../data/looks';
 import { lineupOf, slotsOf, overall, detailOf } from '../data/squads';
 import { defaultTactics } from './tactics';
+import { newQuick, command, quickTick, aiCornerPlan } from './quick';
 import { updateAdvantage, addedMinutes, buildWall, cornerSetup, goalKickSetup, alive } from './rules';
 import { startShootout, soRecord, soUpdate } from './shootout';
 import type { PlayerDef } from '../data/squad';
@@ -18,7 +19,7 @@ import { autoCursor, humanUpdate, oursBall } from './human';
 import { teamAI } from './ai/team';
 
 function makeHuman(t: number, c: HumanCfg | null): Human | null {
-  return c ? { t, ctrl: null, chiT: 0, chiA: NaN, lock: 0, charge: 0, charging: false, second: false, gkRush: false, pressT: 0, lostT: 0, swSeen: [], swT: 0, swHold: false, armP: false, armL: false, armT: false, bufK: 0, bufT: 0, bufPw: 0, bufOpt: 0, bufM: null, preShot: false, fakeT: 0, callAt: 0, mod: 0, zUsed: false, gkTips: 0, lockA: 0, lockT: 0, col: c.col, tag: c.tag, cursor: c.cursor, had: false } : null;
+  return c ? { t, ctrl: null, chiT: 0, chiA: NaN, lock: 0, charge: 0, charging: false, second: false, gkRush: false, pressT: 0, lostT: 0, swSeen: [], swT: 0, swHold: false, armP: false, armL: false, armT: false, bufK: 0, bufT: 0, bufPw: 0, bufOpt: 0, bufM: null, preShot: false, fakeT: 0, callAt: 0, runP: null, goP: null, goT: 0, goA: 0, mod: 0, zUsed: false, gkTips: 0, lockA: 0, lockT: 0, col: c.col, tag: c.tag, cursor: c.cursor, had: false } : null;
 }
 /** 경기 생성. inp를 주면 그 입력 객체를 그대로 읽는다 (앱의 키보드/터치/네트워크 입력). */
 export function createMatch(cfg: MatchCfg, inp?: [Inp, Inp]): Sim {
@@ -28,7 +29,7 @@ export function createMatch(cfg: MatchCfg, inp?: [Inp, Inp]): Sim {
       teams: [a, b], kit: [kitFor(a, false), kitFor(b, kitsClash(a, b))], score: [0, 0], time: 0, len: cfg.len, diff: cfg.diff, half: 1,
       phase: 'kickoff', phaseT: 0, protect: 0, stats: { shots: [0, 0], onT: [0, 0], poss: [0.001, 0.001], fouls: [0, 0], offs: [0, 0], yel: [0, 0], red: [0, 0], passA: [0, 0], passC: [0, 0] },
       firstKick: cfg.firstKick, nextKick: 0, twoP: !!cfg.humans[1], net: cfg.net, tick: 0, slow: 0, scorer: null, tempo: cfg.tempo, spType: null, react: [0, 0],
-      overT: 0, dead: null, deadT: 0, deadR: 9.15, wall: [], spots: null, setAim: false, aimX: 0, aimY: 0, aimMan: null, setTaker: null, setT: 0, setX: 0, setY: 0, throwIn: null, throwT: 0, lastAtt: -1, ctr: [0, 0], autoRun: [1.5, 1.5], tac: [cfg.tactics?.[0] ?? defaultTactics(cfg.squads?.[0]?.formation), cfg.tactics?.[1] ?? defaultTactics(cfg.squads?.[1]?.formation)],
+      overT: 0, dead: null, deadT: 0, deadR: 9.15, wall: [], spots: null, setAim: false, aimX: 0, aimY: 0, aimMan: null, setTaker: null, setT: 0, setX: 0, setY: 0, throwIn: null, throwT: 0, lastAtt: -1, cnr: [0, 0], cnrMain: [null, null], cnrMen: [[], []], shortMan: null, gkBlock: false, qt: [newQuick(), newQuick()], ctr: [0, 0], autoRun: [1.5, 1.5], tac: [cfg.tactics?.[0] ?? defaultTactics(cfg.squads?.[0]?.formation), cfg.tactics?.[1] ?? defaultTactics(cfg.squads?.[1]?.formation)],
       bench: [[], []], subs: [0, 0], stops: 0, added: [0, 0, 0, 0], adv: null, knockout: !!cfg.knockout, so: null,
     },
     ball: { x: CX, y: CY, z: 0, vx: 0, vy: 0, vz: 0, owner: null, lastTouch: 0, passTarget: null, kicker: null, thru: false, shotT: 0, shot: 0, isShot: false, spin: 0, knock: null, curl: 0, setp: false, wt: 1, sx: 0, sy: 0, svx: 0, svy: 0, sin: 0, sph: 2, sOwn: null },
@@ -59,7 +60,7 @@ function makePlayers(s: Sim, squads: [import('../data/squad').SquadDef | null, i
       const lk = lookOf(T.code, d ? d.nameEn : 'p' + i, d ? d.num : NUMS[i]);
       const p: Player = {
         t, i, role: f.role, bx: f.x, by: f.y, num: d ? d.num : NUMS[i], x: 0, y: 0, vx: 0, vy: 0, dir: t === 0 ? 0 : Math.PI, speed: 0,
-        kickCD: 0, stun: 0, tackleCD: 0, bodyCD: 0, reactT: 0, shield: 0, lagVx: 0, lagVy: 0, cutCD: 0, beatT: 0, runT: 0, runDir: 0, callT: 0, offs: false, slide: 0, decT: 0, holdT: 0, lastSave: -1, dive: 0, diveDir: 0, lunge: 0, head: 0, atFeet: false, run: s.rnd() * 10,
+        kickCD: 0, stun: 0, tackleCD: 0, bodyCD: 0, reactT: 0, shield: 0, lagVx: 0, lagVy: 0, cutCD: 0, beatT: 0, runT: 0, runDir: 0, callT: 0, spX: 0, spY: 0, spT: 0, dumT: 0, offs: false, slide: 0, decT: 0, holdT: 0, lastSave: -1, dive: 0, diveDir: 0, lunge: 0, head: 0, atFeet: false, run: s.rnd() * 10,
         forcePass: false, forceShot: false, cele: false, hair: lk.hair, skin: lk.skin, look: lk.seed, tone: lk.tone,
         name: d ? d.name : `${T.code} ${NUMS[i]}`, nameEn: d ? d.nameEn : `${T.code} ${NUMS[i]}`, pos: d ? d.pos : f.pos, ovr: d ? overall(d) : Math.round((T.atk + T.def + T.spd) / 3),
         foot: d ? d.foot : 'R', skill: d ? d.skill : 2, attrs: det, def: d,
@@ -87,7 +88,7 @@ export function kickoff(s: Sim, kt: number) {
   // 배치: 기본 대형(수비 15~17·미드필더 30~33·공격 46m)을 하프라인 쪽으로 당긴다 — 차는 팀 공격수 51.3m·미드필더 41m·수비 30m, 받는 팀은 1m 뒤. 키커 말고는 두 팀 모두 센터서클(9.15m) 밖
   for (const p of players) { if (p.off) continue; let x = p.bx, y = p.by;
     if (p.role !== 'GK') { const fr = p.t === kt ? 51.3 : 50.3; x = Math.min(fr, fr - (46 - x) * (p.t === kt ? 0.68 : 0.72)); const dx = x - CX, dy = y - CY, q = Math.hypot(dx, dy); if (q < 10) { if (q < 0.5) { x = CX - 10; y = CY; } else { x = CX + dx / q * 10; y = CY + dy / q * 10; } } }
-    p.x = wx(x, p.t); p.y = y; p.vx = p.vy = 0; p.dir = p.t === 0 ? 0 : Math.PI; p.kickCD = 0; p.stun = 0; p.holdT = 0; p.forcePass = false; p.dive = 0; p.lunge = 0; p.head = 0; p.atFeet = false; p.cele = false; }
+    p.x = wx(x, p.t); p.y = y; p.vx = p.vy = 0; p.dir = p.t === 0 ? 0 : Math.PI; p.kickCD = 0; p.stun = 0; p.holdT = 0; p.forcePass = false; p.dive = 0; p.lunge = 0; p.head = 0; p.atFeet = false; p.cele = false; p.spT = 0; p.dumT = 0; }
   const fw = team[kt].filter(p => p.role !== 'GK' && !p.off), tk = fw[fw.length - 2] ?? fw[0], mate = fw[fw.length - 1] ?? fw[0];
   tk.x = wx(51.7, kt); tk.y = CY; if (mate !== tk) { mate.x = wx(51.3, kt); mate.y = CY + (mate.by < CY - 0.5 ? -10.3 : 10.3); } // 짝은 하프라인 위 서클 바로 밖 (옆으로 주는 패스를 받는 자리) tk.dir = kt === 0 ? Math.PI : 0; mate.dir = tk.dir; // 킥오프 두 선수는 자기 진영을 본다
   placeBall(s, CX, CY); ball.owner = tk; ball.lastTouch = kt; M.setTaker = null; M.wall = []; M.spots = null; M.overT = 0;
@@ -104,7 +105,7 @@ export function kickoff(s: Sim, kt: number) {
 export function setPiece(s: Sim, type: SetPieceType, t: number, x: number, y: number) {
   const { M, players, team, ball, HU } = s;
   xtEv(s, 'out', t, 0, x, y);
-  placeBall(s, x, y); ball.owner = null; M.throwIn = null; M.setTaker = null; M.wall = []; M.spots = null; team[0][0].atFeet = team[1][0].atFeet = false;
+  placeBall(s, x, y); ball.owner = null; M.throwIn = null; M.setTaker = null; M.wall = []; M.spots = null; M.cnr = [0, 0]; M.cnrMain = [null, null]; M.cnrMen = [[], []]; M.shortMan = null; M.gkBlock = false; for (const p of players) p.spT = 0; team[0][0].atFeet = team[1][0].atFeet = false;
   const tk = type === 'goalkick' ? team[t][0] : nearestOutfield(s, t, { x, y });
   let ang: number;
   if (type === 'corner') { const px = x < CX ? 11 : W - 11; ang = Math.atan2(CY - y, px - x); }
@@ -133,8 +134,9 @@ export function setPiece(s: Sim, type: SetPieceType, t: number, x: number, y: nu
   if (type === 'corner' && !M.so) M.spots = new Map(players.filter(p => !p.off && p !== tk && p.role !== 'GK').map(p => [p, { x: p.x, y: p.y }]));
   if (type === 'penalty' || type === 'corner') M.stops++;
   M.phase = 'setpiece'; M.spType = type; M.phaseT = type === 'penalty' ? 1.4 : 0.8; M.protect = 1.6; M.adv = null;
+  if (type === 'corner' && !M.so && !HU[t]) aiCornerPlan(s, t); // 53차: AI 팀은 짧은 코너킥 12%·작전(니어·파·키퍼 앞) 68%
   for (const h of HU) { if (!h) continue; h.charging = false; h.lock = 0; h.armP = h.armL = h.armT = false; h.bufK = 0; h.bufT = 0; h.preShot = false; if (h.t === t) setCtrl(h, tk); else setCtrl(h, nearestOutfield(s, h.t, ball)); }
-  const hint = HU[t] ? ({ corner: ' · 방향키로 조준 · 롱패스 = 크로스 · 슛 = 낮고 빠르게', throw: ' · 패스 = 가까이 · 롱패스 = 멀리', goalkick: ' · 방향키로 조준 · 롱패스 = 길게 · 패스 = 가까운 동료에게 짧게', freekick: near ? ' · 방향키로 조준 · 슛 = 직접 슛(길게 = 높게) · 롱패스 = 띄우기' : ' · 방향키로 조준 · 롱패스 = 띄우기 · 패스 = 짧게', penalty: '' } as Record<string, string>)[type] : '';
+  const hint = HU[t] ? ({ corner: ' · 방향키로 조준 · 롱패스 = 크로스 · 1~4 = 작전 · 호출 = 짧게', throw: ' · 패스 = 가까이 · 롱패스 = 멀리', goalkick: ' · 방향키로 조준 · 롱패스 = 길게 · 패스 = 가까운 동료에게 짧게', freekick: near ? ' · 방향키로 조준 · 슛 = 직접 슛(길게 = 높게) · 롱패스 = 띄우기' : ' · 방향키로 조준 · 롱패스 = 띄우기 · 패스 = 짧게', penalty: '' } as Record<string, string>)[type] : '';
   banner(s, type === 'penalty' ? 'PENALTY' : '', { corner: '코너킥', throw: '스로인', goalkick: '골킥', freekick: '파울 · 프리킥', penalty: '페널티킥' }[type] + hint, type === 'penalty' ? 1400 : hint ? 2400 : 900);
   if (type === 'freekick' || type === 'penalty') sfx(s, 'whistle');
 }
@@ -189,6 +191,8 @@ export function step(s: Sim, dt: number) {
   const { M, players, ball, HU, INP } = s;
   M.tick++;
   for (const I of INP) readInput(I, dt);
+  for (let t = 0; t < 2; t++) { const I = INP[t], h = HU[t]; if (I.cmd) { if (h && (M.phase === 'live' || M.phase === 'setpiece' || M.phase === 'kickoff')) command(s, h, I.cmd); I.cmd = 0; } } // 숫자 키 1~4 (53차): 코너킥 작전·퀵 전술
+  quickTick(s, dt);
   const ph = M.phase;
   if (ph === 'live') {
     if (M.so) { soUpdate(s, dt); }
@@ -215,11 +219,11 @@ export function step(s: Sim, dt: number) {
   if (M.throwIn) { if (ball.owner !== M.throwIn || M.throwIn.off) M.throwIn = null; else { M.protect = Math.max(M.protect, 0.5); if (M.phase === 'live') M.throwT += dt; } } // 던지기 전엔 뺏을 수 없다
   M.protect = Math.max(0, M.protect - dt); M.react[0] = Math.max(0, M.react[0] - dt); M.react[1] = Math.max(0, M.react[1] - dt);
   for (const p of players) {
-    p.kickCD = Math.max(0, p.kickCD - dt); p.stun = Math.max(0, p.stun - dt); p.tackleCD = Math.max(0, p.tackleCD - dt); p.bodyCD = Math.max(0, p.bodyCD - dt); p.shield = Math.max(0, p.shield - dt); p.callT = Math.max(0, p.callT - dt); p.runT = Math.max(0, p.runT - dt); p.cutCD = Math.max(0, p.cutCD - dt); p.beatT = Math.max(0, p.beatT - dt); p.reactT = Math.max(0, p.reactT - dt); p.dive = Math.max(0, p.dive - dt); p.lunge = Math.max(0, p.lunge - dt); p.head = Math.max(0, p.head - dt);
+    p.kickCD = Math.max(0, p.kickCD - dt); p.stun = Math.max(0, p.stun - dt); p.tackleCD = Math.max(0, p.tackleCD - dt); p.bodyCD = Math.max(0, p.bodyCD - dt); p.shield = Math.max(0, p.shield - dt); p.callT = Math.max(0, p.callT - dt); p.dumT = Math.max(0, p.dumT - dt); if (p.spT > 0) p.spT = Math.max(0, p.spT - dt); p.runT = Math.max(0, p.runT - dt); p.cutCD = Math.max(0, p.cutCD - dt); p.beatT = Math.max(0, p.beatT - dt); p.reactT = Math.max(0, p.reactT - dt); p.dive = Math.max(0, p.dive - dt); p.lunge = Math.max(0, p.lunge - dt); p.head = Math.max(0, p.head - dt);
     p.feint = Math.max(0, p.feint - dt); p.burst = Math.max(0, p.burst - dt); if (p.spin > 0) { p.spin -= dt; p.dir += p.spinDir * Math.PI * 2 / 0.5 * dt; if (p.spin <= 0) p.spin = 0; }
     if (p.slide > 0) { p.slide -= dt; p.vx *= 1 - 2.5 * dt; p.vy *= 1 - 2.5 * dt; if (p.slide <= 0) { p.slide = 0; p.stun = Math.max(p.stun, 0.45); } }
     // 체력: 질주하면 빠르게, 달리면 천천히 닳고 걸으면 회복. 한 경기 내내 질주하면 다 닳는 정도 (스태미나 능력치로 보정)
-    if (M.phase === 'live' && alive(p)) { const sp = Math.hypot(p.vx, p.vy), k = (1.35 - p.attrs.sta / 100 * 0.7) / Math.max(120, M.len) * M.tempo; if (sp > p.speed0 * 0.95) p.sta -= 1.7 * k * dt; else if (sp > 4) p.sta -= 0.5 * k * dt; else p.sta += 0.7 * k * dt; p.sta = clamp(p.sta, 0, 1); }
+    if (M.phase === 'live' && alive(p)) { const sp = Math.hypot(p.vx, p.vy), k = (1.35 - p.attrs.sta / 100 * 0.7) / Math.max(120, M.len) * M.tempo; const hard = M.qt[p.t].press > 0 && p.role !== 'GK' ? 1.6 : 1; /* 팀 압박(53차) 중엔 1.6배로 닳는다 */ if (sp > p.speed0 * 0.95) p.sta -= 1.7 * k * dt * hard; else if (sp > 4) p.sta -= 0.5 * k * dt * hard; else p.sta += 0.7 * k * dt; p.sta = clamp(p.sta, 0, 1); }
     p.speed = p.speed0 * (0.86 + 0.14 * p.sta);
     runPending(s, p, dt);
   }

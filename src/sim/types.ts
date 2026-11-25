@@ -3,6 +3,7 @@ import type { TeamDef, Kit, Role, DiffKey } from '../data/teams';
 import type { SquadDef, PlayerDef, Detail, Pos } from '../data/squad';
 import type { Tactics } from './tactics';
 import type { Shootout } from './shootout';
+import type { Quick } from './quick';
 
 export type Phase = 'kickoff' | 'live' | 'setpiece' | 'goal' | 'halftime' | 'full';
 export type SetPieceType = 'corner' | 'throw' | 'goalkick' | 'freekick' | 'penalty';
@@ -11,7 +12,7 @@ export type SfxType = 'kick' | 'tackle' | 'post' | 'whistle' | 'long' | 'goal';
 export interface Player {
   t: number; i: number; role: Role; bx: number; by: number; num: number;
   x: number; y: number; vx: number; vy: number; dir: number; speed: number;
-  kickCD: number; stun: number; tackleCD: number; bodyCD: number; reactT: number; shield: number; lagVx: number; lagVy: number; cutCD: number; beatT: number; /* beatT: 드리블에 제쳐진 뒤 따라가기 급급한 시간 */ runT: number; runDir: number; /* callT: 동료 호출(49차) — 공 가진 동료 6.5m 앞으로 받으러 온다 */ callT: number; // runT: 침투 지시 남은 시간, runDir 방향 // shield: 사람이 패스·슛 키를 누른 직후 .16초는 뺏기지 않는다 (탭이 떼는 순간 실행되므로)
+  kickCD: number; stun: number; tackleCD: number; bodyCD: number; reactT: number; shield: number; lagVx: number; lagVy: number; cutCD: number; beatT: number; /* beatT: 드리블에 제쳐진 뒤 따라가기 급급한 시간 */ runT: number; runDir: number; /* callT: 동료 호출(49차) — 공 가진 동료 6.5m 앞으로 받으러 온다 */ callT: number; /** 53차 — spX·spY·spT: 세트피스의 약속된 뛰기 목표와 남은 시간(−1 = 작전을 받고 차기를 기다리는 중). dumT: 흘리기 뒤 공을 건드리지 않는 시간 */ spX: number; spY: number; spT: number; dumT: number; // runT: 침투 지시 남은 시간, runDir 방향 // shield: 사람이 패스·슛 키를 누른 직후 .16초는 뺏기지 않는다 (탭이 떼는 순간 실행되므로)
   offs: boolean; slide: number; decT: number; holdT: number; lastSave: number;
   dive: number; diveDir: number; run: number; forcePass: boolean; forceShot: boolean; cele: boolean;
   /** 키퍼가 공을 발밑에 두고 있다 (동료의 백패스를 받았거나 손에서 내려놓음) — 다른 선수가 건드릴 때까지 손으로 못 잡는다 */ atFeet: boolean;
@@ -40,7 +41,7 @@ export interface Ball {
 export interface Human {
   t: number; ctrl: Player | null; lock: number; charge: number; charging: boolean;
   /** 치달 예약: 남은 시간(초)과 방향(rad, NaN = 방향키) — 차 놓은 공에 다시 닿는 순간 친다 */ chiT: number; chiA: number;
-  second: boolean; gkRush: boolean; pressT: number; lostT: number; swSeen: Player[]; swT: number; swHold: boolean; armP: boolean; armL: boolean; /** 스루패스 키를 우리 공일 때 눌렀는가 (51차: 스루도 떼는 순간 나간다) */ armT: boolean; /** 52차 — 원터치: 나한테 오는 패스가 닿기 전에 뗀 키를 닿는 순간 실행한다. bufK 1 패스·2 롱패스·3 스루·4 슛, bufT 남은 시간, bufPw 세기, bufOpt(패스 1 = 주고 뛰기 / 롱패스 1 = 낮게 / 슛 1 = 감아차기·2 = 칩슛), bufM 온라인 게스트가 고른 받을 선수. preShot: 닿기 전부터 슛 키를 누르고 있다. fakeT: 페이크 슛을 쓴 뒤 남은 시간(그 안에 또 쓰면 덜 속는다). callAt: 호출 키를 누른 뒤 남은 시간(그 안에 또 누르면 둘째 동료도 부른다) */ bufK: number; bufT: number; bufPw: number; bufOpt: number; bufM: Player | null; preShot: boolean; fakeT: number; callAt: number; mod: number; zUsed: boolean; /** 키퍼가 공을 잡았을 때 조작 안내를 보여 준 횟수 (경기당 두 번까지) */ gkTips: number; /* armP·armL: 패스·롱패스 키를 우리 공일 때 눌렀는가 (수비 때 누른 키를 공을 뺏은 뒤 떼도 패스가 나가지 않게). mod: 슛을 모으는 동안 누른 보조 키 (1 감아차기, 2 칩슛) */ lockA: number; lockT: number; /* lockA·lockT: 세트피스를 찰 때 누르고 있던 방향키는 받는 선수의 이동으로 치지 않는다 (떼거나 방향을 바꿀 때까지, 최대 lockT초) */ /* 커서 전환: 방금 거쳐 간 선수들(1.2초 안에 다시 누르면 그다음 선수) */ /* lostT: 방금 공을 뺏긴 뒤 남은 시간 (그동안은 공을 돌아본다) */ col: string; tag: string; cursor: 'manual' | 'auto'; had: boolean; // pressT: 압박 지원(Q) 남은 시간
+  second: boolean; gkRush: boolean; pressT: number; lostT: number; swSeen: Player[]; swT: number; swHold: boolean; armP: boolean; armL: boolean; /** 스루패스 키를 우리 공일 때 눌렀는가 (51차: 스루도 떼는 순간 나간다) */ armT: boolean; /** 52차 — 원터치: 나한테 오는 패스가 닿기 전에 뗀 키를 닿는 순간 실행한다. bufK 1 패스·2 롱패스·3 스루·4 슛, bufT 남은 시간, bufPw 세기, bufOpt(패스 1 = 주고 뛰기 / 롱패스 1 = 낮게 / 슛 1 = 감아차기·2 = 칩슛), bufM 온라인 게스트가 고른 받을 선수. preShot: 닿기 전부터 슛 키를 누르고 있다. fakeT: 페이크 슛을 쓴 뒤 남은 시간(그 안에 또 쓰면 덜 속는다). callAt: 호출 키를 누른 뒤 남은 시간(그 안에 또 누르면 둘째 동료도 부른다) */ bufK: number; bufT: number; bufPw: number; bufOpt: number; bufM: Player | null; preShot: boolean; fakeT: number; callAt: number; /** 53차 — runP: 방금 침투를 부른 동료(Q를 길게 누르다 떼면 그때 방향키 쪽으로 뛴다). goP·goT·goA: 주고 뛰기를 한 선수·방향을 바꿀 수 있는 남은 시간·패스를 준 방향 */ runP: Player | null; goP: Player | null; goT: number; goA: number; mod: number; zUsed: boolean; /** 키퍼가 공을 잡았을 때 조작 안내를 보여 준 횟수 (경기당 두 번까지) */ gkTips: number; /* armP·armL: 패스·롱패스 키를 우리 공일 때 눌렀는가 (수비 때 누른 키를 공을 뺏은 뒤 떼도 패스가 나가지 않게). mod: 슛을 모으는 동안 누른 보조 키 (1 감아차기, 2 칩슛) */ lockA: number; lockT: number; /* lockA·lockT: 세트피스를 찰 때 누르고 있던 방향키는 받는 선수의 이동으로 치지 않는다 (떼거나 방향을 바꿀 때까지, 최대 lockT초) */ /* 커서 전환: 방금 거쳐 간 선수들(1.2초 안에 다시 누르면 그다음 선수) */ /* lostT: 방금 공을 뺏긴 뒤 남은 시간 (그동안은 공을 돌아본다) */ col: string; tag: string; cursor: 'manual' | 'auto'; had: boolean; // pressT: 압박 지원(Q) 남은 시간
 }
 export interface Stats { shots: number[]; onT: number[]; poss: number[]; fouls: number[]; offs: number[]; yel: number[]; red: number[]; passA: number[]; passC: number[]; }
 export interface MatchInfo {
@@ -58,6 +59,8 @@ export interface MatchInfo {
   setTaker: Player | null; setT: number; setX: number; setY: number; /* 사람 팀 코너킥·프리킥·골킥·페널티의 키커와 공을 놓고 선 시간: 찰 때까지 제자리 (몰고 나갈 수 없다) */
   throwIn: Player | null; throwT: number; /* 스로인을 던질 선수(공을 손에 들고 서 있다)와 든 시간 */
   /** 역습 중 남은 시간(팀별, 초): 자기 진영에서 공을 뺏은 뒤 4.5초 — 사람 팀의 공격수·측면 미드필더가 앞으로 내달린다 */ ctr: [number, number];
+  /** 53차 — 코너킥 작전(팀별: 0 없음·1~4 작전·5 짧게)과 그 주 목표 선수·공격 쪽 배치 순서(`cornerSetup`의 자리 순)·짧게 받을 선수, 퀵 전술 상태(`quick.ts`) */
+  cnr: [number, number]; cnrMain: [Player | null, Player | null]; cnrMen: [Player[], Player[]]; shortMan: Player | null; /** 이번 코너킥에서 키퍼가 곁에 선 공격수에게 막히는가 ('키퍼 앞' 작전을 걸 때 반반으로 정한다) */ gkBlock: boolean; qt: [Quick, Quick];
   lastAtt: number; autoRun: [number, number]; // 다음 자동 침투까지 남은 시간 (팀별)
   tac: [Tactics, Tactics]; bench: [PlayerDef[], PlayerDef[]]; subs: [number, number]; stops: number; added: number[];
   /** 토너먼트: 비기면 연장(전·후반 3·4) → 승부차기. so는 승부차기 상태 */

@@ -5,6 +5,7 @@ import type { Sim, Player } from '../types';
 import { sfx, puff } from '../events';
 import { gain, knockOn, passTo, throughPass, chipShot, shoot, slideTackle, leadPos, laneRisk, offsideLine, queueKick, n, throwTo, throwPick, kick, setKick } from '../ball';
 import { steer } from '../move';
+import { cornerAim } from '../quick';
 
 export function tryTackle(s: Sim, p: Player, own: Player | null, rate: number) {
   const { M, HU, INP, ball } = s;
@@ -50,9 +51,12 @@ export interface PassChoice { p: Player; score: number; loft: boolean; thru: boo
     (가장 열린 동료를 정확히 겨냥하게 했더니 코너킥의 35%가 골이었다.) 박스에 동료가 없으면 false (평소 패스로) */
 function aiCorner(s: Sim, p: Player) {
   const { M, team } = s, t = p.t; let inBox = 0;
+  if (M.cnr[t] === 5 && M.shortMan && !M.shortMan.off) { const m = M.shortMan; queueKick(s, p, () => passTo(s, p, m, false)); return true; } // 짧은 코너킥(53차)
   for (const m of team[t]) if (m !== p && !m.off && m.role !== 'GK' && wx(m.x, t) > W - 16 && Math.abs(m.y - CY) < 13) inBox++;
   if (!inBox) return false;
   const sd = M.setY < CY ? -1 : 1, r = s.rnd(), z: [number, number] = r < 0.4 ? [W - 6, sd * 3.2] : r < 0.75 ? [W - 7.5, -sd * 4] : [W - 10.5, sd * 0.5], pw = 0.2 + s.rnd() * 0.5;
+  const ca = cornerAim(s, t); // 코너킥 작전(53차): 작전 자리로 올린다 — 차는 순간(`setKick`) 약속된 뛰기가 시작된다
+  if (ca) { M.aimX = ca.x + (s.rnd() * 2 - 1) * 1.2; M.aimY = ca.y + (s.rnd() * 2 - 1) * 1.2; M.aimMan = M.cnrMain[t]; queueKick(s, p, () => setKick(s, p, 'loft', pw)); return true; }
   M.aimX = wx(z[0] + (s.rnd() * 2 - 1) * 1.6, t); M.aimY = CY + z[1] + (s.rnd() * 2 - 1) * 1.6; M.aimMan = null;
   queueKick(s, p, () => setKick(s, p, 'loft', pw)); return true;
 }

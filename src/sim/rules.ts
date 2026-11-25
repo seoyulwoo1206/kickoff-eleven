@@ -64,9 +64,11 @@ export function cornerSetup(s: Sim, t: number, y: number, tk: Player) {
   const D: [number, number][] = [[W - 1.2, sd * 3.3], [W - 3.5, -sd * 3.2], [W - 5.5, sd * 5.2], [W - 5.8, sd * 1.6], [W - 5.8, -sd * 2], [W - 6.5, -sd * 6], [W - 10.5, sd * 2.2], [W - 10, -sd * 7], [W - 18, 0], [W - 48, 0]];
   const place = (ps: Player[], spots: [number, number][]) => {
     const left = ps.slice();
-    for (const [x, dy] of spots) { if (!left.length) break; const px = wx(x, t), py = clamp(CY + dy, 1, H - 1); let bi = 0, bd = 1e9; left.forEach((q, i) => { const dd = Math.hypot(q.x - px, q.y - py); if (dd < bd) { bd = dd; bi = i; } }); const q = left.splice(bi, 1)[0]; q.x = px; q.y = py; q.vx = q.vy = 0; q.lagVx = q.lagVy = 0; q.runT = 0; q.dir = Math.atan2(y - py, tk.x - px); }
+    const got: Player[] = [];
+    for (const [x, dy] of spots) { if (!left.length) break; const px = wx(x, t), py = clamp(CY + dy, 1, H - 1); let bi = 0, bd = 1e9; left.forEach((q, i) => { const dd = Math.hypot(q.x - px, q.y - py); if (dd < bd) { bd = dd; bi = i; } }); const q = left.splice(bi, 1)[0]; got.push(q); q.x = px; q.y = py; q.vx = q.vy = 0; q.lagVx = q.lagVy = 0; q.runT = 0; q.dir = Math.atan2(y - py, tk.x - px); }
+    return got;
   };
-  place(s.team[t].filter(q => q.role !== 'GK' && !q.off && q !== tk), A); place(s.team[1 - t].filter(q => q.role !== 'GK' && !q.off), D);
+  s.M.cnrMen[t] = place(s.team[t].filter(q => q.role !== 'GK' && !q.off && q !== tk), A); s.M.cnrMen[1 - t] = []; place(s.team[1 - t].filter(q => q.role !== 'GK' && !q.off), D); // cnrMen: 공격 쪽 자리 순서 (53차 — 코너킥 작전이 앞 다섯을, 짧은 코너킥이 일곱째를 쓴다)
   const k = s.team[1 - t][0]; if (!k.off) { k.x = wx(W - 1, t); k.y = CY + sd * 0.8; k.vx = k.vy = 0; }
 }
 /** 골킥 배치 (코너킥처럼 양 팀을 자리에 세운다, 찰 때까지 `M.spots`를 지킨다 — teamAI): 차는 팀은 센터백이 박스 양옆(짧게 받을 자리)·풀백은 터치라인 쪽 24m·미드필더 30~44m·공격수 54~58m,
