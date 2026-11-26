@@ -79,6 +79,7 @@ audio.on = opts.sound; applySquadStrength();
 /* ---------- 경기 시작/종료 ---------- */
 let cup: Cup | null = loadCup();
 let cupMatch = false; // 지금 경기가 토너먼트 경기인가
+let cupSwap = false; // 토너먼트 경기에서 대진표의 뒤쪽 팀(b)이 나라서 팀 순서를 뒤집어 넣었나 (결과를 적을 때 다시 뒤집는다)
 let introT = 0;
 const INTRO_LEN = 9.2; // 입장 연출(라인업 소개 + 음악) 길이. 아무 키·클릭으로 건너뛴다
 function endIntro() { introT = 0; hideIntro(); anthemStop(); R.setCamMode?.(camMode); }
@@ -93,11 +94,12 @@ function startMatch(cfg?: StartCfg) {
     if (NET.role === 'host' && !cfg) { cfg = { sel: [opts.sel[0], opts.sel[1]], len: opts.len, fk: Math.random() < 0.5 ? 0 : 1, tempo: opts.tempo, seed: randomSeed() }; netSend({ t: 'start', c: cfg }); }
   }
   if (cfg) { opts.sel[0] = cfg.sel[0]; opts.sel[1] = cfg.sel[1]; opts.len = cfg.len; if ((cfg.tempo as string) in TEMPO) opts.tempo = cfg.tempo as keyof typeof TEMPO; }
+  // 월드컵(54차): 팀을 고르기(a, b) 전에 대진표의 두 팀을 넣는다 — 전엔 이 줄이 뒤에 있어 대진표와 다른 팀(메뉴에서 고른 상대, 그다음부턴 지난 경기의 두 팀)과 붙고 결과만 대진표에 적혔다. 내 팀은 늘 팀 0: 대진표에서 내가 뒤쪽(b)이면 뒤집는다
+  cupSwap = false; if (opts.mode === 'cup' && cup) { const uf = userFixture(cup); if (uf) { cupSwap = uf.b === cup.user; opts.sel[0] = cupSwap ? uf.b : uf.a; opts.sel[1] = cupSwap ? uf.a : uf.b; cupMatch = true; } else cupMatch = false; } else cupMatch = false;
   const net = opts.mode === 'net' && NET.ready, a = TEAMS[opts.sel[0]], b = TEAMS[opts.sel[1]];
   const tag = (t: number) => net ? (t === LOCAL() ? 'YOU' : (t === 0 ? a : b).code) : 'P' + (t + 1);
   const cur = (t: number) => (net && t !== LOCAL()) ? 'auto' as const : opts.cursor; // 커서 전환 방식은 각자 로컬 설정
   const twoP = opts.mode === '2p' || net;
-  if (opts.mode === 'cup' && cup) { const uf = userFixture(cup); if (uf) { opts.sel[0] = uf.a; opts.sel[1] = uf.b; cupMatch = true; } else cupMatch = false; } else cupMatch = false;
   for (const I of INP) { dropKeys(I); clearPresses(I); I.tx = I.ty = 0; }
   sim = createMatch({
     teams: [a, b], len: opts.len, diff: opts.diff, tempo: TEMPO[opts.tempo], firstKick: cfg ? cfg.fk : (Math.random() < 0.5 ? 0 : 1),
@@ -190,7 +192,7 @@ function fullTime() {
   if (NET.role !== 'guest') sfx('long');
   fillResult(sim, LOCAL(), NET.role === 'guest'); fillRatings(); fillXtResult();
   $('cupNextBtn').hidden = !cupMatch; $('againBtn').hidden = cupMatch || NET.role === 'guest';
-  if (cupMatch && cup) { const so = sim.M.so ? [sim.M.so.kicks[0].filter(v => v).length, sim.M.so.kicks[1].filter(v => v).length] as [number, number] : undefined; advance(cup, [sim.M.score[0], sim.M.score[1]], so, sim.M.so?.winner); saveCup(cup); }
+  if (cupMatch && cup) { const so = sim.M.so ? [sim.M.so.kicks[0].filter(v => v).length, sim.M.so.kicks[1].filter(v => v).length] as [number, number] : undefined; const sc = sim.M.score, w = sim.M.so?.winner; advance(cup, cupSwap ? [sc[1], sc[0]] : [sc[0], sc[1]], so && cupSwap ? [so[1], so[0]] : so, w == null || !cupSwap ? w : 1 - w); saveCup(cup); } // 뒤집어 넣은 경기는 대진표 방향(a : b)으로 되돌려 적는다
   window.setTimeout(() => { if (state === 'over') { $('result').hidden = false; ($('againBtn') as HTMLButtonElement).focus(); } }, 900);
   if (NET.role !== 'guest') { const M = sim.M; showBanner('FULL TIME', `${M.teams[0].code} ${M.score[0]} - ${M.score[1]} ${M.teams[1].code}`, 1400, false); }
 }

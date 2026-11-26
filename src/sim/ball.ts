@@ -117,13 +117,16 @@ export function offside(s: Sim, p: Player) {
   for (const q of players) q.offs = false;
   setPiece(s, 'freekick', 1 - t, clamp(p.x, 1, W - 1), clamp(p.y, 1, H - 1));
 }
+/** 패스 통계(54차): 시도는 찬 킥마다 한 번(`ball.pa` = 그 킥의 번호), 성공은 받는 선수가 잡을 때 — 시도로 안 센 킥(머리로 넘김·걷어낸 공 등 `passTarget`만 정한 것)을 받으면 시도도 같이 센다. 전엔 성공만 세어 '패스 성공 7/5'가 나왔다 */
+function passAtt(s: Sim, t: number) { s.M.stats.passA[t]++; s.ball.pa = s.ball.shot; }
+function passDone(s: Sim, t: number) { if (s.ball.pa !== s.ball.shot) passAtt(s, t); s.M.stats.passC[t]++; }
 export function gain(s: Sim, p: Player) {
   const { ball, M, players, HU } = s;
   const prev = ball.owner ?? (ball.knock && d(ball.knock, ball) < 2.5 ? ball.knock : null); // 직전 소유자 (노크온 포함)
   const wasPass = ball.passTarget === p;
   if (p.offs && M.phase === 'live' && ball.kicker && ball.kicker.t === p.t && ball.kicker !== p) { offside(s, p); return; }
   for (const q of players) q.offs = false;
-  if (ball.passTarget === p && ball.kicker && ball.kicker.t === p.t) M.stats.passC[p.t]++; // 패스 성공
+  if (ball.passTarget === p && ball.kicker && ball.kicker.t === p.t) passDone(s, p.t); // 패스 성공
   // 백패스 규칙: 동료가 발로 찬 공(스로인 포함)을 키퍼가 받으면 손을 못 쓴다 — 발밑에 두고 필드 선수처럼 다룬다. 손에서 내려놓은 공(`atFeet`)도 다른 선수가 건드릴 때까지 그대로
   if (p.role === 'GK' && !p.atFeet) p.atFeet = !!(ball.kicker && ball.kicker !== p && ball.kicker.t === p.t && ball.lastTouch === p.t && !ball.isShot);
   for (const g of [s.team[0][0], s.team[1][0]]) if (g !== p) g.atFeet = false;
@@ -205,7 +208,7 @@ export function passTo(s: Sim, p: Player, m: Player, loft: boolean, power = 0, m
     const g = hu ? groundLead(p, m, mode === 1 ? 12 + power * 3 : 10 + power * 4, WT) : groundLead(p, m, 11 + power * 5), dx = g.x - p.x, dy = g.y - p.y, gv = hu ? clamp(g.v, 16, mode === 1 ? 31 : 28) : Math.min(Math.max(14, g.v), 24); q = Math.hypot(dx, dy) || 1;
     p.dir = Math.atan2(dy, dx) + e; const [kx, ky] = rot(dx / q * gv, dy / q * gv, e); kick(s, p, kx, ky, 0); if (hu) ball.wt = WT;
   }
-  ball.passTarget = m; s.M.stats.passA[p.t]++;
+  ball.passTarget = m; passAtt(s, p.t);
   const h = HU[p.t]; if (h && m.role !== 'GK') { h.ctrl = m; h.lock = 0.5; } // 커서는 차는 순간 받는 선수로
   // 주고 뛰기(43차, 사람 팀): 상대 진영 쪽(자기 골 40m 밖)에서 땅볼 패스를 준 미드필더·공격수는 1.4초 동안 골 쪽 빈 곳으로 뛰어 들어간다 — 받은 동료가 바로 돌려주면 2대1 패스가 된다.
   // 방향은 골 쪽에서 받는 선수 반대편으로 25° 벌린다(같은 길로 겹치지 않게). 오프사이드 라인은 `teamAI`의 침투 처리가 지킨다
@@ -254,14 +257,14 @@ export function longPass(s: Sim, p: Player, ang: number, power = 0.5, low = fals
   }
   if (!best && wide && low) { // 땅볼 크로스인데 박스에 아무도 없다: 컷백 자리(골라인 13m 앞, 가운데에서 공 쪽 3m)로 깔아 주고 가장 가까운 동료가 받으러 간다
     const hu = !!s.HU[t], tx = wx(92, t), ty = CY + (p.y < CY ? -3 : 3), dx = tx - p.x, dy = ty - p.y, q = Math.hypot(dx, dy) || 1, v = clamp(groundSpeed(q, 8, hu ? WT : 1), 14, 30), e = passErr(s, p, false);
-    p.dir = Math.atan2(dy, dx) + e; kick(s, p, Math.cos(p.dir) * v, Math.sin(p.dir) * v, 0); if (hu) s.ball.wt = WT; s.M.stats.passA[t]++;
+    p.dir = Math.atan2(dy, dx) + e; kick(s, p, Math.cos(p.dir) * v, Math.sin(p.dir) * v, 0); if (hu) s.ball.wt = WT; passAtt(s, t);
     let m: Player | null = null, md = 14; for (const o of s.team[t]) { if (o === p || o.off || o.role === 'GK') continue; const dd = Math.hypot(o.x - tx, o.y - ty); if (dd < md) { md = dd; m = o; } }
     if (m) { s.ball.passTarget = m; const h = s.HU[t]; if (h) { h.ctrl = m; h.lock = 0.5; } }
     return;
   }
   if (!best && wide) { // 박스에 아직 아무도 없으면 골문 앞(페널티 스폿 근처, 먼 쪽)으로 올려 놓는다
     const tx = wx(94, t), ty = CY + (p.y < CY ? 2.5 : -2.5), dx = tx - p.x, dy = ty - p.y, q = Math.hypot(dx, dy), k = loftKick(q, clamp(0.42 + q / 40, 0.75, 1.3), 1.95), e = passErr(s, p, true);
-    p.dir = Math.atan2(dy, dx) + e; kick(s, p, Math.cos(p.dir) * k.v, Math.sin(p.dir) * k.v, k.vz); s.M.stats.passA[t]++; return;
+    p.dir = Math.atan2(dy, dx) + e; kick(s, p, Math.cos(p.dir) * k.v, Math.sin(p.dir) * k.v, k.vz); passAtt(s, t); return;
   }
   if (best) passTo(s, p, best, !(low && wide), pw, low ? (wide ? 1 : 2) : 0); else { p.dir = ang; const q = 18 + pw * 22, k = loftKick(q, loftTime(q, pw) * (low ? 0.76 : 1)); kick(s, p, ax * k.v, ay * k.v, k.vz); } // 받을 동료가 없으면 그 방향으로 띄워 걷어 낸다
 }
@@ -315,7 +318,7 @@ export function throughPass(s: Sim, p: Player, ang: number, power = 0, maxR?: nu
   if (!best) { if (o.only) passTo(s, p, o.only, false, power); else shortPass(s, p, ang, power, o.sharp ? 0.1 : 0.2, o.sharp); return; } // 뛰어들 동료가 없으면 숏패스로
   if (best.cut && hu) { if (o.only) passTo(s, p, o.only, false, power); else shortPass(s, p, ang, power, o.sharp ? 0.1 : 0.2, o.sharp); return; } // 사람 팀: 가장 나은 공도 상대가 먼저 닿는 선로면(앞이 막혔다) 길게 차 버리지 않고 발밑으로 준다 // 뛰어들 동료가 없으면 숏패스로. 사람 팀: 가장 나은 공도 상대가 먼저 닿는 선로면(앞이 막혔다) 길게 차 버리지 않고 발밑으로 준다
   const e = passErr(s, p, false) * 0.8;
-  p.dir = best.a + e; kick(s, p, Math.cos(best.a + e) * best.v, Math.sin(best.a + e) * best.v, 0); s.ball.passTarget = best.m; s.ball.thru = true; if (hu) s.ball.wt = WT; s.M.stats.passA[t]++;
+  p.dir = best.a + e; kick(s, p, Math.cos(best.a + e) * best.v, Math.sin(best.a + e) * best.v, 0); s.ball.passTarget = best.m; s.ball.thru = true; if (hu) s.ball.wt = WT; passAtt(s, t);
   const h = s.HU[t]; if (h) { h.ctrl = best.m; h.lock = 0.6; }
 }
 /** 스루패스가 구르는 동안: 받기로 한 선수가 상대보다 늦게 닿게 생겼는데, 공이 가는 쪽 앞에 있는 다른 동료가 상대보다 먼저 닿을 수 있으면 그 선수가 받는다 (커서도 넘어간다).
@@ -336,7 +339,7 @@ export function throwTo(s: Sim, p: Player, m: Player) {
   let q = d(p, m), T = 0.8, L = { x: m.x, y: m.y };
   for (let i = 0; i < 3; i++) { T = clamp(q / 13, 0.45, 1.25); L = lead(m, T * 0.8); q = Math.hypot(L.x - p.x, L.y - p.y) || 1; }
   const dx = L.x - p.x, dy = L.y - p.y, qq = Math.min(q, 24), vz = Math.max(0.3, (G * T * T / 2 - 1.5) / T), v = qq / T * 1.07;
-  p.dir = Math.atan2(dy, dx); kick(s, p, dx / q * v, dy / q * v, vz); s.ball.z = 2.0; s.ball.passTarget = m; s.M.stats.passA[p.t]++;
+  p.dir = Math.atan2(dy, dx); kick(s, p, dx / q * v, dy / q * v, vz); s.ball.z = 2.0; s.ball.passTarget = m; passAtt(s, p.t);
   const h = s.HU[p.t]; if (h && m.role !== 'GK') { h.ctrl = m; h.lock = 0.5; }
 }
 /** 스로인 받을 동료: 조준 방향 우선, far면 먼 동료(24m)·아니면 가까운 동료(8m 안팎). 조준 쪽에 없으면 가장 가까운 동료 */
@@ -400,7 +403,7 @@ export function setKick(s: Sim, p: Player, kind: 'loft' | 'drive' | 'shot', pw: 
   }
   startCornerRuns(s, t); // 코너킥 작전(53차): 아직 안 뛰었으면 지금
   const e = passErr(s, p, true) * 0.7, pl = setPlan(s, p, kind, pw, -(ty - fy) * e, (tx - fx) * e);
-  p.dir = Math.atan2(pl.v.vy, pl.v.vx); kick(s, p, pl.v.vx, pl.v.vy, pl.v.vz, pl.curl); M.stats.passA[t]++;
+  p.dir = Math.atan2(pl.v.vy, pl.v.vx); kick(s, p, pl.v.vx, pl.v.vy, pl.v.vz, pl.curl); passAtt(s, t);
   let m: Player | null = M.aimMan && !M.aimMan.off && Math.hypot(M.aimMan.x - tx, M.aimMan.y - ty) < 10 ? M.aimMan : null, bt = 1e9; if (!m) for (const o of team[t]) { if (o === p || o.off || o.role === 'GK') continue; const q = Math.hypot(o.x - tx, o.y - ty); if (q > 16) continue; const tt = q / o.speed; if (tt < bt) { bt = tt; m = o; } } // 조준점으로 들어와 있던 동료(없으면 떨어질 자리에 가장 먼저 닿을 동료)가 받는다
   if (m) { ball.passTarget = m; const h = HU[t]; if (h) { h.ctrl = m; h.lock = 0.5; } }
 }
@@ -620,7 +623,7 @@ function knockDown(s: Sim, p: Player): boolean {
   if (!m) return false;
   const T = clamp(d(m, p) / 14, 0.3, 0.6), tx = m.x + m.vx * T * 0.5, ty = m.y + m.vy * T * 0.5;
   ball.vx = (tx - ball.x) / T; ball.vy = (ty - ball.y) / T; ball.vz = (1.8 - ball.z + G * T * T / 2) / T; ball.isShot = false; ball.curl = 0; ball.thru = false; ball.wt = 1; ball.setp = false;
-  ball.lastTouch = t; ball.kicker = p; ball.shot++; ball.passTarget = m; p.kickCD = 0.35; p.dir = Math.atan2(ty - p.y, tx - p.x); M.stats.passA[t]++; sfx(s, 'kick'); xtEv(s, 'kick', t, p.num, p.x, p.y);
+  ball.lastTouch = t; ball.kicker = p; ball.shot++; ball.passTarget = m; p.kickCD = 0.35; p.dir = Math.atan2(ty - p.y, tx - p.x); passAtt(s, t); sfx(s, 'kick'); xtEv(s, 'kick', t, p.num, p.x, p.y);
   const h = HU[t]; if (h) { h.ctrl = m; h.lock = 0.4; }
   return true;
 }
@@ -713,7 +716,7 @@ export function ballControl(s: Sim) {
   else if (best.role !== 'GK') { // 튀어나가는 퍼스트 터치: 볼컨트롤이 낮을수록 멀리·엉뚱하게
     const bad = clamp((sp - clean) / 12, 0.2, 1) * (1.3 - n(ctl) * 0.6);
     const a = Math.atan2(ball.vy, ball.vx) + (s.rnd() - 0.5) * (toMe ? 0.6 : 1.4) * bad, ns = sp * (toMe ? 0.2 : 0.33) * (0.6 + bad * 0.6);
-    if (toMe && ball.kicker && ball.kicker.t === best.t) M.stats.passC[best.t]++; // 받긴 받았다 (터치가 컸을 뿐)
+    if (toMe && ball.kicker && ball.kicker.t === best.t) passDone(s, best.t); // 받긴 받았다 (터치가 컸을 뿐)
     ball.vx = Math.cos(a) * ns; ball.vy = Math.sin(a) * ns; ball.vz = toMe ? 0.6 : 1.8; ball.lastTouch = best.t; best.kickCD = 0.2; ball.kicker = best; ball.shot++; ball.passTarget = null; ball.knock = best; ball.curl = 0;
   }
 }

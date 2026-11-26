@@ -32,7 +32,7 @@ export function createMatch(cfg: MatchCfg, inp?: [Inp, Inp]): Sim {
       overT: 0, dead: null, deadT: 0, deadR: 9.15, wall: [], spots: null, setAim: false, aimX: 0, aimY: 0, aimMan: null, setTaker: null, setT: 0, setX: 0, setY: 0, throwIn: null, throwT: 0, lastAtt: -1, cnr: [0, 0], cnrMain: [null, null], cnrMen: [[], []], shortMan: null, gkBlock: false, qt: [newQuick(), newQuick()], ctr: [0, 0], autoRun: [1.5, 1.5], tac: [cfg.tactics?.[0] ?? defaultTactics(cfg.squads?.[0]?.formation), cfg.tactics?.[1] ?? defaultTactics(cfg.squads?.[1]?.formation)],
       bench: [[], []], subs: [0, 0], stops: 0, added: [0, 0, 0, 0], adv: null, knockout: !!cfg.knockout, so: null,
     },
-    ball: { x: CX, y: CY, z: 0, vx: 0, vy: 0, vz: 0, owner: null, lastTouch: 0, passTarget: null, kicker: null, thru: false, shotT: 0, shot: 0, isShot: false, spin: 0, knock: null, curl: 0, setp: false, wt: 1, sx: 0, sy: 0, svx: 0, svy: 0, sin: 0, sph: 2, sOwn: null },
+    ball: { x: CX, y: CY, z: 0, vx: 0, vy: 0, vz: 0, owner: null, lastTouch: 0, passTarget: null, kicker: null, thru: false, shotT: 0, shot: 0, isShot: false, spin: 0, knock: null, curl: 0, setp: false, wt: 1, sx: 0, sy: 0, svx: 0, svy: 0, sin: 0, sph: 2, sOwn: null, pa: -1 },
     players: [], team: [[], []], HU: [makeHuman(0, cfg.humans[0]), makeHuman(1, cfg.humans[1])], INP: inp ?? [newInp(), newInp()], pred: [],
     rnd: mulberry32(cfg.seed), ev: [],
   };
@@ -155,7 +155,10 @@ export function goal(s: Sim, t: number) {
   const { M, ball } = s;
   for (const q of s.players) { q.pending = null; q.kickWind = 0; }
   M.stops++; M.adv = null;
-  if (ball.kicker && ball.kicker.t === t) M.stats.onT[t]++;
+  if (ball.kicker && ball.kicker.t === t) { // 골 = 유효 슈팅(54차): 키퍼가 손을 뻗어 본 슛은 gkAI가 이미 셌다 — 전엔 여기서 한 번 더 세어 유효 슈팅이 슈팅보다 많았다. 슛이 아닌 공(크로스·굴절)이 들어가면 슈팅으로도 센다
+    const gk = s.team[1 - t].find(q => q.role === 'GK');
+    if (!ball.isShot) { M.stats.shots[t]++; M.stats.onT[t]++; } else if (!gk || gk.lastSave !== ball.shot) M.stats.onT[t]++;
+  }
   xtEv(s, 'goal', t, ball.kicker && ball.kicker.t === t ? ball.kicker.num : 0, ball.x, ball.y); // 자책골은 번호 0 (두 팀에 같은 등번호가 있어 상대 선수의 골로 적혔다)
   if (M.so) { M.phase = 'goal'; M.phaseT = 2.0; M.nextKick = 1 - t; M.scorer = ball.kicker; banner(s, 'GOAL!', '', 1500, true); sfx(s, 'goal'); crowdSwell(s, 0.18, 1.5); return; }
   M.score[t]++; M.phase = 'goal'; M.phaseT = 9.0; /* 세리머니 클로즈업 2.7초 + 리플레이 ~5.5초 (scene.ts CELE_T와 맞출 것) */

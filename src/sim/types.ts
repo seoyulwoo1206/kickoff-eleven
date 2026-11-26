@@ -29,6 +29,8 @@ export interface Ball {
   x: number; y: number; z: number; vx: number; vy: number; vz: number;
   owner: Player | null; lastTouch: number; passTarget: Player | null; kicker: Player | null; thru: boolean; shotT: number; /* shotT: 슛이 골문까지 날아가는 시간 어림 (키퍼가 볼 시간) */ /* thru: 스루패스로 찬 공 (구르는 동안 더 먼저 닿는 동료가 있으면 받는 선수를 바꾼다) */
   shot: number; isShot: boolean; spin: number; knock: Player | null;
+  /** 패스 시도로 센 킥의 번호(`shot`) (54차): 받았을 때 아직 안 센 킥(머리로 넘김·걷어낸 공을 동료가 받음)이면 시도도 같이 센다 — 성공이 시도보다 많아지지 않게 */
+  pa: number;
   /** 땅볼 마찰 배율 (51차): 사람 팀의 땅볼 패스는 `WT`배 — 세게 나가서 받는 자리에선 느려진다. 다른 선수가 건드리거나 뜨면 1 */
   wt: number;
   /** 첫 터치 (51차): 잡은 순간의 공 자리와 발밑 자리의 차이(m)·그 속도. `updateBall`이 스프링으로 발밑까지 끌어온다 — 빠른 공일수록 크게 튀고 늦게 붙는다. sOwn = 이 값이 속한 선수 */
