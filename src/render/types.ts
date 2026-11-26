@@ -15,6 +15,8 @@ export interface IRenderer {
   /** 경기 시작 시 상태 초기화 (파티클·리플레이 버퍼 등) */
   reset(): void;
   setQuality?(q: Quality): void;
+  /** 해상도 배율 0.5~1 (자동 화질 조절이 화질 단계를 내리기 전에 먼저 쓴다) */
+  setScale?(k: number): void;
   setCamMode?(m: CamMode): void;
   /** 시야 배율: 1 가깝게(가로 38m) ~ 2.4 전체(91m) */
   setView?(v: number): void;

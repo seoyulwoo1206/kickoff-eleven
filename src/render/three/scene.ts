@@ -28,7 +28,7 @@ interface Frame { t: number; P: Float32Array; B: Float32Array; }
 export class ThreeRenderer implements IRenderer {
   cam = { x: CX, y: CY, shake: 0, z: 1 };
   cw = 0; ch = 0; fps = 60;
-  private dpr = 1; private ins = { t: 0, r: 0, b: 0, l: 0 };
+  private dpr = 1; private scale = 1; private ins = { t: 0, r: 0, b: 0, l: 0 };
   private gl: THREE.WebGLRenderer; private scene = new THREE.Scene(); private camera: THREE.PerspectiveCamera;
   private sun: THREE.DirectionalLight; private stadium!: Stadium; private quality: Quality = 'mid'; private mode: CamMode = 'tv';
   private models = new Map<Player, PlayerModel>(); private modelSim: Sim | null = null; private namesMode = opts.names;
@@ -63,21 +63,23 @@ export class ThreeRenderer implements IRenderer {
   }
   setQuality(q: Quality) {
     this.quality = q;
-    this.dpr = Math.min(window.devicePixelRatio || 1, q === 'high' ? 2 : q === 'mid' ? 1.5 : 1); this.gl.setPixelRatio(this.dpr);
+    this.dpr = Math.min(window.devicePixelRatio || 1, q === 'high' ? 2 : q === 'mid' ? 1.5 : 1); this.scale = 1; this.gl.setPixelRatio(this.dpr);
     const shadows = q !== 'low'; this.gl.shadowMap.enabled = shadows; this.sun.castShadow = shadows;
     const sz = q === 'high' ? 2048 : 1024; if (this.sun.shadow.mapSize.width !== sz) { this.sun.shadow.mapSize.set(sz, sz); if (this.sun.shadow.map) { this.sun.shadow.map.dispose(); this.sun.shadow.map = null; } }
     if (this.stadium) { this.scene.remove(this.stadium.group); }
     this.stadium = buildStadium(q); this.scene.add(this.stadium.group); if (this.modelSim) tintCrowd(this.stadium, this.modelSim.M.kit[0].c1, this.modelSim.M.kit[1].c1);
-    for (const m of this.models.values()) m.setBlob(!shadows);
+    for (const m of this.models.values()) m.lod(q);
     this.scene.traverse(o => { const m = (o as THREE.Mesh).material as THREE.Material | undefined; if (m) m.needsUpdate = true; });
   }
+  /** 해상도 배율(56차, 자동 화질 조절용): 그리는 픽셀 수만 줄인다(화면 크기·글자 오버레이는 그대로). 화질을 바꾸면 1로 돌아간다 */
+  setScale(k: number) { this.scale = clamp(k, 0.5, 1); this.gl.setPixelRatio(this.dpr * this.scale); }
   setView(v: number) { this.view = clamp(v, 1, 2.4); }
   setElev(v: number) { this.elev = clamp(v, 0.3, 1.0); }
   setCamMode(m: CamMode) { this.mode = m; if (m === 'intro') { this.camPos.set(CX + 40, 36, CY + 88); this.camLook.set(CX, 1, CY); } }
   resize() {
     const r = this.cv.getBoundingClientRect(); this.cw = r.width; this.ch = r.height;
     this.gl.setSize(this.cw, this.ch, false); this.camera.aspect = this.cw / this.ch; this.camera.updateProjectionMatrix();
-    const od = Math.min(window.devicePixelRatio || 1, 2); this.ovCv.width = Math.round(this.cw * od); this.ovCv.height = Math.round(this.ch * od); this.ov.setTransform(od, 0, 0, od, 0, 0);
+    const od = Math.min(window.devicePixelRatio || 1, window.matchMedia?.('(pointer: coarse)').matches ? 1.5 : 2); this.ovCv.width = Math.round(this.cw * od); this.ovCv.height = Math.round(this.ch * od); this.ov.setTransform(od, 0, 0, od, 0, 0);
     const cs = getComputedStyle(this.insetEl);
     this.ins = { t: parseFloat(cs.paddingTop) || 0, r: parseFloat(cs.paddingRight) || 0, b: parseFloat(cs.paddingBottom) || 0, l: parseFloat(cs.paddingLeft) || 0 };
   }
@@ -153,15 +155,15 @@ export class ThreeRenderer implements IRenderer {
         s.x += s.vx * step; s.y += s.vy * step; const sp = Math.hypot(s.vx, s.vy); s.run += sp * step;
         const fd = sp > 2 && !hold ? Math.atan2(s.vy, s.vx) : face ?? s.dir; let dd = fd - s.dir; dd = ((dd % (Math.PI * 2)) + Math.PI * 3) % (Math.PI * 2) - Math.PI; s.dir += clamp(dd, -8 * step, 8 * step);
       }
-      r.m.setBlob(this.quality === 'low'); r.m.update(s, b, perf);
+      r.m.lod(this.quality); r.m.update(s, b, perf);
     }
   }
   private syncModels(sim: Sim) {
     if (this.modelSim === sim && this.namesMode === opts.names) { // 교체로 선수가 바뀌었으면 그 모델만 다시 만든다 (전엔 나간 선수의 등번호·모습 그대로였다)
-      for (const p of sim.players) { const m = this.models.get(p); if (m && m.key !== PlayerModel.keyOf(p)) { this.scene.remove(m.root); const n = new PlayerModel(p, sim.M.kit[p.t], this.blobTex, shirtName(p, opts.names)); n.setBlob(this.quality === 'low'); this.scene.add(n.root); this.models.set(p, n); } }
+      for (const p of sim.players) { const m = this.models.get(p); if (m && m.key !== PlayerModel.keyOf(p)) { this.scene.remove(m.root); const n = new PlayerModel(p, sim.M.kit[p.t], this.blobTex, shirtName(p, opts.names)); n.lod(this.quality); this.scene.add(n.root); this.models.set(p, n); } }
       return; }
     for (const m of this.models.values()) this.scene.remove(m.root); this.models.clear();
-    for (const p of sim.players) { const m = new PlayerModel(p, sim.M.kit[p.t], this.blobTex, shirtName(p, opts.names)); m.setBlob(this.quality === 'low'); this.scene.add(m.root); this.models.set(p, m); }
+    for (const p of sim.players) { const m = new PlayerModel(p, sim.M.kit[p.t], this.blobTex, shirtName(p, opts.names)); m.lod(this.quality); this.scene.add(m.root); this.models.set(p, m); }
     this.modelSim = sim; this.namesMode = opts.names; tintCrowd(this.stadium, sim.M.kit[0].c1, sim.M.kit[1].c1);
   }
   /** 월드 → 화면 좌표 (오버레이용) */

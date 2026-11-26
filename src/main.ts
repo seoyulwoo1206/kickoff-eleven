@@ -375,7 +375,7 @@ $('cupNextBtn').addEventListener('click', () => { toMenu(); if (cup) { renderCup
 loadKeys(); installKeyCapture();
 $('keysBtn').addEventListener('click', () => { renderKeys(); $('keys').hidden = false; });
 $('keysClose').addEventListener('click', () => { $('keys').hidden = true; });
-bindSeg('segGfx', opts.gfx, v => { opts.gfx = v as typeof opts.gfx; R.setQuality?.(opts.gfx); saveOpts(); });
+bindSeg('segGfx', opts.gfx, v => { opts.gfx = v as typeof opts.gfx; R.setQuality?.(opts.gfx); saveOpts(); aqReset(); }); // 손으로 고르면 자동 조절은 처음부터 다시
 $('camBtn').addEventListener('click', cycleCamera); $('viewBtn').addEventListener('click', cycleView); setView(opts.view, false); $('camHBtn').addEventListener('click', cycleCamH); setCamH(opts.camH, false);
 window.addEventListener('wheel', e => { if (state === 'play' && !e.ctrlKey && !(e.target as HTMLElement | null)?.closest?.('#xtPanel')) setView(opts.view + Math.sign(e.deltaY) * 0.1); }, { passive: true });
 bindSeg('segSnd', audio.on ? 'on' : 'off', v => { audio.on = v === 'on'; opts.sound = audio.on; });
@@ -547,11 +547,26 @@ function frame(ts: number) {
   if (XT.on && sim && state !== 'menu' && xtFrame++ % 4 === 0) $('xtNow').textContent = renderPanel($('xtGraph') as HTMLCanvasElement, $('xtMap') as HTMLCanvasElement, sim.M.tick, [sim.M.teams[0].code, sim.M.teams[1].code], sim.ball);
   if (rawDt < 0.2 && document.visibilityState === 'visible') autoQuality(dt);
 }
-// 프레임이 3초 넘게 28fps 아래면 품질을 한 단계 내린다 (자동, 올리지는 않음)
-let lowT = 0;
+/* 자동 화질 조절(56차 — 전엔 28fps 아래로 3초여야 화질을 내려, 폰에서 35~50fps로 끊기는 동안은 아무것도 안 했다).
+   경기 중 fps가 50 아래로 2.5초 이어지면 한 칸 내린다(올리지는 않는다 — 경기 중 오락가락하지 않게):
+   ① 해상도 배율 1 → 0.85 → 0.7 (`R.setScale`, 저장 안 함) ② 그래도 낮으면 화질 한 단계(배율은 1로, 저장).
+   내린 뒤 fps가 10% 넘게 안 오르면: 해상도였다면 그리기 호출이 병목이니 배율을 되돌리고 바로 화질을 내리고, 화질이었다면 기기가 프레임을 묶어 둔 것(절전 모드 30fps 등)이니 되돌리고 그만둔다 */
+const aq = { lowT: 0, warm: 0, k: 1, f0: 0, last: '' as '' | 's' | 'q', prev: opts.gfx, off: false };
+function aqReset() { aq.lowT = 0; aq.warm = 0; aq.k = 1; aq.f0 = 0; aq.last = ''; aq.off = false; }
 function autoQuality(dt: number) {
-  if (state !== 'play' || R.fps == null) return;
-  if (R.fps < 28) { lowT += dt; if (lowT > 3 && opts.gfx !== 'low') { opts.gfx = opts.gfx === 'high' ? 'mid' : 'low'; R.setQuality?.(opts.gfx); setSeg('segGfx', opts.gfx); saveOpts(); lowT = 0; } } else lowT = Math.max(0, lowT - dt);
+  if (state !== 'play' || R.fps == null || aq.off) { aq.warm = 0; return; }
+  if ((aq.warm += dt) < 2) return; // 경기 시작·화질을 바꾼 직후 2초는 보지 않는다(셰이더 컴파일·fps 평균이 따라오는 시간)
+  if (R.fps >= 50) { aq.lowT = Math.max(0, aq.lowT - dt * 2); return; }
+  if ((aq.lowT += dt) < 2.5) return;
+  aq.lowT = 0; aq.warm = 0;
+  const gained = aq.last !== '' && R.fps > aq.f0 * 1.1, setGfx = (g: typeof opts.gfx) => { opts.gfx = g; R.setQuality?.(g); setSeg('segGfx', g); saveOpts(); aq.k = 1; };
+  if (aq.last === 'q' && !gained) { setGfx(aq.prev); aq.off = true; return; }
+  let step: 's' | 'q' = aq.k > 0.71 ? 's' : 'q';
+  if (aq.last === 's' && !gained) { aq.k = 1; R.setScale?.(1); step = 'q'; }
+  aq.f0 = R.fps;
+  if (step === 's') { aq.k = aq.k > 0.9 ? 0.85 : 0.7; R.setScale?.(aq.k); aq.last = 's'; }
+  else if (opts.gfx !== 'low') { aq.prev = opts.gfx; setGfx(opts.gfx === 'high' ? 'mid' : 'low'); aq.last = 'q'; }
+  else aq.off = true; // 더 내릴 것이 없다
 }
 let htShown = false;
 function halftimePanel(s: Sim) {

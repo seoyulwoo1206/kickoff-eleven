@@ -137,6 +137,13 @@ export class PlayerModel {
   }
   static keyOf(p: Player) { return p.num + '|' + p.nameEn; }
   setBlob(on: boolean) { this.blob.visible = on; }
+  /** 화질에 맞춘 그림자(56차): 저 = 바닥 얼룩(blob), 중 = 몸통·골반·머리·허벅지·정강이만 그림자를 드리움(팔·목·머리카락·발은 뺀다 — 그림자 패스의 그리기 호출이 선수당 16 → 8, 중계 카메라에선 차이가 거의 안 보인다), 고 = 전부 */
+  lod(q: 'high' | 'mid' | 'low') {
+    this.blob.visible = q === 'low'; const full = q === 'high';
+    for (const g of [...this.arm, ...this.fore]) for (const c of g.children) if ((c as THREE.Mesh).isMesh) c.castShadow = full;
+    for (const f of this.foot) f.castShadow = full;
+    this.head.children.forEach((c, i) => { if (i > 0) c.castShadow = full; }); // 0번 = 머리, 그 뒤 = 목·머리카락
+  }
   /** 손에 물건을 쥐여 준다 (i: 0 왼손, 1 오른손) — 아래팔 끝에 붙는다 */
   hold(obj: THREE.Object3D, i = 1) { obj.position.set(0.02, -FARM - 0.05, 0); this.fore[i].add(obj); }
   /** 상태로 포즈를 만든다. tGlobal은 연출용 시간(초).
