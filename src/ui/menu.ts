@@ -1,4 +1,4 @@
-import { TEAMS, kitCss } from '../data/teams';
+import { TEAMS, NATIONS, kitCss } from '../data/teams';
 import { LEAGUES } from '../data/clubs';
 import { opts } from '../options';
 import { NET, LOCAL } from '../net/peer';
@@ -14,10 +14,11 @@ const cats = (): [string, string][] => [['NAT', '국가대표'], ...LEAGUES.filt
 export function renderMenu() {
   const net = opts.mode === 'net', mySide = LOCAL(), locked = net && NET.ready, C = cats();
   if (opts.mode === 'cup' && TEAMS[opts.sel[0]].lg) opts.sel[0] = opts.sel[1] === 0 ? 1 : 0; // 월드컵은 국가대표로만: 클럽을 고른 채 들어오면 국가대표로 바꾼다
+  if (opts.mode === 'ccup' && !TEAMS[opts.sel[0]].lg && TEAMS.length > NATIONS) opts.sel[0] = opts.sel[1] === NATIONS ? NATIONS + 1 : NATIONS; // 클럽 컵은 클럽으로만
   for (const s of [0, 1] as const) {
-    const g = $('grid' + s), cb = $('cat' + s), fixed = opts.mode === 'cup' && s === 0;
-    if (!cat[s] || fixed || (locked && s !== mySide) || !C.some(c => c[0] === cat[s])) cat[s] = fixed ? 'NAT' : catOf(opts.sel[s]);
-    cb.hidden = C.length < 2 || fixed; cb.innerHTML = C.map(([k, n]) => `<button data-v="${k}" aria-pressed="${cat[s] === k}">${n}</button>`).join('');
+    const g = $('grid' + s), cb = $('cat' + s), fixed = opts.mode === 'cup' && s === 0, Cs = opts.mode === 'ccup' && s === 0 ? C.filter(c => c[0] !== 'NAT') : C; // 월드컵의 내 팀은 국가대표만, 클럽 컵의 내 팀은 클럽만
+    if (!cat[s] || fixed || (locked && s !== mySide) || !Cs.some(c => c[0] === cat[s])) cat[s] = fixed ? 'NAT' : catOf(opts.sel[s]);
+    cb.hidden = Cs.length < 2 || fixed; cb.innerHTML = Cs.map(([k, n]) => `<button data-v="${k}" aria-pressed="${cat[s] === k}">${n}</button>`).join('');
     cb.querySelectorAll<HTMLButtonElement>('button').forEach(b => b.addEventListener('click', () => { if (locked && s !== mySide) return; cat[s] = b.dataset.v!; renderMenu(); }));
     g.innerHTML = TEAMS.map((T, i) => catOf(i) !== cat[s] ? '' : `<button class="chip" data-i="${i}" aria-pressed="${opts.sel[s] === i}" ${opts.sel[1 - s] === i ? 'disabled' : ''} aria-label="${T.name}"><div class="shirt" style="background:${kitCss(T)}"></div><span>${T.code}</span></button>`).join('');
     g.querySelectorAll<HTMLButtonElement>('.chip').forEach(b => b.addEventListener('click', () => { if (locked && s !== mySide) return; opts.sel[s] = +b.dataset.i!; renderMenu(); hooks.onSelChange(); }));
@@ -27,7 +28,7 @@ export function renderMenu() {
     $('sq' + s).innerHTML = sq ? `<span class="form">${sq.formation}</span>` + topPlayers(sq, 3).map(p => `<span>${opts.names === 'real' ? p.name : aliasOf(p)}<b>${overall(p)}</b></span>`).join('') + `<span class="asof">${sq.asOf} 기준</span>` : '<span class="asof">선수단 데이터 없음</span>';
     g.parentElement!.classList.toggle('locked', locked && s !== mySide);
   }
-  const two = opts.mode === '2p', cupMode = opts.mode === 'cup';
+  const two = opts.mode === '2p', cupMode = opts.mode === 'cup' || opts.mode === 'ccup';
   const labs = net ? (NET.role === 'guest' ? ['상대 팀 (호스트)', '내 팀 (게스트)'] : ['내 팀 (호스트)', '상대 팀 (게스트)']) : two ? ['P1 팀', 'P2 팀'] : ['내 팀', '상대 팀 (AI)'];
   $('lab0').textContent = labs[0]; $('lab1').textContent = labs[1];
   $('help2').hidden = !two; $('helpNet').hidden = !net; $('optDiff').hidden = !(opts.mode === 'ai' || cupMode || opts.mode === 'pk'); $('netPanel').hidden = !net; $('optLen').hidden = opts.mode === 'pk';

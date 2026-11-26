@@ -5,10 +5,20 @@ import type { TeamDef, Pat } from './teams';
 import { overall, POSES, type Main, type PlayerDef, type Pos, type SquadDef } from './squad';
 import EPL1 from './clubs/EPL1';
 import EPL2 from './clubs/EPL2';
+import LAL1 from './clubs/LAL1';
+import LAL2 from './clubs/LAL2';
+import BUN1 from './clubs/BUN1';
+import BUN2 from './clubs/BUN2';
+import SEA1 from './clubs/SEA1';
+import SEA2 from './clubs/SEA2';
+import ETC1 from './clubs/ETC1';
+import ETC2 from './clubs/ETC2';
 
 /** 리그 열쇠와 메뉴에 보이는 이름 (팀이 하나라도 있는 리그만 메뉴에 뜬다) */
 export const LEAGUES: [string, string][] = [['EPL', '프리미어리그'], ['LAL', '라리가'], ['BUN', '분데스리가'], ['SEA', '세리에 A'], ['ETC', '그 밖 (챔스)']];
-const SRC: [string, string][] = [['EPL', EPL1], ['EPL', EPL2]];
+const SRC: [string, string][] = [['EPL', EPL1], ['EPL', EPL2], ['LAL', LAL1], ['LAL', LAL2], ['BUN', BUN1], ['BUN', BUN2], ['SEA', SEA1], ['SEA', SEA2], ['ETC', ETC1], ['ETC', ETC2]];
+/** 2026/27 챔피언스리그 본선(리그 페이즈) 36팀 — 클럽 컵의 참가팀 (영문 위키백과 '2026–27 UEFA Champions League league phase', 2026-11-26 확인) */
+export const UCL = 'PSG BAY RMA LIV INT MCI ARS BAR ATM BVB ROM SCP AVL FCP MUN BRU BET PSV FEY LIL BOD NAP RBL VIL FEN SHK GAL SLP SLB STU AEK LSK COM LEN VIK SAB'.split(' ');
 
 /** 포지션 틀: 종합에서 벗어난 정도 [pac, sho, pas, dri, def, phy] — 전개한 뒤 `overall()`이 ovr이 되도록 여섯 값을 같이 민다 */
 const TPL: Record<Pos, number[]> = {

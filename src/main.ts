@@ -10,7 +10,7 @@ import { QT_NAMES, CNR_NAMES } from './sim/quick';
 import { pollGamepads } from './input/gamepad';
 import { installTouch, touchGauge, applyTouchStyle } from './input/touch';
 import { openLineup, closeLineup } from './ui/lineup';
-import { newCup, loadCup, saveCup, userFixture, advance, type Cup } from './cup';
+import { newCup, loadCup, saveCup, userFixture, advanceAsync, clubPool, type Cup, type CupKey } from './cup';
 import { renderCup } from './ui/cup';
 import { loadKeys, renderKeys, installKeyCapture, keyOf } from './ui/keys';
 import { boo } from './audio';
@@ -77,7 +77,10 @@ const inSt = { lastIn: '', hb: 0 };
 audio.on = opts.sound; applySquadStrength();
 
 /* ---------- 경기 시작/종료 ---------- */
-let cup: Cup | null = loadCup();
+/* 대회는 둘(55차): 월드컵(mode 'cup', 국가대표)·클럽 컵('ccup', 챔스 참가 클럽) — 저장도 따로. `cup`은 지금 모드의 대회(모드를 바꾸면 그쪽 저장을 읽는다) */
+const isCup = () => opts.mode === 'cup' || opts.mode === 'ccup', cupKey = (): CupKey => opts.mode === 'ccup' ? 'ko11ccup' : 'ko11cup';
+const makeCup = () => opts.mode === 'ccup' ? newCup(opts.sel[0], clubPool(opts.sel[0])) : newCup(opts.sel[0]);
+let cup: Cup | null = loadCup(cupKey());
 let cupMatch = false; // 지금 경기가 토너먼트 경기인가
 let cupSwap = false; // 토너먼트 경기에서 대진표의 뒤쪽 팀(b)이 나라서 팀 순서를 뒤집어 넣었나 (결과를 적을 때 다시 뒤집는다)
 let introT = 0;
@@ -95,7 +98,7 @@ function startMatch(cfg?: StartCfg) {
   }
   if (cfg) { opts.sel[0] = cfg.sel[0]; opts.sel[1] = cfg.sel[1]; opts.len = cfg.len; if ((cfg.tempo as string) in TEMPO) opts.tempo = cfg.tempo as keyof typeof TEMPO; }
   // 월드컵(54차): 팀을 고르기(a, b) 전에 대진표의 두 팀을 넣는다 — 전엔 이 줄이 뒤에 있어 대진표와 다른 팀(메뉴에서 고른 상대, 그다음부턴 지난 경기의 두 팀)과 붙고 결과만 대진표에 적혔다. 내 팀은 늘 팀 0: 대진표에서 내가 뒤쪽(b)이면 뒤집는다
-  cupSwap = false; if (opts.mode === 'cup' && cup) { const uf = userFixture(cup); if (uf) { cupSwap = uf.b === cup.user; opts.sel[0] = cupSwap ? uf.b : uf.a; opts.sel[1] = cupSwap ? uf.a : uf.b; cupMatch = true; } else cupMatch = false; } else cupMatch = false;
+  cupSwap = false; if (isCup() && cup) { const uf = userFixture(cup); if (uf) { cupSwap = uf.b === cup.user; opts.sel[0] = cupSwap ? uf.b : uf.a; opts.sel[1] = cupSwap ? uf.a : uf.b; cupMatch = true; } else cupMatch = false; } else cupMatch = false;
   const net = opts.mode === 'net' && NET.ready, a = TEAMS[opts.sel[0]], b = TEAMS[opts.sel[1]];
   const tag = (t: number) => net ? (t === LOCAL() ? 'YOU' : (t === 0 ? a : b).code) : 'P' + (t + 1);
   const cur = (t: number) => (net && t !== LOCAL()) ? 'auto' as const : opts.cursor; // 커서 전환 방식은 각자 로컬 설정
@@ -118,9 +121,9 @@ function startMatch(cfg?: StartCfg) {
   R.reset(); acc = 0; simLast = 0; state = 'play';
   $('menu').hidden = true; $('result').hidden = true; $('pause').hidden = true; $('hud').hidden = false; $('pauseBtn').hidden = false; $('touch').hidden = !isTouch;
   $('hPing').hidden = !net; showPing(); xtSync();
-  setHudTheme(opts.mode === 'pk' ? 'pk' : net ? 'net' : cupMatch ? 'cup' : opts.mode === '2p' ? '2p' : 'league', opts.mode === 'pk' ? '승부차기' : net ? '온라인 대전' : cupMatch && cup ? '월드컵 · ' + ({ group: '조별리그', r16: '16강', qf: '8강', sf: '준결승', f: '결승' } as Record<string, string>)[cup.stage] : opts.mode === '2p' ? '2인 대전' : '친선 경기');
+  setHudTheme(opts.mode === 'pk' ? 'pk' : net ? 'net' : cupMatch ? 'cup' : opts.mode === '2p' ? '2p' : 'league', opts.mode === 'pk' ? '승부차기' : net ? '온라인 대전' : cupMatch && cup ? (cup.kind === 'club' ? '클럽 컵 · ' : '월드컵 · ') + ({ group: '조별리그', r16: '16강', qf: '8강', sf: '준결승', f: '결승' } as Record<string, string>)[cup.stage] : opts.mode === '2p' ? '2인 대전' : '친선 경기');
   resetHud(); drain(sim); updateHud(sim, LOCAL()); crowdStart();
-  if (introT > 0) { showIntro(sim, opts.names, cupMatch && cup ? '월드컵' : '친선 경기'); anthem(); } else { hideIntro(); anthemStop(0.1); } // 입장: 선발 라인업 + 음악
+  if (introT > 0) { showIntro(sim, opts.names, cupMatch && cup ? (cup.kind === 'club' ? '클럽 컵' : '월드컵') : '친선 경기'); anthem(); } else { hideIntro(); anthemStop(0.1); } // 입장: 선발 라인업 + 음악
   saveOpts();
 }
 /** 시뮬이 내보낸 연출 이벤트를 처리하고, 호스트면 게스트에게도 보낸다 */
@@ -192,7 +195,8 @@ function fullTime() {
   if (NET.role !== 'guest') sfx('long');
   fillResult(sim, LOCAL(), NET.role === 'guest'); fillRatings(); fillXtResult();
   $('cupNextBtn').hidden = !cupMatch; $('againBtn').hidden = cupMatch || NET.role === 'guest';
-  if (cupMatch && cup) { const so = sim.M.so ? [sim.M.so.kicks[0].filter(v => v).length, sim.M.so.kicks[1].filter(v => v).length] as [number, number] : undefined; const sc = sim.M.score, w = sim.M.so?.winner; advance(cup, cupSwap ? [sc[1], sc[0]] : [sc[0], sc[1]], so && cupSwap ? [so[1], so[0]] : so, w == null || !cupSwap ? w : 1 - w); saveCup(cup); } // 뒤집어 넣은 경기는 대진표 방향(a : b)으로 되돌려 적는다
+  if (cupMatch && cup) { const so = sim.M.so ? [sim.M.so.kicks[0].filter(v => v).length, sim.M.so.kicks[1].filter(v => v).length] as [number, number] : undefined; const sc = sim.M.score, w = sim.M.so?.winner, c = cup, key = cupKey(), nb = $('cupNextBtn') as HTMLButtonElement; nb.disabled = true; nb.textContent = '다른 경기 진행 중…'; // 다른 경기는 한 경기씩 나눠 돌린다 — 끝나야 대진표로 갈 수 있다
+    advanceAsync(c, cupSwap ? [sc[1], sc[0]] : [sc[0], sc[1]], so && cupSwap ? [so[1], so[0]] : so, w == null || !cupSwap ? w : 1 - w, () => { saveCup(c, key); nb.disabled = false; nb.textContent = '토너먼트로'; }); } // 뒤집어 넣은 경기는 대진표 방향(a : b)으로 되돌려 적는다
   window.setTimeout(() => { if (state === 'over') { $('result').hidden = false; ($('againBtn') as HTMLButtonElement).focus(); } }, 900);
   if (NET.role !== 'guest') { const M = sim.M; showBanner('FULL TIME', `${M.teams[0].code} ${M.score[0]} - ${M.score[1]} ${M.teams[1].code}`, 1400, false); }
 }
@@ -340,7 +344,7 @@ function fillRatings() {
 
 /* ---------- 메뉴 ---------- */
 initMenu({ onSelChange: () => { netSendLobby(); renderMenuTactics(); } });
-bindSeg('segMode', opts.mode, v => { if (opts.mode === 'net' && v !== 'net') { netClose(); netStatus(NET_IDLE_MSG); } opts.mode = v as typeof opts.mode; renderMenu(); renderMenuTactics(); if (v === 'cup') openCup(); });
+bindSeg('segMode', opts.mode, v => { if (opts.mode === 'net' && v !== 'net') { netClose(); netStatus(NET_IDLE_MSG); } opts.mode = v as typeof opts.mode; if (isCup()) cup = loadCup(cupKey()); renderMenu(); renderMenuTactics(); if (isCup()) openCup(); });
 bindSeg('segLen', opts.len, v => { opts.len = +v; netSendLobby(); });
 bindSeg('segDiff', opts.diff, v => { opts.diff = v as typeof opts.diff; });
 bindSeg('segTempo', opts.tempo, v => { opts.tempo = v as typeof opts.tempo; saveOpts(); });
@@ -356,14 +360,14 @@ const menuLineup: [number[] | null, number[] | null] = [null, null];
 for (const t of [0, 1] as const) $('lu' + t).addEventListener('click', () => { const T = TEAMS[opts.sel[t]], sq = squadOf(T); if (!sq) return; openLineup(sq, menuTac[t].form, menuLineup[t] ?? sq.lineup, opts.names, lu => { menuLineup[t] = lu.slice(); }); });
 $('luClose').addEventListener('click', closeLineup);
 // 월드컵
-function openCup() { if (!cup) cup = newCup(opts.sel[0]); saveCup(cup); renderCup(cup); $('cup').hidden = false; }
+function openCup() { if (!cup) cup = makeCup(); saveCup(cup, cupKey()); renderCup(cup); $('cup').hidden = false; }
 $('cupClose').addEventListener('click', () => { $('cup').hidden = true; });
-$('cupQuit').addEventListener('click', () => { cup = null; saveCup(null); $('cup').hidden = true; });
+$('cupQuit').addEventListener('click', () => { cup = null; saveCup(null, cupKey()); $('cup').hidden = true; });
 $('cupPlay').addEventListener('click', () => {
   if (!cup) return;
-  if (cup.stage === 'done') { cup = newCup(opts.sel[0]); saveCup(cup); renderCup(cup); return; }
+  if (cup.stage === 'done') { cup = makeCup(); saveCup(cup, cupKey()); renderCup(cup); return; }
   const uf = userFixture(cup);
-  if (cup.eliminated || !uf) { advance(cup); saveCup(cup); renderCup(cup); return; }
+  if (cup.eliminated || !uf) { const c = cup, key = cupKey(), pb = $('cupPlay') as HTMLButtonElement; pb.disabled = true; pb.textContent = '진행 중…'; advanceAsync(c, undefined, undefined, undefined, () => { saveCup(c, key); pb.disabled = false; if (cup === c) renderCup(c); }); return; }
   $('cup').hidden = true; ensureAudio(); startMatch();
 });
 $('cupNextBtn').addEventListener('click', () => { toMenu(); if (cup) { renderCup(cup); $('cup').hidden = false; } });
@@ -375,7 +379,7 @@ bindSeg('segGfx', opts.gfx, v => { opts.gfx = v as typeof opts.gfx; R.setQuality
 $('camBtn').addEventListener('click', cycleCamera); $('viewBtn').addEventListener('click', cycleView); setView(opts.view, false); $('camHBtn').addEventListener('click', cycleCamH); setCamH(opts.camH, false);
 window.addEventListener('wheel', e => { if (state === 'play' && !e.ctrlKey && !(e.target as HTMLElement | null)?.closest?.('#xtPanel')) setView(opts.view + Math.sign(e.deltaY) * 0.1); }, { passive: true });
 bindSeg('segSnd', audio.on ? 'on' : 'off', v => { audio.on = v === 'on'; opts.sound = audio.on; });
-$('startBtn').addEventListener('click', () => { ensureAudio(); if (opts.mode === 'cup') { openCup(); return; } startMatch(); });
+$('startBtn').addEventListener('click', () => { ensureAudio(); if (isCup()) { openCup(); return; } startMatch(); });
 $('pauseBtn').addEventListener('click', () => pauseGame());
 $('resumeBtn').addEventListener('click', () => resumeGame());
 $('restartBtn').addEventListener('click', () => startMatch());

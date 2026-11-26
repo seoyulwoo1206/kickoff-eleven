@@ -6,6 +6,7 @@ const $ = (id: string) => document.getElementById(id) as HTMLElement;
 const code = (i: number) => TEAMS[i].code, name = (i: number) => TEAMS[i].name;
 const fx = (f: Fixture, user: number) => { const cls = f.a === user || f.b === user ? ' me' : ''; const sc = f.score ? `${f.score[0]} : ${f.score[1]}${f.so ? ` <small>(${f.so[0]}-${f.so[1]} PK)</small>` : ''}` : 'vs'; return `<div class="fx${cls}"><span>${code(f.a)}</span><b>${sc}</b><span>${code(f.b)}</span></div>`; };
 export function renderCup(c: Cup) {
+  $('cupKind').textContent = c.kind === 'club' ? '클럽 컵 · 챔피언스리그 참가 36팀' : '월드컵 토너먼트';
   $('cupTitle').textContent = `${name(c.user)} · ${STAGE_NAMES[c.stage]}${c.stage === 'group' ? ` ${c.round}차전` : ''}`;
   const uf = userFixture(c);
   let lede: string;
