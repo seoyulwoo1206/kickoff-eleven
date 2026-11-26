@@ -18,6 +18,9 @@ const DIST: Record<string, [number[], number[]]> = {
   SUI: [[4, 3, 1, 1, 1, 1], [3, 3, 3, 1, 1, 0, 0, 0]],
 };
 const DFLT: [number[], number[]] = [[2, 3, 2, 1, 1, 1], [5, 3, 2, 1, 1, 0, 0, 0]];
+/** 분포 표에 없는 국적(클럽 선수, 55차)은 가까운 나라의 분포를 빌린다 — 없으면 DFLT */
+const SAME: Record<string, string> = {};
+for (const [k, list] of Object.entries({ DEN: 'NOR SWE FIN ISL', GER: 'AUT POL CZE SVK HUN UKR RUS', CRO: 'SRB BIH MNE SVN MKD ALB KOS BUL ROU', ITA: 'GRE TUR', ENG: 'SCO WAL NIR IRL', SEN: 'CIV CMR MLI GUI COD GAB BFA TOG GAM ZAM ZIM ANG MOZ BEN SLE GNB CGO EQG CPV JAM HAI TRI RSA UGA KEN', MAR: 'EGY ALG TUN LBY IRQ IRN KSA', COL: 'ECU VEN PER PAN DOM', URU: 'PAR CHI', MEX: 'BOL CRC HON', KOR: 'CHN PRK', USA: 'CAN', AUS: 'NZL' })) for (const c of list.split(' ')) SAME[c] = k;
 function hash(str: string) { let h = 2166136261; for (let i = 0; i < str.length; i++) { h ^= str.charCodeAt(i); h = Math.imul(h, 16777619); } return h >>> 0; }
 function pick(w: number[], r: number) { let sum = 0; for (const x of w) sum += x; let q = r * sum; for (let i = 0; i < w.length; i++) { q -= w[i]; if (q < 0) return i; } return w.length - 1; }
 /** 씨앗에서 n번째 0~1 값 (얼굴 생김새의 각 항목에 하나씩) */
@@ -67,7 +70,7 @@ const OV: Record<string, [number, number, number, number]> = {
 /** 선수별 지정: 머리 모양·수염 (없으면 undefined — `player.ts`·`textures.ts`가 씨앗에서 고른다) */
 export function lookOv(nameEn?: string): { style: number; beard: number } | undefined { const o = nameEn ? OV[nameEn] : undefined; return o ? { style: o[2], beard: o[3] } : undefined; }
 export function lookOf(code: string, name: string, num: number): Look {
-  const seed = hash(code + '|' + name + '|' + num), [ws, wh] = DIST[code] ?? DFLT;
+  const seed = hash(code + '|' + name + '|' + num), [ws, wh] = DIST[code] ?? DIST[SAME[code]] ?? DFLT;
   const ov = OV[name]; if (ov) return { skin: SKIN[ov[0]], hair: HAIR[ov[1]], seed, tone: ov[0] }; // 선수별 지정
   const tone = pick(ws, lookBit(seed, 0)); let hi = pick(wh, lookBit(seed, 1)); if (tone >= 4 && hi > 1) hi = 0; // 어두운 피부엔 검은 머리
   return { skin: SKIN[tone], hair: HAIR[hi], seed, tone };

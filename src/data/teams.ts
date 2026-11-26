@@ -1,10 +1,13 @@
+import { CLUB_TEAMS } from './clubs';
 export type Pat = 'solid' | 'stripes' | 'hoops' | 'half' | 'sash' | 'chevron' | 'check';
-export interface TeamDef { code: string; name: string; pat: Pat; c1: string; c2: string; sh: string; gk: string; atk: number; def: number; spd: number; }
+export interface TeamDef { code: string; name: string; pat: Pat; c1: string; c2: string; sh: string; gk: string; atk: number; def: number; spd: number; /** 클럽팀이면 리그 열쇠(`clubs.ts` `LEAGUES`), 국가대표는 없음 */ lg?: string; }
 export interface Kit { pat: Pat; c1: string; c2: string; sh: string; gk: string; }
 export type Role = 'GK' | 'DF' | 'MF' | 'FW';
 export type DiffKey = 'easy' | 'normal' | 'hard';
 export interface DiffDef { spd: number; react: number; tackle: number; err: number; gk: number; press: number; }
 
+/** 국가대표 수 — `TEAMS`의 앞 `NATIONS`개가 국가대표, 그 뒤가 클럽(55차). 순번이 저장값(`opts.sel`·월드컵 저장)에 쓰이므로 국가대표는 늘 앞에 둔다 */
+export const NATIONS = 24;
 export const TEAMS: TeamDef[] = [
   { code: 'KOR', name: '대한민국', pat: 'solid', c1: '#d6243a', c2: '#1a1a2e', sh: '#f4f4f4', gk: '#19a974', atk: 83, def: 80, spd: 86 },
   { code: 'JPN', name: '일본', pat: 'solid', c1: '#1a3a8f', c2: '#f4f4f4', sh: '#1a3a8f', gk: '#ff9800', atk: 81, def: 79, spd: 88 },
@@ -30,6 +33,7 @@ export const TEAMS: TeamDef[] = [
   { code: 'SUI', name: '스위스', pat: 'solid', c1: '#d52b1e', c2: '#f4f4f4', sh: '#f4f4f4', gk: '#1a237e', atk: 80, def: 84, spd: 80 },
   { code: 'GHA', name: '가나', pat: 'half', c1: '#f4f4f4', c2: '#c8102e', sh: '#111111', gk: '#2e7d32', atk: 80, def: 78, spd: 86 },
   { code: 'NGA', name: '나이지리아', pat: 'stripes', c1: '#1b9b4b', c2: '#f4f4f4', sh: '#1b9b4b', gk: '#111111', atk: 83, def: 79, spd: 87 },
+  ...CLUB_TEAMS,
 ];
 export const DIFF: Record<DiffKey, DiffDef> = {
   // 난이도는 속도 치트 없이 반응 시간·판단 실수·압박·태클·키퍼로만 (spd는 1로 고정)

@@ -307,7 +307,7 @@ function renderPauseTactics() {
   const field = s.team[t].filter(p => !p.off), bench = s.M.bench[t], left = 5 - s.M.subs[t];
   const toks: Tok[] = field.map(p => { const q = halfPos(p.bx, p.by, t === 1); return { id: 'f' + p.i, num: p.num, name: displayName(p, opts.names), kit: p.role === 'GK' ? kit.gk : kit.c1, skin: p.skin, hair: p.hair, x: q.x, y: q.y, sub: `${p.pos} ${p.ovr}`, bar: p.sta, cls: (subPick === 'f' + p.i ? 'on ' : '') + (p.yellow ? 'yel' : '') }; });
   $('subPitch').innerHTML = pitchHtml(toks, 'half');
-  $('subBench').innerHTML = bench.length ? bench.map((d, i) => { const lk = lookOf(code, d.nameEn, d.num); return tokHtml({ id: 'b' + i, num: d.num, name: opts.names === 'real' ? d.name : aliasOf(d), kit: d.pos === 'GK' ? kit.gk : kit.c1, skin: lk.skin, hair: lk.hair, sub: `${d.pos} ${overall(d)}`, cls: subPick === 'b' + i ? 'on' : '' }); }).join('') : '<span class="ratenote">벤치에 선수가 없어요</span>';
+  $('subBench').innerHTML = bench.length ? bench.map((d, i) => { const lk = lookOf(d.nat ?? code, d.nameEn, d.num); return tokHtml({ id: 'b' + i, num: d.num, name: opts.names === 'real' ? d.name : aliasOf(d), kit: d.pos === 'GK' ? kit.gk : kit.c1, skin: lk.skin, hair: lk.hair, sub: `${d.pos} ${overall(d)}`, cls: subPick === 'b' + i ? 'on' : '' }); }).join('') : '<span class="ratenote">벤치에 선수가 없어요</span>';
   $('subNote').textContent = `교체 ${s.M.subs[t]}/5 · ` + (subMsg || (left <= 0 ? '교체를 모두 썼어요' : !bench.length ? '벤치 없음' : subPick ? (subPick[0] === 'f' ? '들어올 벤치 선수를 누르세요' : '나갈 선수를 누르세요') : '나갈 선수와 들어올 선수를 차례로 누르세요'));
 }
 function subClick(id: string) {
@@ -329,7 +329,7 @@ function fillRatings() {
   const by = new Map(r.list.map(p => [p.t + ':' + p.num, p])), bc = (v: number) => v >= 8 ? 'r9' : v >= 7 ? 'r7' : v >= 6 ? 'r6' : 'r5';
   const toks: Tok[] = sim.players.map(p => { const q = fullPos(p.bx, p.by, p.t), v = by.get(p.t + ':' + p.num); return { id: 'r' + p.t + p.i, num: p.num, name: displayName(p, opts.names), kit: p.role === 'GK' ? M.kit[p.t].gk : M.kit[p.t].c1, skin: p.skin, hair: p.hair, x: q.x, y: q.y, badge: v ? v.rating.toFixed(1) : '-', badgeCls: v ? bc(v.rating) : '', cls: 'stat ' + (v === r.mvp ? 'mvp ' : '') + (p.off ? 'dim' : '') }; });
   const gone = r.list.filter(p => !sim!.players.some(q => q.t === p.t && q.num === p.num)).sort((a, b) => a.t - b.t), m = r.mvp;
-  const outTok = (p: typeof m) => { const T = M.teams[p.t], d = squadOf(T)?.players.find(q => q.num === p.num), lk = d ? lookOf(T.code, d.nameEn, d.num) : null; // 나간 선수의 Player 객체는 들어온 선수로 덮였으므로 선수단 자료에서 겉모습을 찾는다
+  const outTok = (p: typeof m) => { const T = M.teams[p.t], d = squadOf(T)?.players.find(q => q.num === p.num), lk = d ? lookOf(d.nat ?? T.code, d.nameEn, d.num) : null; // 나간 선수의 Player 객체는 들어온 선수로 덮였으므로 선수단 자료에서 겉모습을 찾는다
     return tokHtml({ id: 'o' + p.t + p.num, num: p.num, name: p.name, kit: p.role === 'GK' ? M.kit[p.t].gk : M.kit[p.t].c1, skin: lk?.skin ?? '#d2a27c', hair: lk?.hair ?? '#2a2018', sub: '▼ ' + T.code, badge: p.rating.toFixed(1), badgeCls: bc(p.rating), cls: 'stat ' + (p === m ? 'mvp' : '') }); };
   el.innerHTML = `<div class="mvpline"><em>★ 최우수 선수</em><b>${m.name}</b><span>${M.teams[m.t].code} · 평점 ${m.rating.toFixed(1)}${m.goals ? ` · ${m.goals}골` : ''}${m.assists ? ` · ${m.assists}도움` : ''}${m.saves ? ` · 선방 ${m.saves}` : ''}${m.recov + m.clears ? ` · 공 따냄 ${m.recov + m.clears}` : ''}</span></div>`
     + pitchHtml(toks, 'full')

@@ -238,6 +238,7 @@ body.xtv #xtPanel,body.xtv #xtPanel.all{left:6px;right:6px;width:auto;top:var(--
 #xtPanel .xtr[hidden]{display:none}
 #xtPanel .xtr>span{font-size:11px;font-weight:700;letter-spacing:.08em;color:var(--muted)}
 .seg.sm{display:flex;flex-wrap:wrap}
+.seg.cat{margin:8px 0 6px}.seg.cat[hidden]{display:none}.seg.cat button{padding:8px 10px;font-size:13px}
 .seg.sm button{padding:5px 8px;font-size:12px;flex:1 1 auto;white-space:nowrap}
 .seg.sm button:disabled{opacity:.35}
 #segXtPart button,#segXtModel button{font-family:var(--f-num);font-size:14px;font-weight:600;letter-spacing:.02em;padding:4px 5px} /* 영문 이름 넷이 한 줄에 들어가게 좁은 글꼴 */

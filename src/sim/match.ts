@@ -57,7 +57,7 @@ function makePlayers(s: Sim, squads: [import('../data/squad').SquadDef | null, i
       const det = detailOf(d ?? { name: '', nameEn: '', num: NUMS[i], pos: f.pos, foot: 'R', weak: 3, skill: 2, height: 180,
         r: f.role === 'GK' ? { pac: 58, sho: 60, pas: 62, dri: 55, def: T.def, phy: T.def } : { pac: T.spd, sho: f.role === 'FW' ? T.atk : f.role === 'MF' ? T.atk - 8 : T.atk - 25, pas: f.role === 'MF' ? T.atk : T.atk - 8, dri: f.role === 'DF' ? T.atk - 15 : T.atk - 3, def: f.role === 'DF' ? T.def : f.role === 'MF' ? T.def - 12 : T.def - 35, phy: (T.def + T.spd) / 2 },
         gk: f.role === 'GK' ? { div: T.def, han: T.def - 2, kic: 65, ref: T.def + 2, pos: T.def } : undefined });
-      const lk = lookOf(T.code, d ? d.nameEn : 'p' + i, d ? d.num : NUMS[i]);
+      const lk = lookOf(d?.nat ?? T.code, d ? d.nameEn : 'p' + i, d ? d.num : NUMS[i]); // 클럽 선수는 국적의 분포로
       const p: Player = {
         t, i, role: f.role, bx: f.x, by: f.y, num: d ? d.num : NUMS[i], x: 0, y: 0, vx: 0, vy: 0, dir: t === 0 ? 0 : Math.PI, speed: 0,
         kickCD: 0, stun: 0, tackleCD: 0, bodyCD: 0, reactT: 0, shield: 0, lagVx: 0, lagVy: 0, cutCD: 0, beatT: 0, runT: 0, runDir: 0, callT: 0, spX: 0, spY: 0, spT: 0, dumT: 0, offs: false, slide: 0, decT: 0, holdT: 0, lastSave: -1, dive: 0, diveDir: 0, lunge: 0, head: 0, atFeet: false, run: s.rnd() * 10,

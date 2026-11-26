@@ -1,4 +1,5 @@
 import { TEAMS, kitCss } from '../data/teams';
+import { LEAGUES } from '../data/clubs';
 import { opts } from '../options';
 import { NET, LOCAL } from '../net/peer';
 import { squadOf, strengthOf, topPlayers, overall, aliasOf } from '../data/squads';
@@ -7,11 +8,18 @@ const $ = (id: string) => document.getElementById(id) as HTMLElement;
 export interface MenuHooks { onSelChange(): void; }
 let hooks: MenuHooks;
 export function initMenu(h: MenuHooks) { hooks = h; }
+/** 팀 종류(55차): 국가대표('NAT') 또는 클럽의 리그 열쇠. 쪽마다 지금 보고 있는 종류 `cat` — 격자엔 그 종류의 팀만 뜬다(고른 팀의 순번 `opts.sel`은 전체 `TEAMS` 기준 그대로) */
+const catOf = (i: number) => TEAMS[i].lg ?? 'NAT', cat: [string, string] = ['', ''];
+const cats = (): [string, string][] => [['NAT', '국가대표'], ...LEAGUES.filter(([k]) => TEAMS.some(T => T.lg === k))];
 export function renderMenu() {
-  const net = opts.mode === 'net', mySide = LOCAL(), locked = net && NET.ready;
+  const net = opts.mode === 'net', mySide = LOCAL(), locked = net && NET.ready, C = cats();
+  if (opts.mode === 'cup' && TEAMS[opts.sel[0]].lg) opts.sel[0] = opts.sel[1] === 0 ? 1 : 0; // 월드컵은 국가대표로만: 클럽을 고른 채 들어오면 국가대표로 바꾼다
   for (const s of [0, 1] as const) {
-    const g = $('grid' + s);
-    g.innerHTML = TEAMS.map((T, i) => `<button class="chip" data-i="${i}" aria-pressed="${opts.sel[s] === i}" ${opts.sel[1 - s] === i ? 'disabled' : ''} aria-label="${T.name}"><div class="shirt" style="background:${kitCss(T)}"></div><span>${T.code}</span></button>`).join('');
+    const g = $('grid' + s), cb = $('cat' + s), fixed = opts.mode === 'cup' && s === 0;
+    if (!cat[s] || fixed || (locked && s !== mySide) || !C.some(c => c[0] === cat[s])) cat[s] = fixed ? 'NAT' : catOf(opts.sel[s]);
+    cb.hidden = C.length < 2 || fixed; cb.innerHTML = C.map(([k, n]) => `<button data-v="${k}" aria-pressed="${cat[s] === k}">${n}</button>`).join('');
+    cb.querySelectorAll<HTMLButtonElement>('button').forEach(b => b.addEventListener('click', () => { if (locked && s !== mySide) return; cat[s] = b.dataset.v!; renderMenu(); }));
+    g.innerHTML = TEAMS.map((T, i) => catOf(i) !== cat[s] ? '' : `<button class="chip" data-i="${i}" aria-pressed="${opts.sel[s] === i}" ${opts.sel[1 - s] === i ? 'disabled' : ''} aria-label="${T.name}"><div class="shirt" style="background:${kitCss(T)}"></div><span>${T.code}</span></button>`).join('');
     g.querySelectorAll<HTMLButtonElement>('.chip').forEach(b => b.addEventListener('click', () => { if (locked && s !== mySide) return; opts.sel[s] = +b.dataset.i!; renderMenu(); hooks.onSelChange(); }));
     const T = TEAMS[opts.sel[s]]; $('ch' + s).innerHTML = `${T.name}<small>${T.code}</small>`;
     const sq = squadOf(T);

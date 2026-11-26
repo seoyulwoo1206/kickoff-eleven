@@ -1,10 +1,11 @@
 /* 선수단 조회·팀 전력 계산. 팀 JSON이 없는 팀은 TEAMS의 팀 능력치만으로 (옛 방식) 경기한다 */
 import { SQUADS } from './teams/index';
+import { CLUB_SQUADS } from './clubs';
 import { TEAMS, type TeamDef } from './teams';
 import { overall, expand, type SquadDef, type PlayerDef, type Detail } from './squad';
 import { FORMATIONS } from './formations';
 
-export function squadOf(T: TeamDef): SquadDef | null { return SQUADS[T.code] ?? null; }
+export function squadOf(T: TeamDef): SquadDef | null { return SQUADS[T.code] ?? CLUB_SQUADS[T.code] ?? null; }
 export function lineupOf(sq: SquadDef): PlayerDef[] { const by = new Map(sq.players.map(p => [p.num, p])); return sq.lineup.map(n => by.get(n)!).filter(Boolean); }
 export function slotsOf(sq: SquadDef) { return FORMATIONS[sq.formation] ?? FORMATIONS['4-4-2']; }
 export interface TeamStrength { ovr: number; atk: number; def: number; spd: number; }

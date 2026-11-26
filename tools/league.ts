@@ -1,7 +1,7 @@
 /* 리그 시뮬: 24팀을 무작위로 짝지어 N경기 돌리고 축구다운지 본다.
    사용: npx tsx tools/league.ts [경기수=100] [경기길이초=300] [--seed N]
    출력: 경기당 골·슈팅·유효·패스 수/성공률·파울·오프사이드·카드·루즈볼, 전력차(선발 평균 차)별 승률 */
-import { TEAMS } from '../src/data/teams';
+import { TEAMS, NATIONS } from '../src/data/teams';
 import { createMatch, step } from '../src/sim/match';
 import { STEP } from '../src/sim/consts';
 import { applySquadStrength, squadOf, strengthOf } from '../src/data/squads';
@@ -16,7 +16,8 @@ const acc = { goals: 0, shots: 0, onT: 0, passA: 0, passC: 0, fouls: 0, offs: 0,
 const byDiff: Record<string, [number, number, number]> = { '0-2': [0, 0, 0], '3-5': [0, 0, 0], '6-8': [0, 0, 0], '9+': [0, 0, 0] }; // 강팀 승/무/패
 const t0 = Date.now();
 for (let g = 0; g < N; g++) {
-  const ia = Math.floor(rnd() * TEAMS.length); let ib = Math.floor(rnd() * (TEAMS.length - 1)); if (ib >= ia) ib++;
+  const POOL = process.argv.includes('--clubs') ? TEAMS.length : NATIONS; // 기본은 국가대표끼리(예전 측정과 비교), --clubs면 클럽까지
+  const ia = Math.floor(rnd() * POOL); let ib = Math.floor(rnd() * (POOL - 1)); if (ib >= ia) ib++;
   const A = TEAMS[ia], B = TEAMS[ib];
   const s = createMatch({ teams: [A, B], len: LEN, diff: 'normal', tempo: 1, firstKick: g & 1, humans: [null, null], net: false, seed: seed0 * 1000 + g, squads: [squadOf(A), squadOf(B)] });
   let ticks = 0;

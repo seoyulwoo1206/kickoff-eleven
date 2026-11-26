@@ -20,6 +20,7 @@ export interface PlayerDef {
   height: number;      // cm
   age?: number;
   club?: string;
+  nat?: string;        // 국적(FIFA 3글자) — 클럽팀 선수의 겉모습 분포에 쓴다 (국가대표는 팀 코드)
   uncertain?: boolean; // 소집 여부가 확실치 않음
   r: Main;             // 6대 지표 0~99 (GK도 적음: pac 민첩/달리기, sho 킥, pas 패스, dri 볼컨트롤, def 위치선정, phy 피지컬)
   gk?: GkMain;         // GK 전용

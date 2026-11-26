@@ -1,6 +1,6 @@
 /* 월드컵 토너먼트: 24팀 → 6조 × 4팀 조별리그 → 16강(각 조 1·2위 + 3위 상위 4팀) → 8강 → 4강 → 결승.
    사용자 경기만 실제로 플레이하고 나머지는 헤드리스로 돌린다. localStorage 'ko11cup'에 저장 */
-import { TEAMS } from './data/teams';
+import { TEAMS, NATIONS } from './data/teams';
 import { createMatch, step } from './sim/match';
 import { STEP } from './sim/consts';
 import { squadOf, strengthOf } from './data/squads';
@@ -14,7 +14,7 @@ const KEY = 'ko11cup';
 export const GROUP_NAMES = 'ABCDEF';
 
 export function newCup(user: number, seed = (Math.random() * 1e9) >>> 0): Cup {
-  const rnd = mulberry32(seed), idx = TEAMS.map((_, i) => i).filter(i => i !== user);
+  const rnd = mulberry32(seed), idx = TEAMS.map((_, i) => i).filter(i => i < NATIONS && i !== user); // 국가대표 24팀만 (클럽은 TEAMS의 뒤쪽)
   for (let i = idx.length - 1; i > 0; i--) { const j = Math.floor(rnd() * (i + 1)); [idx[i], idx[j]] = [idx[j], idx[i]]; }
   idx.splice(Math.floor(rnd() * 24), 0, user);
   const groups: number[][] = []; for (let g = 0; g < 6; g++) groups.push(idx.slice(g * 4, g * 4 + 4));
